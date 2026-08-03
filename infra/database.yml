@@ -1,24 +1,31 @@
+# Compose project is named explicitly. Without it, Compose derives the project
+# from the directory name ("infra"), which is identical in municipal-backend --
+# so `make db-up` here would recreate that product's container and bind this
+# app to its data volume. Distinct name, container, volume and ports keep the
+# two products' databases isolated and runnable side by side.
+name: mebuska-corporate
+
 services:
   db:
     image: postgis/postgis:16-3.4
-    container_name: buska_db
+    container_name: mebuska_corporate_db
     restart: always
     ports:
-      - "${DB_PORT:-5432}:5432"
+      - "${DB_PORT:-5433}:5432"
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
 
     volumes:
       - ../database/init.sql:/docker-entrypoint-initdb.d/init.sql
-      - buska_data:/var/lib/postgresql/data
+      - mebuska_corporate_data:/var/lib/postgresql/data
 
   mailhog:
     image: mailhog/mailhog
-    container_name: buska_mailhog
+    container_name: mebuska_corporate_mailhog
     ports:
-      - "1025:1025"
-      - "8025:8025"
+      - "${MAILHOG_SMTP_PORT:-1026}:1025"
+      - "${MAILHOG_UI_PORT:-8026}:8025"
 
 volumes:
-  buska_data:
+  mebuska_corporate_data:
