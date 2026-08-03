@@ -3,10 +3,14 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
+import psycopg2
 import pytest
+from dotenv import load_dotenv
 from flask_jwt_extended import create_access_token
+from sqlalchemy.engine import make_url
 
 from app import create_app
+from app.core.config import Settings
 from app.models.base import db
 from app.models.enum import DiaDaSemana, StatusViagem, UserStatus
 from tests.factories.geo_factory import PontoFactory
@@ -60,14 +64,67 @@ class Actor:
 # A suíte nunca deve iniciar o scheduler. A variável pode vazar do shell do dev.
 os.environ.pop("RUN_SCHEDULER", None)
 
+load_dotenv()
+
+# `_db` calls db.drop_all(). Never let that point at the dev/prod database —
+# default to a dedicated "<db>_test" database, and refuse to run at all if
+# the resolved URI doesn't look like a test database.
+_TEST_DB_URI = os.getenv("TEST_DATABASE_URI") or Settings().SQLALCHEMY_DATABASE_URI + "_test"
+assert "test" in _TEST_DB_URI.rsplit("/", 1)[-1], f"refusing to run tests against {_TEST_DB_URI}"
+
+
+def _ensure_test_database(uri: str) -> None:
+    """Create the test database if missing, with the same PostGIS extensions
+    `database/init.sql` sets up for the dev database, so tests work without a
+    manual setup step. The app user (e.g. buska_user) has no CREATEDB/superuser
+    privilege — same as in dev — so this uses the postgres superuser, exactly
+    like `infra/database.yml` does for the dev container."""
+    url = make_url(uri)
+    admin_user = os.getenv("POSTGRES_USER", "postgres")
+    admin_password = os.getenv("POSTGRES_PASSWORD", "postgres")
+
+    admin_conn = psycopg2.connect(
+        host=url.host, port=url.port, user=admin_user, password=admin_password, dbname="postgres"
+    )
+    admin_conn.autocommit = True
+    try:
+        with admin_conn.cursor() as cur:
+            cur.execute("SELECT 1 FROM pg_database WHERE datname = %s", (url.database,))
+            if not cur.fetchone():
+                cur.execute(f'CREATE DATABASE "{url.database}" OWNER "{url.username}"')
+    finally:
+        admin_conn.close()
+
+    conn = psycopg2.connect(
+        host=url.host, port=url.port, user=admin_user, password=admin_password, dbname=url.database
+    )
+    conn.autocommit = True
+    try:
+        with conn.cursor() as cur:
+            cur.execute("CREATE EXTENSION IF NOT EXISTS postgis")
+            cur.execute("CREATE EXTENSION IF NOT EXISTS postgis_topology")
+            cur.execute('CREATE EXTENSION IF NOT EXISTS "uuid-ossp"')
+            cur.execute(f'GRANT ALL PRIVILEGES ON DATABASE "{url.database}" TO "{url.username}"')
+            cur.execute(f'GRANT ALL PRIVILEGES ON SCHEMA public TO "{url.username}"')
+            cur.execute(
+                f'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO "{url.username}"'
+            )
+            cur.execute(
+                f'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO "{url.username}"'
+            )
+    finally:
+        conn.close()
+
 
 @pytest.fixture(scope="session")
 def app():
+    _ensure_test_database(_TEST_DB_URI)
     app = create_app(
         config_overrides={
             "TESTING": True,
             "DEBUG": True,
             "JWT_SECRET_KEY": "change_this_secret_key_use_long_random_string",
+            "SQLALCHEMY_DATABASE_URI": _TEST_DB_URI,
             "SQLALCHEMY_TRACK_MODIFICATIONS": False,
         }
     )

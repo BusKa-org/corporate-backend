@@ -3,12 +3,17 @@
 from app import create_app
 
 
-def test_create_app_applies_config_overrides_before_engine_binding():
-    """Overrides must reach db.init_app, not arrive after it."""
+def test_create_app_applies_config_overrides():
+    """Overrides must reach every config key, including ones set late (e.g.
+    MAX_CONTENT_LENGTH) and read early (e.g. DEBUG, used by setup_logging)."""
     app = create_app(
-        config_overrides={"SQLALCHEMY_DATABASE_URI": "postgresql+psycopg2://x:y@nowhere/z"}
+        config_overrides={
+            "SQLALCHEMY_DATABASE_URI": "postgresql+psycopg2://x:y@nowhere/z",
+            "MAX_CONTENT_LENGTH": 1,
+        }
     )
     assert app.config["SQLALCHEMY_DATABASE_URI"] == "postgresql+psycopg2://x:y@nowhere/z"
+    assert app.config["MAX_CONTENT_LENGTH"] == 1
 
 
 def test_create_app_override_reaches_the_bound_engine():
@@ -17,8 +22,8 @@ def test_create_app_override_reaches_the_bound_engine():
 
     uri = "postgresql+psycopg2://override:pass@127.0.0.1:6543/override_db"
     app = create_app(config_overrides={"SQLALCHEMY_DATABASE_URI": uri})
-    engine = db._app_engines[app][None]
-    assert "override_db" in str(engine.url)
+    with app.app_context():
+        assert db.engine.url.database == "override_db"
 
 
 def test_create_app_without_overrides_still_works():

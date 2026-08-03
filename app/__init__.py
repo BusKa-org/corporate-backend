@@ -42,7 +42,7 @@ jwt = JWTManager()
 logger = logging.getLogger(__name__)
 
 
-def create_app(config_overrides: dict[str, Any] | None = None) -> Flask:
+def create_app(*, config_overrides: dict[str, Any] | None = None) -> Flask:
     load_dotenv()
     settings = Settings()
     app = Flask(__name__)
@@ -84,6 +84,16 @@ def create_app(config_overrides: dict[str, Any] | None = None) -> Flask:
     app.config["MAIL_USE_TLS"] = settings.MAIL_USE_TLS
     app.config["FRONTEND_URL"] = settings.FRONTEND_URL
 
+    # Maximum request size (16MB)
+    app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024
+
+    # Test harness and embedding hosts inject config here. Must run before
+    # anything reads config (setup_logging reads DEBUG below) and before
+    # db.init_app(): Flask-SQLAlchemy 3.1 binds engines during init_app, so a
+    # later app.config.update() would be silently ignored.
+    if config_overrides:
+        app.config.update(config_overrides)
+
     # ==========================================
     # Logging Configuration
     # ==========================================
@@ -110,12 +120,6 @@ def create_app(config_overrides: dict[str, Any] | None = None) -> Flask:
         max_age=86400,  # Cache preflight for 24 hours
     )
 
-    # Test harness and embedding hosts inject config here. Must run before
-    # db.init_app(): Flask-SQLAlchemy 3.1 binds engines during init_app, so a
-    # later app.config.update() would be silently ignored.
-    if config_overrides:
-        app.config.update(config_overrides)
-
     db.init_app(app)
     jwt.init_app(app)
 
@@ -130,9 +134,6 @@ def create_app(config_overrides: dict[str, Any] | None = None) -> Flask:
     # Security Headers
     # ==========================================
     setup_security_headers(app)
-
-    # Set maximum request size (16MB)
-    app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024
 
     # Check production security
     if not settings.DEBUG:

@@ -138,6 +138,8 @@ check: lint typecheck  # Run all checks
 # ==========================================
 # Testing
 # ==========================================
+# Tests run against a dedicated "<DB_NAME>_test" database (or TEST_DATABASE_URI
+# if set), auto-created with PostGIS on first run — never against the dev DB.
 
 .PHONY: test test-cov test-unit test-integration
 
