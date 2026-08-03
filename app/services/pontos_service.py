@@ -8,6 +8,7 @@ from app.models.base import db
 from app.models.enum import UserRole
 from app.models.geo import Ponto
 from app.models.user import User
+from app.services.rotas_service import garantir_ponto_sem_viagem_ativa
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +90,8 @@ def update_ponto(user_id: str, ponto_id: str, data: dict[str, Any]) -> Ponto:
     if ponto.organizacao_id != user.organizacao_id:
         raise ForbiddenError("Acesso negado")
 
+    garantir_ponto_sem_viagem_ativa(ponto_id)
+
     try:
         # Update simple fields
         for field in ("apelido", "latitude", "longitude"):
@@ -120,6 +123,8 @@ def delete_ponto(user_id: str, ponto_id: str) -> None:
 
     if ponto.organizacao_id != user.organizacao_id:
         raise ForbiddenError("Acesso negado")
+
+    garantir_ponto_sem_viagem_ativa(ponto_id)
 
     try:
         db.session.delete(ponto)

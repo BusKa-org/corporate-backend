@@ -3,20 +3,78 @@
 import logging
 from typing import Any
 
+from sqlalchemy import or_
+
 from app.core.exceptions import (
     AppError,
+    ConflictError,
     ForbiddenError,
     NotFoundError,
     ValidationError,
 )
 from app.models.base import db
-from app.models.enum import DiaDaSemana, SentidoViagem, UserRole
+from app.models.enum import DiaDaSemana, SentidoViagem, StatusViagem, UserRole
 from app.models.geo import Ponto
 from app.models.rota import DiasOperacao, HorarioRota, Rota, RotaAluno, RotaPonto
 from app.models.user import User
+from app.models.viagem import Viagem
 from app.utils import audit_logger, validate_uuid
 
 logger = logging.getLogger(__name__)
+
+# RF-04, fluxo secundário 1: enquanto uma viagem que usa o ponto estiver de pé,
+# a alteração espera. Os estados da rodada sob demanda mais os herdados em curso.
+STATUS_VIAGEM_ATIVA = (
+    StatusViagem.OCIOSA,
+    StatusViagem.SOLICITADA,
+    StatusViagem.BUFFER_ABERTO,
+    StatusViagem.EM_ROTA,
+    StatusViagem.EM_ANDAMENTO,
+)
+
+
+def _existe_viagem_ativa(rota_ids: list) -> bool:
+    """Viagem ativa em qualquer das rotas, tanto a rodada sob demanda
+    (`Viagem.rota_id`) quanto a viagem programada (via grade de horários)."""
+    if not rota_ids:
+        return False
+
+    return (
+        db.session.query(Viagem.id)
+        .outerjoin(HorarioRota, Viagem.horario_rota_id == HorarioRota.id)
+        .filter(
+            Viagem.status.in_(STATUS_VIAGEM_ATIVA),
+            or_(Viagem.rota_id.in_(rota_ids), HorarioRota.rota_id.in_(rota_ids)),
+        )
+        .first()
+        is not None
+    )
+
+
+def garantir_rota_sem_viagem_ativa(rota_id: str) -> None:
+    """RF-04: bloqueia mexer na sequência de pontos de um circuito em uso."""
+    if _existe_viagem_ativa([rota_id]):
+        raise ConflictError(
+            "Há viagens ativas usando esta rota; aguarde a finalização para alterar os pontos"
+        )
+
+
+def garantir_ponto_sem_viagem_ativa(ponto_id: str) -> None:
+    """RF-04: bloqueia editar ou remover um ponto usado por viagem ativa."""
+    rota_ids = [
+        row[0] for row in db.session.query(RotaPonto.rota_id).filter_by(ponto_id=ponto_id).all()
+    ]
+    if _existe_viagem_ativa(rota_ids):
+        raise ConflictError(
+            "Há viagens ativas usando este ponto; aguarde a finalização para alterá-lo"
+        )
+
+
+def _renumerar_pontos(rota_id: str) -> None:
+    """Mantém `RotaPonto.ordem` como 1..n sem buracos após adição/remoção."""
+    pontos = RotaPonto.query.filter_by(rota_id=rota_id).order_by(RotaPonto.ordem).all()
+    for posicao, rp in enumerate(pontos, start=1):
+        rp.ordem = posicao
 
 
 def list_all_rotas(user_id: str) -> list[Rota]:
@@ -165,14 +223,17 @@ def add_ponto(gestor_id: str, rota_id: str, data: dict[str, Any]) -> None:
     if not pontos or not isinstance(pontos, list):
         raise ValidationError("A rota deve conter pelo menos um ponto válido")
 
+    garantir_rota_sem_viagem_ativa(rota.id)
+
     try:
         # Clear existing route points (replacing with new set)
         RotaPonto.query.filter_by(rota_id=rota.id).delete()
         db.session.flush()
 
-        for p in pontos:
+        # A ordem enviada é uma preferência: o que persiste é a sequência
+        # 1..n sem buracos que o RF-14 usa para numerar os segmentos.
+        for ordem, p in enumerate(sorted(pontos, key=lambda x: x.get("ordem", 0)), start=1):
             ponto_id = p.get("ponto_id")
-            ordem = p.get("ordem", 1)
 
             # Case 1: Link existing point by ID
             if ponto_id:
@@ -208,12 +269,51 @@ def add_ponto(gestor_id: str, rota_id: str, data: dict[str, Any]) -> None:
                 novo_rota_ponto = RotaPonto(rota_id=rota.id, ponto_id=ponto.id, ordem=ordem)
                 db.session.add(novo_rota_ponto)
 
+        # Fecha os buracos deixados pelos pontos ignorados acima.
+        _renumerar_pontos(rota.id)
+
         db.session.commit()
 
     except Exception as e:
         db.session.rollback()
         logger.error(f"Error adding points to route: {e}")
         raise AppError(f"Erro ao adicionar pontos: {str(e)}", 500)
+
+
+def remover_ponto(gestor_id: str, rota_id: str, ponto_id: str) -> None:
+    """RF-04: remove um ponto do circuito e renumera a sequência restante.
+
+    Raises: ForbiddenError, NotFoundError, ConflictError
+    """
+    user = User.query.get(gestor_id)
+    if not user or user.role != UserRole.GESTOR:
+        raise ForbiddenError("Apenas gestores gerenciam os pontos do circuito")
+
+    rota = Rota.query.get(rota_id)
+    if not rota:
+        raise NotFoundError("Rota não encontrada")
+
+    if rota.organizacao_id != user.organizacao_id:
+        raise ForbiddenError("Acesso negado")
+
+    rota_ponto = db.session.get(RotaPonto, (rota.id, ponto_id))
+    if not rota_ponto:
+        raise NotFoundError("Ponto não encontrado nesta rota")
+
+    garantir_rota_sem_viagem_ativa(rota.id)
+
+    db.session.delete(rota_ponto)
+    db.session.flush()
+    _renumerar_pontos(rota.id)
+    db.session.commit()
+
+    audit_logger.log_user_action(
+        action="remover_ponto",
+        user_id=gestor_id,
+        resource_type="rota",
+        resource_id=str(rota_id),
+        details={"ponto_id": str(ponto_id)},
+    )
 
 
 def add_horario(gestor_id: str, rota_id: str, data: dict[str, Any]) -> HorarioRota:

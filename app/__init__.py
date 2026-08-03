@@ -106,6 +106,9 @@ def create_app(
     app.config["MAIL_PASSWORD"] = settings.MAIL_PASSWORD
     app.config["MAIL_USE_TLS"] = settings.MAIL_USE_TLS
     app.config["FRONTEND_URL"] = settings.FRONTEND_URL
+    # RF-09: versão vigente do Termo de Aceite. Fica no config para que os
+    # testes troquem a versão e exercitem o reaceite sem mexer no ambiente.
+    app.config["TERMO_VERSAO"] = settings.TERMO_VERSAO
 
     # Maximum request size (16MB)
     app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024

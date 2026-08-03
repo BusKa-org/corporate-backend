@@ -126,6 +126,17 @@ class RotaPontosResource(Resource):
         return {"message": "Pontos adicionados com sucesso"}, 200
 
 
+@api.route("/<string:id>/pontos/<string:ponto_id>")
+class RotaPontoResource(Resource):
+    @api.doc("remove_rota_ponto")
+    @api.response(200, "Success")
+    @jwt_required()
+    def delete(self, id: str, ponto_id: str) -> tuple[dict[str, Any], int]:
+        current_user_id = get_jwt_identity()
+        rotas_service.remover_ponto(current_user_id, id, ponto_id)
+        return {"message": "Ponto removido do circuito com sucesso"}, 200
+
+
 @api.route("/<string:id>/horarios")
 class RotaHorariosResource(Resource):
     @api.doc("list_rota_horarios")

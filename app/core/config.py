@@ -49,6 +49,11 @@ class Settings:
         self.MAIL_PASSWORD = os.getenv("MAIL_PASSWORD", "")
         self.MAIL_USE_TLS = os.getenv("MAIL_USE_TLS", "true").lower() == "true"
 
+        # RF-09: versão vigente do Termo de Aceite / Política de Privacidade.
+        # Ao mudar aqui, todo aceite anterior deixa de valer e o usuário volta
+        # ao estado *sem consentimento* até aceitar a nova versão.
+        self.TERMO_VERSAO = os.getenv("TERMO_VERSAO", "1.0")
+
         # Frontend URL (used for guardian consent email links)
         self.FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:8081")
 

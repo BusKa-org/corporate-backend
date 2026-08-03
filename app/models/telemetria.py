@@ -46,6 +46,10 @@ class TelemetriaVeiculo(db.Model):
     viagem = relationship("Viagem")
 
     __table_args__ = (
+        # Chave natural da amostra. É o que torna o reenvio de um lote seguro
+        # mesmo quando duas requisições idênticas chegam ao mesmo tempo — a
+        # deduplicação por consulta sozinha não cobre esse caso.
+        db.UniqueConstraint("veiculo_id", "timestamp", name="uq_telemetria_veiculo_timestamp"),
         db.Index("idx_telemetria_veiculo_ts", "veiculo_id", "timestamp"),
         db.CheckConstraint(
             "nivel_bateria IS NULL OR (nivel_bateria >= 0 AND nivel_bateria <= 100)",

@@ -1,6 +1,7 @@
 """User service - CRUD operations, driver creation, password management."""
 
 import logging
+import secrets
 from typing import Any, cast
 
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -13,9 +14,14 @@ from app.core.exceptions import (
     UnauthorizedError,
     ValidationError,
 )
+from app.core.transaction import transactional
 from app.models.base import db
-from app.models.enum import UserRole, UserStatus
+from app.models.enum import StatusSolicitacao, StatusViagem, UserRole, UserStatus
+from app.models.notificacao import Notificacao
+from app.models.password_reset import PasswordResetToken
 from app.models.user import Aluno, Gestor, Motorista, User
+from app.models.viagem import AlunosConfirmados, Viagem
+from app.services import consentimento_service
 from app.utils import audit_logger, validate_cpf, validate_email, validate_password, validate_uuid
 
 logger = logging.getLogger(__name__)
@@ -322,3 +328,111 @@ def update_fcm_token(user_id: str, data: dict[str, Any]) -> None:
     user = _get_user_or_404(user_id)
     user.fcm_token = data.get("fcm_token")
     db.session.commit()
+
+
+# RF-20 — exclusão de conta (Art. 18 LGPD)
+#
+# Viagens em curso que impedem a exclusão: o titular ainda ocupa um assento da
+# rodada, então concluir ou cancelar a participação vem primeiro.
+_VIAGENS_EM_CURSO = (
+    StatusViagem.SOLICITADA,
+    StatusViagem.BUFFER_ABERTO,
+    StatusViagem.EM_ROTA,
+    StatusViagem.AGENDADA,
+    StatusViagem.EM_ANDAMENTO,
+)
+
+
+def _tem_embarque_confirmado_em_viagem_ativa(user_id: str) -> bool:
+    return (
+        db.session.query(AlunosConfirmados.aluno_id)
+        .join(Viagem, Viagem.id == AlunosConfirmados.viagem_id)
+        .filter(
+            AlunosConfirmados.aluno_id == user_id,
+            AlunosConfirmados.status == StatusSolicitacao.CONFIRMADO,
+            Viagem.status.in_(_VIAGENS_EM_CURSO),
+        )
+        .first()
+        is not None
+    )
+
+
+def excluir_conta(user_id: str, data: dict[str, Any]) -> None:
+    """Exclui a conta do titular anonimizando os dados pessoais (RF-20).
+
+    Estratégia de anonimização — a linha do usuário é mantida, não apagada:
+    `alunos_confirmados` referencia `aluno.usuario_id`, e essas linhas são a
+    base estatística do dashboard (RF-21). Apagar o usuário levaria as linhas
+    junto pelo ON DELETE CASCADE e destruiria o histórico que a própria LGPD
+    permite preservar de forma anônima. Então sobra a alternativa correta:
+    quebrar o vínculo com a pessoa, mantendo as chaves estrangeiras válidas.
+
+    Colunas identificadoras são sobrescritas:
+      - nome        -> rótulo fixo
+      - email/cpf   -> derivados do UUID da conta (`id.hex`), que já é único;
+                       isso satisfaz as constraints UNIQUE sem que duas contas
+                       anonimizadas colidam, e não é reversível para a pessoa
+      - telefone / fcm_token / dados do responsável -> nulos
+      - cnh (motorista) -> também derivada do UUID, por ser UNIQUE e NOT NULL
+
+    O acesso é encerrado: senha trocada por um segredo aleatório descartado,
+    status DISABLED, tokens de recuperação de senha apagados (senão a conta
+    voltaria por "esqueci minha senha") e notificações removidas, por serem
+    mensagens endereçadas à pessoa e sem valor estatístico.
+    """
+    user = _get_user_or_404(user_id)
+
+    email = (data.get("email") or "").strip().lower()
+    password = data.get("password") or ""
+
+    if email != (user.email or "").lower() or not check_password_hash(user.senha_hash, password):
+        audit_logger.log_security_event(
+            event_type="failed_account_deletion",
+            severity="medium",
+            user_id=user_id,
+            details={"reason": "invalid_credentials"},
+        )
+        raise UnauthorizedError("Credenciais inválidas")
+
+    if _tem_embarque_confirmado_em_viagem_ativa(user_id):
+        raise ConflictError(
+            "Você possui uma viagem em andamento com embarque confirmado. "
+            "Conclua ou cancele a participação antes de excluir a conta."
+        )
+
+    anon = user.id.hex
+    with transactional():
+        consentimento_service.revogar_consentimentos(user_id)
+
+        db.session.query(Notificacao).filter_by(usuario_id=user.id).delete(
+            synchronize_session=False
+        )
+        db.session.query(PasswordResetToken).filter_by(user_id=user.id).delete(
+            synchronize_session=False
+        )
+
+        user.nome = "Titular removido"
+        user.email = f"anonimizado+{anon}@removido.invalid"
+        user.cpf = anon[:14]
+        user.telefone = None
+        user.fcm_token = None
+        user.receber_notificacoes = False
+        user.senha_hash = generate_password_hash(secrets.token_urlsafe(32))
+        user.status = UserStatus.DISABLED
+
+        if isinstance(user, Aluno):
+            user.matricula = None
+            user.nome_responsavel = None
+            user.cpf_responsavel = None
+            user.email_responsavel = None
+            user.data_nascimento = None
+            user.guardian_token = None
+        elif isinstance(user, Motorista):
+            user.cnh = anon[:20]
+
+    audit_logger.log_user_action(
+        action="excluir_conta",
+        user_id=user_id,
+        resource_type="user",
+        resource_id=user_id,
+    )
