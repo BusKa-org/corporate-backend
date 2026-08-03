@@ -7,6 +7,7 @@ from app.extensions import scheduler
 from app.models.base import db
 from app.models.enum import StatusSolicitacao, StatusViagem
 from app.models.viagem import AlunosConfirmados, Viagem
+from app.services import embarque_service
 from app.services.notificacao_service import NotificacaoService
 from app.utils.geo_utils import calcular_distancia_metros
 
@@ -46,8 +47,9 @@ def consolidar_buffers_expirados() -> int:
         if confirmados:
             viagem.status = StatusViagem.EM_ROTA
             viagem.inicio_real = agora
-            # Emissão das credenciais QR (RF-15) é do plano de embarque: ela
-            # entra aqui, sobre esta mesma lista de confirmados.
+            # RF-15/RF-16: credenciais de embarque e roteiro do motorista
+            # saem daqui, sobre esta mesma lista de confirmados.
+            embarque_service.consolidar_embarque(viagem, confirmados)
             NotificacaoService.notificar_rodada_consolidada(
                 viagem, [c.aluno_id for c in confirmados]
             )
