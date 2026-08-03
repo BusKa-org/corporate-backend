@@ -36,22 +36,6 @@
           "type": "string"
         }
       ],
-      "post": {
-        "responses": {
-          "200": {
-            "description": "Success",
-            "schema": {
-              "$ref": "#/definitions/AlunoResponse"
-            }
-          }
-        },
-        "summary": "(Público) Responsável confirma consentimento para o aluno menor",
-        "operationId": "guardian_consent_confirm",
-        "security": [],
-        "tags": [
-          "alunos"
-        ]
-      },
       "get": {
         "responses": {
           "200": {
@@ -67,21 +51,25 @@
         "tags": [
           "alunos"
         ]
-      }
-    },
-    "/v1/alunos/me": {
-      "delete": {
+      },
+      "post": {
         "responses": {
           "200": {
-            "description": "Success"
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/AlunoResponse"
+            }
           }
         },
-        "summary": "Aluno exclui sua conta",
-        "operationId": "aluno_delete",
+        "summary": "(Público) Responsável confirma consentimento para o aluno menor",
+        "operationId": "guardian_consent_confirm",
+        "security": [],
         "tags": [
           "alunos"
         ]
-      },
+      }
+    },
+    "/v1/alunos/me": {
       "put": {
         "responses": {
           "200": {
@@ -103,6 +91,18 @@
             }
           }
         ],
+        "tags": [
+          "alunos"
+        ]
+      },
+      "delete": {
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "Aluno exclui sua conta",
+        "operationId": "aluno_delete",
         "tags": [
           "alunos"
         ]
@@ -176,8 +176,43 @@
             "description": "Success"
           }
         },
-        "summary": "(Gestor) Aprova cadastro de um aluno menor",
+        "summary": "(Gestor) Aprova o cadastro de um aluno pendente",
         "operationId": "aprovar_aluno",
+        "tags": [
+          "alunos"
+        ]
+      }
+    },
+    "/v1/alunos/{aluno_id}/rejeitar": {
+      "parameters": [
+        {
+          "name": "aluno_id",
+          "in": "path",
+          "required": true,
+          "type": "string"
+        }
+      ],
+      "post": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/AlunoResponse"
+            }
+          }
+        },
+        "summary": "(Gestor) Rejeita o cadastro de um aluno pendente, com motivo",
+        "operationId": "rejeitar_aluno",
+        "parameters": [
+          {
+            "name": "payload",
+            "required": true,
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/AlunoRejeitarRequest"
+            }
+          }
+        ],
         "tags": [
           "alunos"
         ]
@@ -245,6 +280,147 @@
         ],
         "tags": [
           "auth"
+        ]
+      }
+    },
+    "/v1/consentimento": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/ConsentimentoStatusResponse"
+            }
+          },
+          "404": {
+            "description": "Usuário não encontrado"
+          }
+        },
+        "summary": "Situação do usuário logado perante a versão vigente do termo",
+        "operationId": "get_consentimento_status",
+        "tags": [
+          "consentimento"
+        ]
+      },
+      "post": {
+        "responses": {
+          "201": {
+            "description": "Aceite registrado",
+            "schema": {
+              "$ref": "#/definitions/ConsentimentoResponse"
+            }
+          },
+          "404": {
+            "description": "Não encontrado"
+          }
+        },
+        "summary": "Registra o aceite do Termo e da Política de Privacidade",
+        "operationId": "registrar_consentimento",
+        "tags": [
+          "consentimento"
+        ]
+      }
+    },
+    "/v1/consentimento/conta": {
+      "delete": {
+        "responses": {
+          "200": {
+            "description": "Conta excluída",
+            "schema": {
+              "$ref": "#/definitions/ConsentimentoMessageResponse"
+            }
+          },
+          "400": {
+            "description": "Dados inválidos"
+          },
+          "401": {
+            "description": "Credenciais inválidas"
+          },
+          "409": {
+            "description": "Viagem em andamento com embarque confirmado"
+          }
+        },
+        "summary": "Exclui a conta e anonimiza os dados pessoais do titular (Art",
+        "description": "18 LGPD)",
+        "operationId": "excluir_conta",
+        "parameters": [
+          {
+            "name": "payload",
+            "required": true,
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/ExclusaoContaRequest"
+            }
+          }
+        ],
+        "tags": [
+          "consentimento"
+        ]
+      }
+    },
+    "/v1/dashboard/indicadores": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/IndicadoresPeriodo"
+            }
+          }
+        },
+        "summary": "(Gestor) Indicadores agregados e anonimizados do período (RF-21)",
+        "operationId": "indicadores_periodo",
+        "parameters": [
+          {
+            "required": true,
+            "in": "query",
+            "description": "Fim do período, inclusivo (YYYY-MM-DD)",
+            "name": "fim",
+            "type": "string"
+          },
+          {
+            "required": true,
+            "in": "query",
+            "description": "Início do período, inclusivo (YYYY-MM-DD)",
+            "name": "inicio",
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "dashboard"
+        ]
+      }
+    },
+    "/v1/dashboard/indicadores/exportar": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Relatório em CSV"
+          }
+        },
+        "summary": "(Gestor) Exporta o relatório do período em CSV",
+        "operationId": "exportar_indicadores",
+        "parameters": [
+          {
+            "required": true,
+            "in": "query",
+            "description": "Fim do período, inclusivo (YYYY-MM-DD)",
+            "name": "fim",
+            "type": "string"
+          },
+          {
+            "required": true,
+            "in": "query",
+            "description": "Início do período, inclusivo (YYYY-MM-DD)",
+            "name": "inicio",
+            "type": "string"
+          }
+        ],
+        "produces": [
+          "text/csv"
+        ],
+        "tags": [
+          "dashboard"
         ]
       }
     },
@@ -362,7 +538,217 @@
         ]
       }
     },
+    "/v1/embarque/viagens/{viagem_id}/credencial": {
+      "parameters": [
+        {
+          "name": "viagem_id",
+          "in": "path",
+          "required": true,
+          "type": "string"
+        }
+      ],
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/CredencialResponse"
+            }
+          }
+        },
+        "summary": "Credencial de embarque do próprio aluno na rodada (RF-15)",
+        "operationId": "get_credencial",
+        "tags": [
+          "embarque"
+        ]
+      }
+    },
+    "/v1/embarque/viagens/{viagem_id}/manual": {
+      "parameters": [
+        {
+          "name": "viagem_id",
+          "in": "path",
+          "required": true,
+          "type": "string"
+        }
+      ],
+      "post": {
+        "responses": {
+          "200": {
+            "description": "Embarque registrado",
+            "schema": {
+              "$ref": "#/definitions/EmbarqueResponse"
+            }
+          }
+        },
+        "summary": "Fallback manual: motorista acha o aluno na lista do ponto (RF-17)",
+        "operationId": "confirmar_embarque_manual",
+        "parameters": [
+          {
+            "name": "payload",
+            "required": true,
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/EmbarqueManualRequest"
+            }
+          }
+        ],
+        "tags": [
+          "embarque"
+        ]
+      }
+    },
+    "/v1/embarque/viagens/{viagem_id}/roteiro": {
+      "parameters": [
+        {
+          "name": "viagem_id",
+          "in": "path",
+          "required": true,
+          "type": "string"
+        }
+      ],
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/RoteiroResponse"
+            }
+          }
+        },
+        "summary": "Roteiro consolidado do motorista, com embarques e desembarques (RF-16)",
+        "operationId": "get_roteiro",
+        "tags": [
+          "embarque"
+        ]
+      }
+    },
+    "/v1/embarque/viagens/{viagem_id}/roteiro/avancar": {
+      "parameters": [
+        {
+          "name": "viagem_id",
+          "in": "path",
+          "required": true,
+          "type": "string"
+        }
+      ],
+      "post": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/RoteiroResponse"
+            }
+          }
+        },
+        "summary": "Conclui a parada corrente e segue para a próxima (RF-16)",
+        "operationId": "avancar_ponto",
+        "parameters": [
+          {
+            "name": "payload",
+            "required": true,
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/AvancarPontoRequest"
+            }
+          }
+        ],
+        "tags": [
+          "embarque"
+        ]
+      }
+    },
+    "/v1/embarque/viagens/{viagem_id}/sincronizacao": {
+      "parameters": [
+        {
+          "name": "viagem_id",
+          "in": "path",
+          "required": true,
+          "type": "string"
+        }
+      ],
+      "post": {
+        "responses": {
+          "200": {
+            "description": "Lote processado",
+            "schema": {
+              "$ref": "#/definitions/SincronizacaoResponse"
+            }
+          }
+        },
+        "summary": "Aplica em lote a fila de eventos registrados sem conexão (RF-18)",
+        "operationId": "sincronizar_eventos_offline",
+        "parameters": [
+          {
+            "name": "payload",
+            "required": true,
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/SincronizacaoRequest"
+            }
+          }
+        ],
+        "tags": [
+          "embarque"
+        ]
+      }
+    },
+    "/v1/embarque/viagens/{viagem_id}/validacao": {
+      "parameters": [
+        {
+          "name": "viagem_id",
+          "in": "path",
+          "required": true,
+          "type": "string"
+        }
+      ],
+      "post": {
+        "responses": {
+          "409": {
+            "description": "CREDENCIAL_DE_OUTRA_VIAGEM, CREDENCIAL_DE_OUTRO_PONTO ou JA_UTILIZADA"
+          },
+          "404": {
+            "description": "CREDENCIAL_DESCONHECIDA"
+          },
+          "200": {
+            "description": "Embarque registrado",
+            "schema": {
+              "$ref": "#/definitions/EmbarqueResponse"
+            }
+          }
+        },
+        "summary": "Valida a credencial lida e registra o embarque (RF-17)",
+        "operationId": "validar_embarque",
+        "parameters": [
+          {
+            "name": "payload",
+            "required": true,
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/ValidarEmbarqueRequest"
+            }
+          }
+        ],
+        "tags": [
+          "embarque"
+        ]
+      }
+    },
     "/v1/instituicoes/": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/InstituicaoListResponse"
+            }
+          }
+        },
+        "operationId": "list_instituicoes",
+        "tags": [
+          "instituicoes"
+        ]
+      },
       "post": {
         "responses": {
           "201": {
@@ -384,20 +770,6 @@
             }
           }
         ],
-        "tags": [
-          "instituicoes"
-        ]
-      },
-      "get": {
-        "responses": {
-          "200": {
-            "description": "Success",
-            "schema": {
-              "$ref": "#/definitions/InstituicaoListResponse"
-            }
-          }
-        },
-        "operationId": "list_instituicoes",
         "tags": [
           "instituicoes"
         ]
@@ -469,7 +841,128 @@
         ]
       }
     },
+    "/v1/janelas/": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/JanelaListResponse"
+            }
+          }
+        },
+        "summary": "Lista as janelas de disponibilidade da organização (Gestor)",
+        "operationId": "list_janelas",
+        "tags": [
+          "janelas"
+        ]
+      },
+      "post": {
+        "responses": {
+          "201": {
+            "description": "Created",
+            "schema": {
+              "$ref": "#/definitions/JanelaResponse"
+            }
+          }
+        },
+        "summary": "Cria uma janela de disponibilidade (Gestor)",
+        "operationId": "create_janela",
+        "parameters": [
+          {
+            "name": "payload",
+            "required": true,
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/JanelaRequest"
+            }
+          }
+        ],
+        "tags": [
+          "janelas"
+        ]
+      }
+    },
+    "/v1/janelas/vigente": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/JanelaVigenteResponse"
+            }
+          }
+        },
+        "summary": "Janela em vigor agora e horários de operação do dia",
+        "operationId": "get_janela_vigente",
+        "tags": [
+          "janelas"
+        ]
+      }
+    },
+    "/v1/janelas/{id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "type": "string"
+        }
+      ],
+      "patch": {
+        "responses": {
+          "200": {
+            "description": "Updated",
+            "schema": {
+              "$ref": "#/definitions/JanelaResponse"
+            }
+          }
+        },
+        "summary": "Atualiza uma janela de disponibilidade (Gestor)",
+        "operationId": "update_janela",
+        "parameters": [
+          {
+            "name": "payload",
+            "required": true,
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/JanelaRequest"
+            }
+          }
+        ],
+        "tags": [
+          "janelas"
+        ]
+      },
+      "delete": {
+        "responses": {
+          "200": {
+            "description": "Deleted",
+            "schema": {
+              "$ref": "#/definitions/JanelaMessageResponse"
+            }
+          }
+        },
+        "summary": "Remove uma janela de disponibilidade (Gestor)",
+        "operationId": "delete_janela",
+        "tags": [
+          "janelas"
+        ]
+      }
+    },
     "/v1/notificacoes/": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "Lista as notificações do usuário logado",
+        "operationId": "listar_minhas_notificacoes",
+        "tags": [
+          "notificacoes"
+        ]
+      },
       "post": {
         "responses": {
           "200": {
@@ -488,18 +981,6 @@
             }
           }
         ],
-        "tags": [
-          "notificacoes"
-        ]
-      },
-      "get": {
-        "responses": {
-          "200": {
-            "description": "Success"
-          }
-        },
-        "summary": "Lista as notificações do usuário logado",
-        "operationId": "listar_minhas_notificacoes",
         "tags": [
           "notificacoes"
         ]
@@ -528,6 +1009,26 @@
       }
     },
     "/v1/ocorrencias/": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "(Gestor) Lista ocorrências da organização",
+        "operationId": "listar_ocorrencias",
+        "parameters": [
+          {
+            "in": "query",
+            "description": "Filter by status (ABERTA, RESOLVIDA)",
+            "name": "status",
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "ocorrencias"
+        ]
+      },
       "post": {
         "responses": {
           "201": {
@@ -547,26 +1048,6 @@
             "schema": {
               "$ref": "#/definitions/OcorrenciaInput"
             }
-          }
-        ],
-        "tags": [
-          "ocorrencias"
-        ]
-      },
-      "get": {
-        "responses": {
-          "200": {
-            "description": "Success"
-          }
-        },
-        "summary": "(Gestor) Lista ocorrências da organização",
-        "operationId": "listar_ocorrencias",
-        "parameters": [
-          {
-            "in": "query",
-            "description": "Filter by status (ABERTA, RESOLVIDA)",
-            "name": "status",
-            "type": "string"
           }
         ],
         "tags": [
@@ -600,6 +1081,21 @@
       }
     },
     "/v1/onibus/": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/OnibusListResponse"
+            }
+          }
+        },
+        "summary": "Lista a frota da organização",
+        "operationId": "list_onibus",
+        "tags": [
+          "onibus"
+        ]
+      },
       "post": {
         "responses": {
           "201": {
@@ -621,21 +1117,6 @@
             }
           }
         ],
-        "tags": [
-          "onibus"
-        ]
-      },
-      "get": {
-        "responses": {
-          "200": {
-            "description": "Success",
-            "schema": {
-              "$ref": "#/definitions/OnibusListResponse"
-            }
-          }
-        },
-        "summary": "Lista a frota da organização",
-        "operationId": "list_onibus",
         "tags": [
           "onibus"
         ]
@@ -675,6 +1156,18 @@
           "onibus"
         ]
       },
+      "delete": {
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "Remove um ônibus",
+        "operationId": "delete_onibus",
+        "tags": [
+          "onibus"
+        ]
+      },
       "get": {
         "responses": {
           "200": {
@@ -689,21 +1182,23 @@
         "tags": [
           "onibus"
         ]
-      },
-      "delete": {
-        "responses": {
-          "200": {
-            "description": "Success"
-          }
-        },
-        "summary": "Remove um ônibus",
-        "operationId": "delete_onibus",
-        "tags": [
-          "onibus"
-        ]
       }
     },
     "/v1/pontos/": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/PontoListResponse"
+            }
+          }
+        },
+        "operationId": "list_pontos",
+        "tags": [
+          "pontos"
+        ]
+      },
       "post": {
         "responses": {
           "201": {
@@ -727,20 +1222,6 @@
         "tags": [
           "pontos"
         ]
-      },
-      "get": {
-        "responses": {
-          "200": {
-            "description": "Success",
-            "schema": {
-              "$ref": "#/definitions/PontoListResponse"
-            }
-          }
-        },
-        "operationId": "list_pontos",
-        "tags": [
-          "pontos"
-        ]
       }
     },
     "/v1/pontos/{id}": {
@@ -752,6 +1233,30 @@
           "type": "string"
         }
       ],
+      "put": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/PontoResponse"
+            }
+          }
+        },
+        "operationId": "update_ponto",
+        "parameters": [
+          {
+            "name": "payload",
+            "required": true,
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/PontoUpdateRequest"
+            }
+          }
+        ],
+        "tags": [
+          "pontos"
+        ]
+      },
       "delete": {
         "responses": {
           "200": {
@@ -776,33 +1281,23 @@
         "tags": [
           "pontos"
         ]
-      },
-      "put": {
+      }
+    },
+    "/v1/rotas/": {
+      "get": {
         "responses": {
           "200": {
             "description": "Success",
             "schema": {
-              "$ref": "#/definitions/PontoResponse"
+              "$ref": "#/definitions/RotaListResponse"
             }
           }
         },
-        "operationId": "update_ponto",
-        "parameters": [
-          {
-            "name": "payload",
-            "required": true,
-            "in": "body",
-            "schema": {
-              "$ref": "#/definitions/PontoUpdateRequest"
-            }
-          }
-        ],
+        "operationId": "list_rotas",
         "tags": [
-          "pontos"
+          "rotas"
         ]
-      }
-    },
-    "/v1/rotas/": {
+      },
       "post": {
         "responses": {
           "201": {
@@ -823,20 +1318,6 @@
             }
           }
         ],
-        "tags": [
-          "rotas"
-        ]
-      },
-      "get": {
-        "responses": {
-          "200": {
-            "description": "Success",
-            "schema": {
-              "$ref": "#/definitions/RotaListResponse"
-            }
-          }
-        },
-        "operationId": "list_rotas",
         "tags": [
           "rotas"
         ]
@@ -867,6 +1348,27 @@
           "type": "string"
         }
       ],
+      "put": {
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "operationId": "update_rota",
+        "parameters": [
+          {
+            "name": "payload",
+            "required": true,
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/RotaUpdateRequest"
+            }
+          }
+        ],
+        "tags": [
+          "rotas"
+        ]
+      },
       "delete": {
         "responses": {
           "200": {
@@ -891,27 +1393,6 @@
         "tags": [
           "rotas"
         ]
-      },
-      "put": {
-        "responses": {
-          "200": {
-            "description": "Success"
-          }
-        },
-        "operationId": "update_rota",
-        "parameters": [
-          {
-            "name": "payload",
-            "required": true,
-            "in": "body",
-            "schema": {
-              "$ref": "#/definitions/RotaUpdateRequest"
-            }
-          }
-        ],
-        "tags": [
-          "rotas"
-        ]
       }
     },
     "/v1/rotas/{id}/horarios": {
@@ -923,6 +1404,20 @@
           "type": "string"
         }
       ],
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/RotaHorarioListResponse"
+            }
+          }
+        },
+        "operationId": "list_rota_horarios",
+        "tags": [
+          "rotas"
+        ]
+      },
       "post": {
         "responses": {
           "201": {
@@ -946,20 +1441,6 @@
         "tags": [
           "rotas"
         ]
-      },
-      "get": {
-        "responses": {
-          "200": {
-            "description": "Success",
-            "schema": {
-              "$ref": "#/definitions/RotaHorarioListResponse"
-            }
-          }
-        },
-        "operationId": "list_rota_horarios",
-        "tags": [
-          "rotas"
-        ]
       }
     },
     "/v1/rotas/{id}/pontos": {
@@ -971,6 +1452,20 @@
           "type": "string"
         }
       ],
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/PontoFlatListResponse"
+            }
+          }
+        },
+        "operationId": "list_rota_pontos",
+        "tags": [
+          "rotas"
+        ]
+      },
       "post": {
         "responses": {
           "200": {
@@ -991,17 +1486,30 @@
         "tags": [
           "rotas"
         ]
-      },
-      "get": {
+      }
+    },
+    "/v1/rotas/{id}/pontos/{ponto_id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "ponto_id",
+          "in": "path",
+          "required": true,
+          "type": "string"
+        }
+      ],
+      "delete": {
         "responses": {
           "200": {
-            "description": "Success",
-            "schema": {
-              "$ref": "#/definitions/PontoFlatListResponse"
-            }
+            "description": "Success"
           }
         },
-        "operationId": "list_rota_pontos",
+        "operationId": "remove_rota_ponto",
         "tags": [
           "rotas"
         ]
@@ -1055,6 +1563,118 @@
         ],
         "tags": [
           "routing"
+        ]
+      }
+    },
+    "/v1/telemetria/consumo-por-viagem": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/TelemetriaConsumoViagemListResponse"
+            }
+          }
+        },
+        "summary": "(Gestor) Consumo energético agregado por viagem",
+        "operationId": "consumo_por_viagem",
+        "parameters": [
+          {
+            "in": "query",
+            "description": "Fim do período, inclusivo (ISO 8601)",
+            "name": "fim",
+            "type": "string"
+          },
+          {
+            "in": "query",
+            "description": "Início do período, inclusivo (ISO 8601)",
+            "name": "inicio",
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "telemetria"
+        ]
+      }
+    },
+    "/v1/telemetria/ingestao": {
+      "post": {
+        "responses": {
+          "201": {
+            "description": "Lote processado",
+            "schema": {
+              "$ref": "#/definitions/TelemetriaIngestaoResponse"
+            }
+          }
+        },
+        "summary": "(Veículo) Envia um lote de amostras de telemetria",
+        "operationId": "ingerir_telemetria",
+        "parameters": [
+          {
+            "name": "payload",
+            "required": true,
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/TelemetriaIngestaoRequest"
+            }
+          }
+        ],
+        "tags": [
+          "telemetria"
+        ]
+      }
+    },
+    "/v1/telemetria/serie": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/TelemetriaListResponse"
+            }
+          }
+        },
+        "summary": "(Gestor) Série temporal de telemetria no período",
+        "operationId": "serie_telemetria",
+        "parameters": [
+          {
+            "in": "query",
+            "description": "Fim do período, inclusivo (ISO 8601)",
+            "name": "fim",
+            "type": "string"
+          },
+          {
+            "in": "query",
+            "description": "Início do período, inclusivo (ISO 8601)",
+            "name": "inicio",
+            "type": "string"
+          },
+          {
+            "in": "query",
+            "description": "Filtra por veículo",
+            "name": "veiculo_id",
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "telemetria"
+        ]
+      }
+    },
+    "/v1/telemetria/ultimo": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/TelemetriaListResponse"
+            }
+          }
+        },
+        "summary": "(Gestor) Última leitura de cada veículo da frota",
+        "operationId": "ultimo_por_veiculo",
+        "tags": [
+          "telemetria"
         ]
       }
     },
@@ -1226,6 +1846,36 @@
       }
     },
     "/v1/users/motoristas": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/UserListResponse"
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden - not a gestor"
+          }
+        },
+        "summary": "Lista motoristas do mesmo município do Gestor",
+        "operationId": "list_motoristas",
+        "parameters": [
+          {
+            "name": "X-Fields",
+            "in": "header",
+            "type": "string",
+            "format": "mask",
+            "description": "An optional fields mask"
+          }
+        ],
+        "tags": [
+          "users"
+        ]
+      },
       "post": {
         "responses": {
           "201": {
@@ -1254,36 +1904,6 @@
             "schema": {
               "$ref": "#/definitions/MotoristaCreateRequest"
             }
-          }
-        ],
-        "tags": [
-          "users"
-        ]
-      },
-      "get": {
-        "responses": {
-          "200": {
-            "description": "Success",
-            "schema": {
-              "type": "array",
-              "items": {
-                "$ref": "#/definitions/UserListResponse"
-              }
-            }
-          },
-          "403": {
-            "description": "Forbidden - not a gestor"
-          }
-        },
-        "summary": "Lista motoristas do mesmo município do Gestor",
-        "operationId": "list_motoristas",
-        "parameters": [
-          {
-            "name": "X-Fields",
-            "in": "header",
-            "type": "string",
-            "format": "mask",
-            "description": "An optional fields mask"
           }
         ],
         "tags": [
@@ -1355,30 +1975,6 @@
       }
     },
     "/v1/viagens/": {
-      "post": {
-        "responses": {
-          "201": {
-            "description": "Created",
-            "schema": {
-              "$ref": "#/definitions/ViagemResponse"
-            }
-          }
-        },
-        "operationId": "create_viagem",
-        "parameters": [
-          {
-            "name": "payload",
-            "required": true,
-            "in": "body",
-            "schema": {
-              "$ref": "#/definitions/ViagemCreateRequest"
-            }
-          }
-        ],
-        "tags": [
-          "viagens"
-        ]
-      },
       "get": {
         "responses": {
           "200": {
@@ -1424,6 +2020,30 @@
         "tags": [
           "viagens"
         ]
+      },
+      "post": {
+        "responses": {
+          "201": {
+            "description": "Created",
+            "schema": {
+              "$ref": "#/definitions/ViagemResponse"
+            }
+          }
+        },
+        "operationId": "create_viagem",
+        "parameters": [
+          {
+            "name": "payload",
+            "required": true,
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/ViagemCreateRequest"
+            }
+          }
+        ],
+        "tags": [
+          "viagens"
+        ]
       }
     },
     "/v1/viagens/aluno/agenda": {
@@ -1453,6 +2073,46 @@
           }
         },
         "operationId": "list_my_viagens",
+        "tags": [
+          "viagens"
+        ]
+      }
+    },
+    "/v1/viagens/rodada-ativa": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/RodadaAtivaResponse"
+            }
+          }
+        },
+        "summary": "(Aluno) Rodada em andamento e contagem regressiva do buffer",
+        "operationId": "get_rodada_ativa",
+        "tags": [
+          "viagens"
+        ]
+      }
+    },
+    "/v1/viagens/solicitar": {
+      "post": {
+        "responses": {
+          "201": {
+            "description": "Solicitação registrada",
+            "schema": {
+              "$ref": "#/definitions/RodadaResponse"
+            }
+          },
+          "400": {
+            "description": "Fora da janela de disponibilidade"
+          },
+          "403": {
+            "description": "Sem consentimento vigente"
+          }
+        },
+        "summary": "(Aluno) Solicita o veículo dentro da janela de disponibilidade",
+        "operationId": "solicitar_viagem",
         "tags": [
           "viagens"
         ]
@@ -1548,6 +2208,93 @@
         ]
       }
     },
+    "/v1/viagens/{id}/declaracao": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "type": "string"
+        }
+      ],
+      "delete": {
+        "responses": {
+          "200": {
+            "description": "Cancelada",
+            "schema": {
+              "$ref": "#/definitions/CancelamentoResponse"
+            }
+          },
+          "404": {
+            "description": "Sem solicitação"
+          }
+        },
+        "summary": "(Aluno) Cancela a solicitação da rodada",
+        "operationId": "cancelar_solicitacao",
+        "tags": [
+          "viagens"
+        ]
+      },
+      "post": {
+        "responses": {
+          "201": {
+            "description": "Embarque confirmado",
+            "schema": {
+              "$ref": "#/definitions/DeclaracaoResponse"
+            }
+          },
+          "400": {
+            "description": "Rodada não aceita declarações"
+          },
+          "409": {
+            "description": "Indisponibilidade momentânea"
+          }
+        },
+        "summary": "(Aluno) Declara origem e destino durante o buffer",
+        "operationId": "declarar_trajeto",
+        "parameters": [
+          {
+            "name": "payload",
+            "required": true,
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/DeclaracaoTrajetoRequest"
+            }
+          }
+        ],
+        "tags": [
+          "viagens"
+        ]
+      }
+    },
+    "/v1/viagens/{id}/iniciar-percurso": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "type": "string"
+        }
+      ],
+      "post": {
+        "responses": {
+          "200": {
+            "description": "Buffer aberto",
+            "schema": {
+              "$ref": "#/definitions/RodadaResponse"
+            }
+          },
+          "400": {
+            "description": "Rodada não solicitada"
+          }
+        },
+        "summary": "(Motorista) Inicia o percurso e abre a janela de buffer",
+        "operationId": "iniciar_percurso",
+        "tags": [
+          "viagens"
+        ]
+      }
+    },
     "/v1/viagens/{id}/localizacao": {
       "parameters": [
         {
@@ -1557,6 +2304,18 @@
           "type": "string"
         }
       ],
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "(Aluno/Motorista) Obtém a localização atual do ônibus (viagem em andamento)",
+        "operationId": "obter_localizacao_onibus",
+        "tags": [
+          "viagens"
+        ]
+      },
       "post": {
         "responses": {
           "200": {
@@ -1575,18 +2334,6 @@
             }
           }
         ],
-        "tags": [
-          "viagens"
-        ]
-      },
-      "get": {
-        "responses": {
-          "200": {
-            "description": "Success"
-          }
-        },
-        "summary": "(Aluno/Motorista) Obtém a localização atual do ônibus (viagem em andamento)",
-        "operationId": "obter_localizacao_onibus",
         "tags": [
           "viagens"
         ]
@@ -1727,6 +2474,22 @@
     {
       "name": "dashboard",
       "description": "Métricas e Relatórios para o Gestor"
+    },
+    {
+      "name": "janelas",
+      "description": "Janelas de Disponibilidade do Veículo"
+    },
+    {
+      "name": "consentimento",
+      "description": "Consentimento LGPD e Direitos do Titular"
+    },
+    {
+      "name": "embarque",
+      "description": "Embarque por QR Code e Roteiro do Motorista"
+    },
+    {
+      "name": "telemetria",
+      "description": "Telemetria do Veículo Elétrico"
     }
   ],
   "definitions": {
@@ -2065,6 +2828,21 @@
       },
       "type": "object"
     },
+    "OnibusListResponse": {
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/OnibusResponse"
+          }
+        },
+        "total": {
+          "type": "integer",
+          "description": "Total de ônibus"
+        }
+      },
+      "type": "object"
+    },
     "OnibusResponse": {
       "properties": {
         "id": {
@@ -2086,21 +2864,6 @@
         "ano": {
           "type": "integer",
           "description": "Ano"
-        }
-      },
-      "type": "object"
-    },
-    "OnibusListResponse": {
-      "properties": {
-        "items": {
-          "type": "array",
-          "items": {
-            "$ref": "#/definitions/OnibusResponse"
-          }
-        },
-        "total": {
-          "type": "integer",
-          "description": "Total de ônibus"
         }
       },
       "type": "object"
@@ -2198,6 +2961,21 @@
       },
       "type": "object"
     },
+    "RotaListResponse": {
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RotaResponse"
+          }
+        },
+        "total": {
+          "type": "integer",
+          "description": "Total de rotas"
+        }
+      },
+      "type": "object"
+    },
     "RotaResponse": {
       "properties": {
         "id": {
@@ -2227,21 +3005,6 @@
         "municipio_uf": {
           "type": "string",
           "description": "UF do município"
-        }
-      },
-      "type": "object"
-    },
-    "RotaListResponse": {
-      "properties": {
-        "items": {
-          "type": "array",
-          "items": {
-            "$ref": "#/definitions/RotaResponse"
-          }
-        },
-        "total": {
-          "type": "integer",
-          "description": "Total de rotas"
         }
       },
       "type": "object"
@@ -2298,6 +3061,21 @@
       },
       "type": "object"
     },
+    "RotaHorarioListResponse": {
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RotaHorarioResponse"
+          }
+        },
+        "total": {
+          "type": "integer",
+          "description": "Total de horários"
+        }
+      },
+      "type": "object"
+    },
     "RotaHorarioResponse": {
       "properties": {
         "id": {
@@ -2318,21 +3096,6 @@
           "items": {
             "type": "string"
           }
-        }
-      },
-      "type": "object"
-    },
-    "RotaHorarioListResponse": {
-      "properties": {
-        "items": {
-          "type": "array",
-          "items": {
-            "$ref": "#/definitions/RotaHorarioResponse"
-          }
-        },
-        "total": {
-          "type": "integer",
-          "description": "Total de horários"
         }
       },
       "type": "object"
@@ -2437,6 +3200,21 @@
       },
       "type": "object"
     },
+    "PontoListResponse": {
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/PontoResponse"
+          }
+        },
+        "total": {
+          "type": "integer",
+          "description": "Total de pontos"
+        }
+      },
+      "type": "object"
+    },
     "PontoResponse": {
       "properties": {
         "id": {
@@ -2462,21 +3240,6 @@
         "instituicao": {
           "type": "string",
           "description": "Instituição vinculada"
-        }
-      },
-      "type": "object"
-    },
-    "PontoListResponse": {
-      "properties": {
-        "items": {
-          "type": "array",
-          "items": {
-            "$ref": "#/definitions/PontoResponse"
-          }
-        },
-        "total": {
-          "type": "integer",
-          "description": "Total de pontos"
         }
       },
       "type": "object"
@@ -2527,6 +3290,108 @@
         "longitude": {
           "type": "number",
           "description": "Longitude"
+        }
+      },
+      "type": "object"
+    },
+    "RodadaResponse": {
+      "properties": {
+        "viagem_id": {
+          "type": "string",
+          "description": "UUID da rodada"
+        },
+        "status": {
+          "type": "string",
+          "description": "OCIOSA, SOLICITADA, BUFFER_ABERTO, EM_ROTA"
+        },
+        "buffer_expira_em": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Fim da contagem regressiva"
+        },
+        "segundos_restantes": {
+          "type": "integer",
+          "description": "Tempo restante do buffer"
+        },
+        "minha_situacao": {
+          "type": "string",
+          "description": "INTERESSADO, CONFIRMADO, NEGADO"
+        },
+        "motorista_notificado": {
+          "type": "boolean",
+          "description": "Esta solicitação chamou o motorista"
+        }
+      },
+      "type": "object"
+    },
+    "RodadaAtivaResponse": {
+      "properties": {
+        "em_operacao": {
+          "type": "boolean",
+          "description": "Dentro da janela de disponibilidade"
+        },
+        "rodada": {
+          "$ref": "#/definitions/RodadaResponse"
+        }
+      },
+      "type": "object"
+    },
+    "DeclaracaoTrajetoRequest": {
+      "required": [
+        "ponto_destino_id",
+        "ponto_origem_id"
+      ],
+      "properties": {
+        "ponto_origem_id": {
+          "type": "string",
+          "description": "UUID do ponto de embarque"
+        },
+        "ponto_destino_id": {
+          "type": "string",
+          "description": "UUID do ponto de desembarque"
+        }
+      },
+      "type": "object"
+    },
+    "CancelamentoResponse": {
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Resultado do cancelamento"
+        },
+        "vaga_liberada": {
+          "type": "boolean",
+          "description": "A vaga voltou para a rodada"
+        }
+      },
+      "type": "object"
+    },
+    "DeclaracaoResponse": {
+      "properties": {
+        "viagem_id": {
+          "type": "string",
+          "description": "UUID da rodada"
+        },
+        "aluno_id": {
+          "type": "string",
+          "description": "UUID do aluno"
+        },
+        "status": {
+          "type": "string",
+          "description": "CONFIRMADO ou NEGADO"
+        },
+        "ponto_embarque_id": {
+          "type": "string",
+          "description": "UUID do ponto de embarque"
+        },
+        "ponto_destino_id": {
+          "type": "string",
+          "description": "UUID do ponto de desembarque"
+        },
+        "declarado_em": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Momento da declaração"
         }
       },
       "type": "object"
@@ -2654,6 +3519,21 @@
       },
       "type": "object"
     },
+    "ViagemListResponse": {
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ViagemResponse"
+          }
+        },
+        "total": {
+          "type": "integer",
+          "description": "Total de viagens"
+        }
+      },
+      "type": "object"
+    },
     "ViagemResponse": {
       "properties": {
         "id": {
@@ -2691,21 +3571,6 @@
         "veiculo_id": {
           "type": "string",
           "description": "UUID do veículo"
-        }
-      },
-      "type": "object"
-    },
-    "ViagemListResponse": {
-      "properties": {
-        "items": {
-          "type": "array",
-          "items": {
-            "$ref": "#/definitions/ViagemResponse"
-          }
-        },
-        "total": {
-          "type": "integer",
-          "description": "Total de viagens"
         }
       },
       "type": "object"
@@ -2840,13 +3705,11 @@
     "AlunoSelfSignupRequest": {
       "required": [
         "cpf",
-        "data_nascimento",
         "email",
-        "endereco_casa",
         "instituicao_id",
-        "matricula",
         "nome",
-        "password"
+        "password",
+        "password_confirm"
       ],
       "properties": {
         "nome": {
@@ -2861,6 +3724,10 @@
           "type": "string",
           "description": "Senha"
         },
+        "password_confirm": {
+          "type": "string",
+          "description": "Confirmação da senha"
+        },
         "cpf": {
           "type": "string",
           "description": "CPF"
@@ -2871,11 +3738,11 @@
         },
         "matricula": {
           "type": "string",
-          "description": "Matrícula escolar"
+          "description": "Matrícula"
         },
         "instituicao_id": {
           "type": "string",
-          "description": "UUID da instituição"
+          "description": "UUID da instituição de vínculo"
         },
         "data_nascimento": {
           "type": "string",
@@ -3054,6 +3921,18 @@
       },
       "type": "object"
     },
+    "AlunoRejeitarRequest": {
+      "required": [
+        "motivo"
+      ],
+      "properties": {
+        "motivo": {
+          "type": "string",
+          "description": "Motivo da rejeição"
+        }
+      },
+      "type": "object"
+    },
     "GuardianConsentResponse": {
       "properties": {
         "nome": {
@@ -3172,6 +4051,173 @@
       },
       "type": "object"
     },
+    "IndicadoresPeriodo": {
+      "properties": {
+        "periodo": {
+          "$ref": "#/definitions/IndicadorPeriodo"
+        },
+        "sem_dados": {
+          "type": "boolean",
+          "description": "Verdadeiro se o período não tem viagens"
+        },
+        "mensagem": {
+          "type": "string",
+          "description": "Mensagem informativa quando não há dados"
+        },
+        "periodo_sugerido": {
+          "description": "Intervalo com dados, quando existe",
+          "allOf": [
+            {
+              "$ref": "#/definitions/IndicadorPeriodo"
+            }
+          ]
+        },
+        "total_viagens": {
+          "type": "integer"
+        },
+        "viagens_por_status": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/IndicadorViagensPorStatus"
+          }
+        },
+        "negacoes_por_ponto": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/IndicadorNegacaoPorPonto"
+          }
+        },
+        "tempo_medio_por_trecho": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/IndicadorTempoTrecho"
+          }
+        },
+        "ocupacao": {
+          "$ref": "#/definitions/IndicadorOcupacao"
+        },
+        "ipk": {
+          "$ref": "#/definitions/IndicadorIPK"
+        }
+      },
+      "type": "object"
+    },
+    "IndicadorPeriodo": {
+      "properties": {
+        "inicio": {
+          "type": "string"
+        },
+        "fim": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "IndicadorViagensPorStatus": {
+      "properties": {
+        "status": {
+          "type": "string",
+          "description": "Status da viagem"
+        },
+        "total": {
+          "type": "integer",
+          "description": "Viagens nesse status no período"
+        }
+      },
+      "type": "object"
+    },
+    "IndicadorNegacaoPorPonto": {
+      "properties": {
+        "ponto_id": {
+          "type": "string",
+          "description": "ID do ponto de embarque"
+        },
+        "apelido": {
+          "type": "string",
+          "description": "Nome do ponto"
+        },
+        "negacoes": {
+          "type": "integer",
+          "description": "Solicitações negadas por capacidade"
+        }
+      },
+      "type": "object"
+    },
+    "IndicadorTempoTrecho": {
+      "properties": {
+        "ponto_origem_id": {
+          "type": "string"
+        },
+        "ponto_origem": {
+          "type": "string"
+        },
+        "ponto_destino_id": {
+          "type": "string"
+        },
+        "ponto_destino": {
+          "type": "string"
+        },
+        "minutos_medio": {
+          "type": "number",
+          "description": "Tempo médio do trecho, em minutos"
+        },
+        "amostras": {
+          "type": "integer",
+          "description": "Passagens usadas na média"
+        },
+        "ordem": {
+          "type": "integer",
+          "description": "Posição do trecho no circuito"
+        }
+      },
+      "type": "object"
+    },
+    "IndicadorOcupacao": {
+      "properties": {
+        "viagens_consideradas": {
+          "type": "integer",
+          "description": "Viagens operadas com veículo e capacidade conhecidos"
+        },
+        "passageiros_media": {
+          "type": "number",
+          "description": "Média de embarques por viagem"
+        },
+        "capacidade_media": {
+          "type": "number",
+          "description": "Capacidade média dos veículos"
+        },
+        "taxa_ocupacao": {
+          "type": "number",
+          "description": "Média de passageiros/capacidade (nulo sem viagens)"
+        }
+      },
+      "type": "object"
+    },
+    "IndicadorIPK": {
+      "properties": {
+        "passageiros": {
+          "type": "integer",
+          "description": "Embarques nas viagens com km registrado"
+        },
+        "km": {
+          "type": "number",
+          "description": "Quilometragem somada dessas viagens"
+        },
+        "ipk": {
+          "type": "number",
+          "description": "Passageiros por quilômetro; nulo se nenhuma viagem tem km_real"
+        },
+        "viagens_consideradas": {
+          "type": "integer",
+          "description": "Viagens com km_real > 0"
+        },
+        "viagens_sem_km": {
+          "type": "integer",
+          "description": "Viagens operadas sem km_real, excluídas do IPK"
+        }
+      },
+      "type": "object"
+    },
     "PontoTelemetria": {
       "properties": {
         "latitude": {
@@ -3185,6 +4231,683 @@
         "timestamp": {
           "type": "string",
           "description": "Horário exato do registro (ISO)"
+        }
+      },
+      "type": "object"
+    },
+    "JanelaRequest": {
+      "required": [
+        "dia",
+        "hora_fim",
+        "hora_inicio",
+        "motorista_id",
+        "rota_id"
+      ],
+      "properties": {
+        "rota_id": {
+          "type": "string",
+          "description": "UUID do circuito"
+        },
+        "motorista_id": {
+          "type": "string",
+          "description": "UUID do motorista"
+        },
+        "veiculo_id": {
+          "type": "string",
+          "description": "UUID do veículo (opcional)"
+        },
+        "dia": {
+          "type": "string",
+          "description": "SEG, TER, QUA, QUI, SEX, SAB, DOM"
+        },
+        "hora_inicio": {
+          "type": "string",
+          "description": "HH:MM"
+        },
+        "hora_fim": {
+          "type": "string",
+          "description": "HH:MM"
+        },
+        "buffer_minutos": {
+          "type": "integer",
+          "description": "N minutos do buffer (RF-11)"
+        },
+        "ativo": {
+          "type": "boolean",
+          "description": "Janela ativa"
+        }
+      },
+      "type": "object"
+    },
+    "JanelaListResponse": {
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/JanelaResponse"
+          }
+        },
+        "total": {
+          "type": "integer",
+          "description": "Total de janelas"
+        }
+      },
+      "type": "object"
+    },
+    "JanelaResponse": {
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "UUID da janela"
+        },
+        "rota_id": {
+          "type": "string",
+          "description": "UUID do circuito"
+        },
+        "rota_nome": {
+          "type": "string",
+          "description": "Nome do circuito"
+        },
+        "motorista_id": {
+          "type": "string",
+          "description": "UUID do motorista"
+        },
+        "motorista_nome": {
+          "type": "string",
+          "description": "Nome do motorista"
+        },
+        "veiculo_id": {
+          "type": "string",
+          "description": "UUID do veículo"
+        },
+        "dia": {
+          "type": "string",
+          "description": "Dia da semana"
+        },
+        "hora_inicio": {
+          "type": "string",
+          "description": "Início da operação"
+        },
+        "hora_fim": {
+          "type": "string",
+          "description": "Fim da operação"
+        },
+        "buffer_minutos": {
+          "type": "integer",
+          "description": "N minutos do buffer"
+        },
+        "ativo": {
+          "type": "boolean",
+          "description": "Janela ativa"
+        }
+      },
+      "type": "object"
+    },
+    "JanelaVigenteResponse": {
+      "properties": {
+        "em_operacao": {
+          "type": "boolean",
+          "description": "Há janela em vigor agora"
+        },
+        "janela": {
+          "$ref": "#/definitions/JanelaResponse"
+        },
+        "horarios_hoje": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/JanelaResponse"
+          }
+        }
+      },
+      "type": "object"
+    },
+    "JanelaMessageResponse": {
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Mensagem de confirmação"
+        }
+      },
+      "type": "object"
+    },
+    "ConsentimentoStatusResponse": {
+      "properties": {
+        "versao_termo": {
+          "type": "string",
+          "description": "Versão vigente do termo"
+        },
+        "aceito": {
+          "type": "boolean",
+          "description": "Há aceite válido para a versão vigente"
+        },
+        "aceito_em": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Data/hora do aceite vigente"
+        }
+      },
+      "type": "object"
+    },
+    "ConsentimentoResponse": {
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "UUID do registro de consentimento"
+        },
+        "versao_termo": {
+          "type": "string",
+          "description": "Versão aceita"
+        },
+        "aceito_em": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Data/hora do aceite"
+        }
+      },
+      "type": "object"
+    },
+    "ExclusaoContaRequest": {
+      "required": [
+        "email",
+        "password"
+      ],
+      "properties": {
+        "email": {
+          "type": "string",
+          "description": "E-mail do próprio titular"
+        },
+        "password": {
+          "type": "string",
+          "description": "Senha do próprio titular"
+        }
+      },
+      "type": "object"
+    },
+    "ConsentimentoMessageResponse": {
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Mensagem de confirmação"
+        }
+      },
+      "type": "object"
+    },
+    "CredencialResponse": {
+      "properties": {
+        "viagem_id": {
+          "type": "string",
+          "description": "UUID da viagem"
+        },
+        "aluno_id": {
+          "type": "string",
+          "description": "UUID do aluno"
+        },
+        "qr_token": {
+          "type": "string",
+          "description": "Credencial opaca; o app a desenha como QR"
+        },
+        "ponto_embarque_id": {
+          "type": "string",
+          "description": "UUID do ponto de embarque"
+        },
+        "ponto_destino_id": {
+          "type": "string",
+          "description": "UUID do ponto de destino"
+        },
+        "embarcou": {
+          "type": "boolean",
+          "description": "Embarque já registrado"
+        },
+        "embarcado_em": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Momento do embarque"
+        }
+      },
+      "type": "object"
+    },
+    "RoteiroResponse": {
+      "properties": {
+        "viagem_id": {
+          "type": "string",
+          "description": "UUID da viagem"
+        },
+        "status": {
+          "type": "string",
+          "description": "Status da viagem"
+        },
+        "pontos": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/PontoRoteiro"
+          }
+        },
+        "ponto_atual_id": {
+          "type": "string",
+          "description": "Parada em atendimento"
+        },
+        "instrucao_atual": {
+          "type": "string",
+          "description": "Instrução da parada em atendimento"
+        }
+      },
+      "type": "object"
+    },
+    "PontoRoteiro": {
+      "properties": {
+        "ponto_id": {
+          "type": "string",
+          "description": "UUID do ponto"
+        },
+        "apelido": {
+          "type": "string",
+          "description": "Nome do ponto"
+        },
+        "ordem": {
+          "type": "integer",
+          "description": "Posição no circuito"
+        },
+        "visitado": {
+          "type": "boolean",
+          "description": "Parada já transposta"
+        },
+        "chegada_real": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Horário de chegada"
+        },
+        "embarcam": {
+          "type": "integer",
+          "description": "Quantos embarcam neste ponto"
+        },
+        "desembarcam": {
+          "type": "integer",
+          "description": "Quantos desembarcam neste ponto"
+        },
+        "instrucao": {
+          "type": "string",
+          "description": "Instrução textual exibida ao motorista"
+        },
+        "passageiros": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/PassageiroDoPonto"
+          }
+        }
+      },
+      "type": "object"
+    },
+    "PassageiroDoPonto": {
+      "properties": {
+        "aluno_id": {
+          "type": "string",
+          "description": "UUID do aluno"
+        },
+        "nome": {
+          "type": "string",
+          "description": "Nome do passageiro"
+        },
+        "qr_token": {
+          "type": "string",
+          "description": "Credencial válida (matriz de permissões)"
+        },
+        "embarcou": {
+          "type": "boolean",
+          "description": "Embarque já registrado"
+        },
+        "ponto_destino_id": {
+          "type": "string",
+          "description": "UUID do ponto de desembarque"
+        }
+      },
+      "type": "object"
+    },
+    "AvancarPontoRequest": {
+      "properties": {
+        "ocorrido_em": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Horário de chegada à parada (ISO 8601)"
+        }
+      },
+      "type": "object"
+    },
+    "ValidarEmbarqueRequest": {
+      "required": [
+        "qr_token"
+      ],
+      "properties": {
+        "qr_token": {
+          "type": "string",
+          "description": "Credencial lida do QR Code"
+        },
+        "ocorrido_em": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Momento da leitura (ISO 8601)"
+        }
+      },
+      "type": "object"
+    },
+    "EmbarqueResponse": {
+      "properties": {
+        "viagem_id": {
+          "type": "string",
+          "description": "UUID da viagem"
+        },
+        "aluno_id": {
+          "type": "string",
+          "description": "UUID do aluno"
+        },
+        "nome": {
+          "type": "string",
+          "description": "Nome do passageiro"
+        },
+        "ponto_embarque_id": {
+          "type": "string",
+          "description": "UUID do ponto de embarque"
+        },
+        "embarcado_em": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Momento do embarque"
+        },
+        "manual": {
+          "type": "boolean",
+          "description": "Embarque registrado pelo fallback manual"
+        }
+      },
+      "type": "object"
+    },
+    "EmbarqueManualRequest": {
+      "required": [
+        "aluno_id"
+      ],
+      "properties": {
+        "aluno_id": {
+          "type": "string",
+          "description": "UUID do aluno na lista do ponto"
+        },
+        "ocorrido_em": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Momento do embarque (ISO 8601)"
+        }
+      },
+      "type": "object"
+    },
+    "SincronizacaoRequest": {
+      "required": [
+        "eventos"
+      ],
+      "properties": {
+        "eventos": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/EventoOffline"
+          }
+        }
+      },
+      "type": "object"
+    },
+    "EventoOffline": {
+      "required": [
+        "evento_id",
+        "ocorrido_em",
+        "tipo"
+      ],
+      "properties": {
+        "evento_id": {
+          "type": "string",
+          "description": "Identificador gerado no app"
+        },
+        "tipo": {
+          "type": "string",
+          "description": "EMBARQUE, EMBARQUE_MANUAL, CHEGADA_PONTO ou POSICAO"
+        },
+        "ocorrido_em": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Carimbo local do evento"
+        },
+        "qr_token": {
+          "type": "string",
+          "description": "Credencial lida (EMBARQUE)"
+        },
+        "aluno_id": {
+          "type": "string",
+          "description": "UUID do aluno (EMBARQUE_MANUAL)"
+        },
+        "ponto_id": {
+          "type": "string",
+          "description": "UUID do ponto (CHEGADA_PONTO, embarques)"
+        },
+        "latitude": {
+          "type": "number",
+          "description": "Latitude (POSICAO)"
+        },
+        "longitude": {
+          "type": "number",
+          "description": "Longitude (POSICAO)"
+        }
+      },
+      "type": "object"
+    },
+    "SincronizacaoResponse": {
+      "properties": {
+        "recebidos": {
+          "type": "integer",
+          "description": "Eventos no lote"
+        },
+        "aplicados": {
+          "type": "integer",
+          "description": "Eventos aplicados agora"
+        },
+        "ja_aplicados": {
+          "type": "integer",
+          "description": "Eventos já aplicados antes"
+        },
+        "recusados": {
+          "type": "integer",
+          "description": "Eventos recusados"
+        },
+        "resultados": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ResultadoEvento"
+          }
+        }
+      },
+      "type": "object"
+    },
+    "ResultadoEvento": {
+      "properties": {
+        "evento_id": {
+          "type": "string",
+          "description": "Identificador do evento"
+        },
+        "situacao": {
+          "type": "string",
+          "description": "aplicado, ja_aplicado ou recusado"
+        },
+        "codigo": {
+          "type": "string",
+          "description": "Código da recusa"
+        },
+        "mensagem": {
+          "type": "string",
+          "description": "Motivo da recusa"
+        }
+      },
+      "type": "object"
+    },
+    "TelemetriaIngestaoRequest": {
+      "required": [
+        "amostras",
+        "veiculo_id"
+      ],
+      "properties": {
+        "veiculo_id": {
+          "type": "string",
+          "description": "UUID do veículo"
+        },
+        "amostras": {
+          "type": "array",
+          "description": "Lote de leituras",
+          "items": {
+            "$ref": "#/definitions/TelemetriaAmostra"
+          }
+        }
+      },
+      "type": "object"
+    },
+    "TelemetriaAmostra": {
+      "required": [
+        "timestamp"
+      ],
+      "properties": {
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Instante da leitura (ISO 8601, com fuso)"
+        },
+        "viagem_id": {
+          "type": "string",
+          "description": "Viagem em curso, se houver"
+        },
+        "nivel_bateria": {
+          "type": "number",
+          "description": "Carga da bateria em % (0 a 100)"
+        },
+        "consumo_kwh": {
+          "type": "number",
+          "description": "Consumo no intervalo, em kWh"
+        },
+        "autonomia_km": {
+          "type": "number",
+          "description": "Autonomia estimada em km"
+        },
+        "odometro_km": {
+          "type": "number",
+          "description": "Odômetro acumulado em km"
+        },
+        "saude_bateria": {
+          "type": "number",
+          "description": "SOH da bateria em % (0 a 100)"
+        }
+      },
+      "type": "object"
+    },
+    "TelemetriaIngestaoResponse": {
+      "properties": {
+        "recebidas": {
+          "type": "integer",
+          "description": "Amostras no lote"
+        },
+        "armazenadas": {
+          "type": "integer",
+          "description": "Amostras novas gravadas"
+        },
+        "duplicadas": {
+          "type": "integer",
+          "description": "Amostras já conhecidas, descartadas"
+        }
+      },
+      "type": "object"
+    },
+    "TelemetriaListResponse": {
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/TelemetriaResponse"
+          }
+        },
+        "total": {
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "TelemetriaResponse": {
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "veiculo_id": {
+          "type": "string"
+        },
+        "viagem_id": {
+          "type": "string"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "nivel_bateria": {
+          "type": "number"
+        },
+        "consumo_kwh": {
+          "type": "number"
+        },
+        "autonomia_km": {
+          "type": "number"
+        },
+        "odometro_km": {
+          "type": "number"
+        },
+        "saude_bateria": {
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "TelemetriaConsumoViagemListResponse": {
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/TelemetriaConsumoViagem"
+          }
+        },
+        "total": {
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "TelemetriaConsumoViagem": {
+      "properties": {
+        "viagem_id": {
+          "type": "string"
+        },
+        "veiculo_id": {
+          "type": "string"
+        },
+        "amostras": {
+          "type": "integer"
+        },
+        "inicio": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "fim": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "consumo_kwh": {
+          "type": "number",
+          "description": "Soma do consumo das amostras da viagem"
+        },
+        "km": {
+          "type": "number",
+          "description": "Diferença entre odômetro final e inicial"
+        },
+        "bateria_max": {
+          "type": "number"
+        },
+        "bateria_min": {
+          "type": "number"
         }
       },
       "type": "object"
