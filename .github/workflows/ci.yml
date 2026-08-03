@@ -246,6 +246,8 @@ jobs:
           DB_HOST: localhost
           DB_PORT: 5432
           DB_NAME: buska_db
+          POSTGRES_USER: buska_user
+          POSTGRES_PASSWORD: buska_pass
           JWT_SECRET_KEY: test_secret
         run: |
           uv run pytest -m "not e2e" \

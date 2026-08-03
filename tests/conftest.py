@@ -70,7 +70,10 @@ load_dotenv()
 # default to a dedicated "<db>_test" database, and refuse to run at all if
 # the resolved URI doesn't look like a test database.
 _TEST_DB_URI = os.getenv("TEST_DATABASE_URI") or Settings().SQLALCHEMY_DATABASE_URI + "_test"
-assert "test" in _TEST_DB_URI.rsplit("/", 1)[-1], f"refusing to run tests against {_TEST_DB_URI}"
+_db_name = make_url(_TEST_DB_URI).database or ""
+assert _db_name.endswith("_test") or _db_name.startswith(
+    "test_"
+), f"refusing to run tests against {_TEST_DB_URI}"
 
 
 def _ensure_test_database(uri: str) -> None:
@@ -83,9 +86,18 @@ def _ensure_test_database(uri: str) -> None:
     admin_user = os.getenv("POSTGRES_USER", "postgres")
     admin_password = os.getenv("POSTGRES_PASSWORD", "postgres")
 
-    admin_conn = psycopg2.connect(
-        host=url.host, port=url.port, user=admin_user, password=admin_password, dbname="postgres"
-    )
+    try:
+        admin_conn = psycopg2.connect(
+            host=url.host,
+            port=url.port,
+            user=admin_user,
+            password=admin_password,
+            dbname="postgres",
+        )
+    except psycopg2.OperationalError as e:
+        raise RuntimeError(
+            f"test DB setup needs superuser credentials; set POSTGRES_USER/POSTGRES_PASSWORD ({e})"
+        ) from e
     admin_conn.autocommit = True
     try:
         with admin_conn.cursor() as cur:
