@@ -43,8 +43,8 @@ def aluno3(client, app, _db, organizacao):
 
 def _consolidar(_db, viagem, reservas):
     """Abre o buffer, registra os trajetos e deixa a varredura consolidar."""
-    # A fábrica sorteia a capacidade do veículo; aqui vale a da van real do
-    # PaqTcPB, senão um sorteio baixo nega os trajetos que se cruzam.
+    # A fábrica sorteia a capacidade do veículo; aqui ela é fixa, senão um
+    # sorteio baixo nega os trajetos que se cruzam.
     viagem.veiculo.capacidade = 17
     viagem.status = StatusViagem.BUFFER_ABERTO
     viagem.buffer_expira_em = datetime.now(UTC) + timedelta(minutes=5)

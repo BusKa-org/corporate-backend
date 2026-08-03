@@ -168,7 +168,7 @@ def obter_telemetria_viagem(gestor_id: str, viagem_id: str) -> list[dict]:
 # * **Escopo de rota.** Uma viagem chega ao circuito por dois caminhos: a
 #   rodada sob demanda aponta direto para `rota_id`, a viagem programada
 #   herdada chega por `horario_rota_id`. O painel cobre os dois — o gestor do
-#   PaqTcPB opera DRT, mas a mesma base ainda guarda viagens programadas e um
+#   A operação corrente é DRT, mas a mesma base ainda guarda viagens programadas e um
 #   relatório que as ignorasse subnotificaria o período sem avisar.
 # * **Período.** `Viagem.data` é um `DATE`; os dois limites são inclusivos e a
 #   comparação é de data civil, sem fuso envolvido.

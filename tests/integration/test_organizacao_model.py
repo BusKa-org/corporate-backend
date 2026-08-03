@@ -5,13 +5,13 @@ from app.models.organizacao import Organizacao
 
 
 def test_organizacao_persists_and_defaults_ativo(_db):
-    org = Organizacao(nome="Fundação PaqTcPB", sigla="PAQTCPB")
+    org = Organizacao(nome="Organização Exemplo", sigla="EXEMPLO")
     _db.session.add(org)
     _db.session.commit()
 
     fetched = _db.session.get(Organizacao, org.id)
-    assert fetched.nome == "Fundação PaqTcPB"
-    assert fetched.sigla == "PAQTCPB"
+    assert fetched.nome == "Organização Exemplo"
+    assert fetched.sigla == "EXEMPLO"
     assert fetched.ativo is True
     assert fetched.__tablename__ == "organizacao"
 

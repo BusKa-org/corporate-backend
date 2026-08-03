@@ -70,6 +70,18 @@
       }
     },
     "/v1/alunos/me": {
+      "delete": {
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "Aluno exclui sua conta",
+        "operationId": "aluno_delete",
+        "tags": [
+          "alunos"
+        ]
+      },
       "put": {
         "responses": {
           "200": {
@@ -91,18 +103,6 @@
             }
           }
         ],
-        "tags": [
-          "alunos"
-        ]
-      },
-      "delete": {
-        "responses": {
-          "200": {
-            "description": "Success"
-          }
-        },
-        "summary": "Aluno exclui sua conta",
-        "operationId": "aluno_delete",
         "tags": [
           "alunos"
         ]
@@ -815,17 +815,6 @@
           "type": "string"
         }
       ],
-      "delete": {
-        "responses": {
-          "200": {
-            "description": "Success"
-          }
-        },
-        "operationId": "delete_instituicao",
-        "tags": [
-          "instituicoes"
-        ]
-      },
       "get": {
         "responses": {
           "200": {
@@ -836,6 +825,17 @@
           }
         },
         "operationId": "get_instituicao",
+        "tags": [
+          "instituicoes"
+        ]
+      },
+      "delete": {
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "operationId": "delete_instituicao",
         "tags": [
           "instituicoes"
         ]
@@ -1156,18 +1156,6 @@
           "onibus"
         ]
       },
-      "delete": {
-        "responses": {
-          "200": {
-            "description": "Success"
-          }
-        },
-        "summary": "Remove um ônibus",
-        "operationId": "delete_onibus",
-        "tags": [
-          "onibus"
-        ]
-      },
       "get": {
         "responses": {
           "200": {
@@ -1179,6 +1167,18 @@
         },
         "summary": "Detalhes de um ônibus",
         "operationId": "get_onibus",
+        "tags": [
+          "onibus"
+        ]
+      },
+      "delete": {
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "Remove um ônibus",
+        "operationId": "delete_onibus",
         "tags": [
           "onibus"
         ]
@@ -1233,30 +1233,6 @@
           "type": "string"
         }
       ],
-      "put": {
-        "responses": {
-          "200": {
-            "description": "Success",
-            "schema": {
-              "$ref": "#/definitions/PontoResponse"
-            }
-          }
-        },
-        "operationId": "update_ponto",
-        "parameters": [
-          {
-            "name": "payload",
-            "required": true,
-            "in": "body",
-            "schema": {
-              "$ref": "#/definitions/PontoUpdateRequest"
-            }
-          }
-        ],
-        "tags": [
-          "pontos"
-        ]
-      },
       "delete": {
         "responses": {
           "200": {
@@ -1278,6 +1254,30 @@
           }
         },
         "operationId": "get_ponto",
+        "tags": [
+          "pontos"
+        ]
+      },
+      "put": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/PontoResponse"
+            }
+          }
+        },
+        "operationId": "update_ponto",
+        "parameters": [
+          {
+            "name": "payload",
+            "required": true,
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/PontoUpdateRequest"
+            }
+          }
+        ],
         "tags": [
           "pontos"
         ]
@@ -1348,27 +1348,6 @@
           "type": "string"
         }
       ],
-      "put": {
-        "responses": {
-          "200": {
-            "description": "Success"
-          }
-        },
-        "operationId": "update_rota",
-        "parameters": [
-          {
-            "name": "payload",
-            "required": true,
-            "in": "body",
-            "schema": {
-              "$ref": "#/definitions/RotaUpdateRequest"
-            }
-          }
-        ],
-        "tags": [
-          "rotas"
-        ]
-      },
       "delete": {
         "responses": {
           "200": {
@@ -1390,6 +1369,27 @@
           }
         },
         "operationId": "get_rota",
+        "tags": [
+          "rotas"
+        ]
+      },
+      "put": {
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "operationId": "update_rota",
+        "parameters": [
+          {
+            "name": "payload",
+            "required": true,
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/RotaUpdateRequest"
+            }
+          }
+        ],
         "tags": [
           "rotas"
         ]
@@ -2217,24 +2217,6 @@
           "type": "string"
         }
       ],
-      "delete": {
-        "responses": {
-          "200": {
-            "description": "Cancelada",
-            "schema": {
-              "$ref": "#/definitions/CancelamentoResponse"
-            }
-          },
-          "404": {
-            "description": "Sem solicitação"
-          }
-        },
-        "summary": "(Aluno) Cancela a solicitação da rodada",
-        "operationId": "cancelar_solicitacao",
-        "tags": [
-          "viagens"
-        ]
-      },
       "post": {
         "responses": {
           "201": {
@@ -2262,6 +2244,24 @@
             }
           }
         ],
+        "tags": [
+          "viagens"
+        ]
+      },
+      "delete": {
+        "responses": {
+          "200": {
+            "description": "Cancelada",
+            "schema": {
+              "$ref": "#/definitions/CancelamentoResponse"
+            }
+          },
+          "404": {
+            "description": "Sem solicitação"
+          }
+        },
+        "summary": "(Aluno) Cancela a solicitação da rodada",
+        "operationId": "cancelar_solicitacao",
         "tags": [
           "viagens"
         ]
@@ -3353,19 +3353,6 @@
       },
       "type": "object"
     },
-    "CancelamentoResponse": {
-      "properties": {
-        "message": {
-          "type": "string",
-          "description": "Resultado do cancelamento"
-        },
-        "vaga_liberada": {
-          "type": "boolean",
-          "description": "A vaga voltou para a rodada"
-        }
-      },
-      "type": "object"
-    },
     "DeclaracaoResponse": {
       "properties": {
         "viagem_id": {
@@ -3392,6 +3379,19 @@
           "type": "string",
           "format": "date-time",
           "description": "Momento da declaração"
+        }
+      },
+      "type": "object"
+    },
+    "CancelamentoResponse": {
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Resultado do cancelamento"
+        },
+        "vaga_liberada": {
+          "type": "boolean",
+          "description": "A vaga voltou para a rodada"
         }
       },
       "type": "object"

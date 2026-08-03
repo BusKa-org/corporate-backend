@@ -87,10 +87,10 @@ def test_signup_notifica_o_gestor_da_organizacao(client, _db, instituicao, gesto
 
 @pytest.mark.integration
 def test_instituicoes_publicas_listam_as_opcoes_do_formulario(client, _db, organizacao):
-    _instituicao(_db, organizacao, nome="PaqTcPB", sigla="PaqTcPB")
+    _instituicao(_db, organizacao, nome="Parque Exemplo", sigla="PARQUE")
     r = client.get("/v1/instituicoes/public")
     assert r.status_code == 200, r.get_data(as_text=True)
-    assert "PaqTcPB" in [i["nome"] for i in r.get_json()["items"]]
+    assert "Parque Exemplo" in [i["nome"] for i in r.get_json()["items"]]
 
 
 # ─── Fluxo secundário 1 — validações ───────────────────────────────────────────

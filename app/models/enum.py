@@ -2,12 +2,22 @@ import enum
 
 
 class TipoInstituicao(enum.Enum):
+    """Tipo da instituição atendida.
+
+    Os seis primeiros vêm do catálogo escolar herdado (EMEC/INEP). Os dois
+    últimos existem porque uma implantação corporativa atende parques
+    tecnológicos e centros de inovação, que não são escolas — enquadrá-los
+    como universidade seria gravar dado errado só para caber no enum.
+    """
+
     INSTITUTO_FEDERAL = "Instituto Federal"
     UNIVERSIDADE_PUBLICA = "Universidade Pública"
     UNIVERSIDADE_PRIVADA = "Universidade Privada"
     ESCOLA_PUBLICA = "Escola Pública"
     ESCOLA_PRIVADA = "Escola Privada"
     ESCOLA_COMUNITARIA = "Escola Comunitária"
+    PARQUE_TECNOLOGICO = "Parque Tecnológico"
+    CENTRO_INOVACAO = "Centro de Inovação"
 
 
 class DiaDaSemana(enum.Enum):

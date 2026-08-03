@@ -381,7 +381,7 @@ def pontos_circuito(_db, organizacao):
 
 @pytest.fixture()
 def circuito(_db, organizacao, motorista, onibus, pontos_circuito):
-    """Rota com os quatro pontos em ordem — o circuito fixo do PaqTcPB."""
+    """Rota com os quatro pontos em ordem — um circuito fixo qualquer."""
     r = RotaFactory(
         organizacao_id=organizacao.id,
         motorista_padrao_id=motorista.user.id,

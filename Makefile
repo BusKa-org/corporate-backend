@@ -91,9 +91,6 @@ db-shell:
 seed:
 	uv run python seed.py
 
-seed-sql:
-	PGPASSWORD=$${DB_PASSWORD:-buska_pass} psql -h $${DB_HOST:-localhost} -p $${DB_PORT:-5432} -U $${DB_USER:-buska_user} -d $${DB_NAME:-buska_db} -f database/populate.sql
-
 # Alembic migrations
 migrate:
 	uv run alembic upgrade head
@@ -204,7 +201,6 @@ help:
 	@echo "  db-create       Create database from scratch (Alembic)"
 	@echo "  db-shell        Connect to database via psql"
 	@echo "  seed            Seed data using seed.py"
-	@echo "  seed-sql        Seed data using populate.sql"
 	@echo ""
 	@echo "Migrations (Alembic):"
 	@echo "  migrate         Apply pending migrations"

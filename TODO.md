@@ -14,16 +14,18 @@ This file tracks what remains and the debt the work left or uncovered.
 These are not code problems. Each one is a question I cannot answer from the
 repository.
 
-1. **PaqTcPB and CITTA are not seeded.** RF-02 names four served institutions;
-   only UFCG and UEPB exist. Real CNPJ, coordinates and `codigo_externo` are
-   needed — inventing institutional records was not an option.
-2. **`seed.py` and `scripts/seeds/` are broken and were never fixed by the
-   rename.** They resolve the tenant by IBGE code `2504009` (Campina Grande)
-   and require a municipalities CSV import; `Organizacao` dropped `codigo_ibge`
-   on purpose. This is not a rename miss — the corporate demo data has to be
-   re-authored around a tenant that is a foundation, not a municipality, and it
-   needs item 1 first. They are also the only source of the repo's remaining
-   ruff/black failures, which is why `make lint` (scoped to `app/`) looks clean.
+1. **Real data for two institutions is still missing** — in `mebuska-deploy`,
+   not here. `paqtcpb/dados.py` carries PaqTcPB and CITTA with **approximate
+   coordinates** and **no CNPJ**; the seed prints a warning about both on every
+   run. Confirm with PaqTcPB and fill them in there. Stop ordering matters
+   beyond cosmetics: it is what RF-14 builds its segments from.
+2. **`seed.py` is client-neutral now, and the municipal importers are gone.**
+   The product seeds a generic demonstration organisation. `scripts/seeds/`
+   (municipality/school catalogue importers keyed by IBGE code) and
+   `database/populate.sql` (a list of every PB municipality) were deleted —
+   they could not work after `codigo_ibge` was dropped, and a corporate tenant
+   curates a handful of institutions rather than importing a national
+   catalogue. Recoverable from git if a municipal deployment ever needs them.
 3. **No device identity for telemetry ingestion (RF-22).** Ingestion
    authenticates as a driver or manager, so `mebuska-deploy` must provision an
    account and store a long-lived token on the vehicle reader. Rotation and

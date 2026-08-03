@@ -99,7 +99,6 @@ mebuska-corporate/
 │   └── services/           # Serviços de negócio
 ├── database/               # Scripts SQL
 │   ├── init.sql            # Schema e extensões
-│   └── populate.sql        # Dados iniciais
 ├── docs/                   # Documentação da API
 │   └── endpoints/          # Specs YAML (Swagger)
 ├── infra/

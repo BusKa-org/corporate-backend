@@ -102,7 +102,7 @@ def vetor_carga(viagem_id: IdLike) -> list[int]:
 
 
 def capacidade_viagem(viagem_id: IdLike) -> int:
-    """Limite de assentos: capacidade do veículo da viagem (17 no PaqTcPB)."""
+    """Limite de assentos: a capacidade do veículo da viagem."""
     viagem = _get_viagem(viagem_id)
     return _capacidade(viagem, _rota_da_viagem(viagem))
 

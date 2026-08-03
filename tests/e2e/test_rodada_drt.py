@@ -21,7 +21,7 @@ from tests.factories.user_factory import AlunoFactory
 
 pytestmark = pytest.mark.e2e
 
-CAPACIDADE_VAN = 17
+CAPACIDADE_VEICULO = 17
 
 
 def _ator(client, app, usuario):
@@ -32,8 +32,9 @@ def _ator(client, app, usuario):
 
 @pytest.fixture()
 def van(_db, onibus):
-    """A van real do PaqTcPB tem 17 lugares; a fábrica sorteia a capacidade."""
-    onibus.capacidade = CAPACIDADE_VAN
+    """Capacidade fixa: a fábrica sorteia, e um sorteio baixo negaria os
+    trajetos que se cruzam por lotação em vez de por defeito."""
+    onibus.capacidade = CAPACIDADE_VEICULO
     _db.session.commit()
     return onibus
 
@@ -98,7 +99,7 @@ def test_rodada_completa_da_solicitacao_ao_embarque(
     assert ativa["em_operacao"] is True
     assert ativa["rodada"]["viagem_id"] == viagem_id
 
-    # RF-13/RF-14 — trajetos sobrepostos e disjuntos, todos cabem em 17 lugares.
+    # RF-13/RF-14 — trajetos sobrepostos e disjuntos, todos cabem no veículo.
     for ator, origem, destino in (
         (ana, p1, p3),
         (bruno, p2, p4),
