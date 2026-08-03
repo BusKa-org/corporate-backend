@@ -14,12 +14,74 @@
         },
         "summary": "Gestor vê lista de alunos cadastrados",
         "operationId": "list_alunos_gestor",
+        "parameters": [
+          {
+            "in": "query",
+            "description": "Filter by status (PENDING_APPROVAL, ACTIVE, ...)",
+            "name": "status",
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "alunos"
+        ]
+      }
+    },
+    "/v1/alunos/guardian-consent/{token}": {
+      "parameters": [
+        {
+          "name": "token",
+          "in": "path",
+          "required": true,
+          "type": "string"
+        }
+      ],
+      "post": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/AlunoResponse"
+            }
+          }
+        },
+        "summary": "(Público) Responsável confirma consentimento para o aluno menor",
+        "operationId": "guardian_consent_confirm",
+        "security": [],
+        "tags": [
+          "alunos"
+        ]
+      },
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/GuardianConsentResponse"
+            }
+          }
+        },
+        "summary": "(Público) Busca dados do aluno para a tela de consentimento do responsável",
+        "operationId": "guardian_consent_info",
+        "security": [],
         "tags": [
           "alunos"
         ]
       }
     },
     "/v1/alunos/me": {
+      "delete": {
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "Aluno exclui sua conta",
+        "operationId": "aluno_delete",
+        "tags": [
+          "alunos"
+        ]
+      },
       "put": {
         "responses": {
           "200": {
@@ -41,18 +103,6 @@
             }
           }
         ],
-        "tags": [
-          "alunos"
-        ]
-      },
-      "delete": {
-        "responses": {
-          "200": {
-            "description": "Success"
-          }
-        },
-        "summary": "Aluno exclui sua conta",
-        "operationId": "aluno_delete",
         "tags": [
           "alunos"
         ]
@@ -81,6 +131,53 @@
           }
         ],
         "security": [],
+        "tags": [
+          "alunos"
+        ]
+      }
+    },
+    "/v1/alunos/{aluno_id}": {
+      "parameters": [
+        {
+          "name": "aluno_id",
+          "in": "path",
+          "required": true,
+          "type": "string"
+        }
+      ],
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/AlunoResponse"
+            }
+          }
+        },
+        "summary": "(Gestor) Obtém detalhes completos de um aluno",
+        "operationId": "get_aluno_detail",
+        "tags": [
+          "alunos"
+        ]
+      }
+    },
+    "/v1/alunos/{aluno_id}/aprovar": {
+      "parameters": [
+        {
+          "name": "aluno_id",
+          "in": "path",
+          "required": true,
+          "type": "string"
+        }
+      ],
+      "post": {
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "(Gestor) Aprova cadastro de um aluno menor",
+        "operationId": "aprovar_aluno",
         "tags": [
           "alunos"
         ]
@@ -430,6 +527,78 @@
         ]
       }
     },
+    "/v1/ocorrencias/": {
+      "post": {
+        "responses": {
+          "201": {
+            "description": "Ocorrência registrada",
+            "schema": {
+              "$ref": "#/definitions/OcorrenciaResponse"
+            }
+          }
+        },
+        "summary": "(Aluno / Motorista) Reporta um problema",
+        "operationId": "criar_ocorrencia",
+        "parameters": [
+          {
+            "name": "payload",
+            "required": true,
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/OcorrenciaInput"
+            }
+          }
+        ],
+        "tags": [
+          "ocorrencias"
+        ]
+      },
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "(Gestor) Lista ocorrências da organização",
+        "operationId": "listar_ocorrencias",
+        "parameters": [
+          {
+            "in": "query",
+            "description": "Filter by status (ABERTA, RESOLVIDA)",
+            "name": "status",
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "ocorrencias"
+        ]
+      }
+    },
+    "/v1/ocorrencias/{ocorrencia_id}/resolver": {
+      "parameters": [
+        {
+          "name": "ocorrencia_id",
+          "in": "path",
+          "required": true,
+          "type": "string"
+        }
+      ],
+      "patch": {
+        "responses": {
+          "200": {
+            "description": "Ocorrência resolvida",
+            "schema": {
+              "$ref": "#/definitions/OcorrenciaResponse"
+            }
+          }
+        },
+        "summary": "(Gestor) Marca uma ocorrência como resolvida",
+        "operationId": "resolver_ocorrencia",
+        "tags": [
+          "ocorrencias"
+        ]
+      }
+    },
     "/v1/onibus/": {
       "post": {
         "responses": {
@@ -465,7 +634,7 @@
             }
           }
         },
-        "summary": "Lista a frota da prefeitura",
+        "summary": "Lista a frota da organização",
         "operationId": "list_onibus",
         "tags": [
           "onibus"
@@ -481,14 +650,27 @@
           "type": "string"
         }
       ],
-      "delete": {
+      "patch": {
         "responses": {
           "200": {
-            "description": "Success"
+            "description": "Updated",
+            "schema": {
+              "$ref": "#/definitions/OnibusResponse"
+            }
           }
         },
-        "summary": "Remove um ônibus",
-        "operationId": "delete_onibus",
+        "summary": "Atualiza dados de um ônibus",
+        "operationId": "update_onibus",
+        "parameters": [
+          {
+            "name": "payload",
+            "required": true,
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/OnibusUpdateRequest"
+            }
+          }
+        ],
         "tags": [
           "onibus"
         ]
@@ -504,6 +686,18 @@
         },
         "summary": "Detalhes de um ônibus",
         "operationId": "get_onibus",
+        "tags": [
+          "onibus"
+        ]
+      },
+      "delete": {
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "Remove um ônibus",
+        "operationId": "delete_onibus",
         "tags": [
           "onibus"
         ]
@@ -558,30 +752,6 @@
           "type": "string"
         }
       ],
-      "put": {
-        "responses": {
-          "200": {
-            "description": "Success",
-            "schema": {
-              "$ref": "#/definitions/PontoResponse"
-            }
-          }
-        },
-        "operationId": "update_ponto",
-        "parameters": [
-          {
-            "name": "payload",
-            "required": true,
-            "in": "body",
-            "schema": {
-              "$ref": "#/definitions/PontoUpdateRequest"
-            }
-          }
-        ],
-        "tags": [
-          "pontos"
-        ]
-      },
       "delete": {
         "responses": {
           "200": {
@@ -603,6 +773,30 @@
           }
         },
         "operationId": "get_ponto",
+        "tags": [
+          "pontos"
+        ]
+      },
+      "put": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/PontoResponse"
+            }
+          }
+        },
+        "operationId": "update_ponto",
+        "parameters": [
+          {
+            "name": "payload",
+            "required": true,
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/PontoUpdateRequest"
+            }
+          }
+        ],
         "tags": [
           "pontos"
         ]
@@ -673,27 +867,6 @@
           "type": "string"
         }
       ],
-      "put": {
-        "responses": {
-          "200": {
-            "description": "Success"
-          }
-        },
-        "operationId": "update_rota",
-        "parameters": [
-          {
-            "name": "payload",
-            "required": true,
-            "in": "body",
-            "schema": {
-              "$ref": "#/definitions/RotaUpdateRequest"
-            }
-          }
-        ],
-        "tags": [
-          "rotas"
-        ]
-      },
       "delete": {
         "responses": {
           "200": {
@@ -715,6 +888,27 @@
           }
         },
         "operationId": "get_rota",
+        "tags": [
+          "rotas"
+        ]
+      },
+      "put": {
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "operationId": "update_rota",
+        "parameters": [
+          {
+            "name": "payload",
+            "required": true,
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/RotaUpdateRequest"
+            }
+          }
+        ],
         "tags": [
           "rotas"
         ]
@@ -763,38 +957,6 @@
           }
         },
         "operationId": "list_rota_horarios",
-        "tags": [
-          "rotas"
-        ]
-      }
-    },
-    "/v1/rotas/{id}/inscricao": {
-      "parameters": [
-        {
-          "in": "path",
-          "description": "UUID da Rota",
-          "name": "id",
-          "required": true,
-          "type": "string"
-        }
-      ],
-      "post": {
-        "responses": {
-          "200": {
-            "description": "Success"
-          }
-        },
-        "operationId": "inscrever_aluno",
-        "parameters": [
-          {
-            "name": "payload",
-            "required": true,
-            "in": "body",
-            "schema": {
-              "$ref": "#/definitions/RotaInscricaoRequest"
-            }
-          }
-        ],
         "tags": [
           "rotas"
         ]
@@ -909,7 +1071,7 @@
             "description": "Forbidden - not a gestor"
           }
         },
-        "summary": "Lista todos os usuários da prefeitura (Apenas Gestor)",
+        "summary": "Lista todos os usuários da organização (Apenas Gestor)",
         "operationId": "list_users",
         "tags": [
           "users"
@@ -1013,6 +1175,37 @@
       }
     },
     "/v1/users/me": {
+      "patch": {
+        "responses": {
+          "200": {
+            "description": "Updated",
+            "schema": {
+              "$ref": "#/definitions/UserResponse"
+            }
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "409": {
+            "description": "Conflict"
+          }
+        },
+        "summary": "Atualiza perfil do usuário logado (nome, telefone, receber_notificacoes, cnh)",
+        "operationId": "update_my_profile",
+        "parameters": [
+          {
+            "name": "payload",
+            "required": true,
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/UpdateProfileRequest"
+            }
+          }
+        ],
+        "tags": [
+          "users"
+        ]
+      },
       "get": {
         "responses": {
           "200": {
@@ -1098,6 +1291,37 @@
         ]
       }
     },
+    "/v1/users/motoristas/{motorista_id}": {
+      "parameters": [
+        {
+          "name": "motorista_id",
+          "in": "path",
+          "required": true,
+          "type": "string"
+        }
+      ],
+      "delete": {
+        "responses": {
+          "200": {
+            "description": "Deleted"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "400": {
+            "description": "Has linked trips"
+          }
+        },
+        "summary": "Gestor remove um motorista",
+        "operationId": "delete_motorista",
+        "tags": [
+          "users"
+        ]
+      }
+    },
     "/v1/users/{id}": {
       "parameters": [
         {
@@ -1123,7 +1347,7 @@
             "description": "User not found"
           }
         },
-        "summary": "Busca usuário por ID (próprio perfil ou mesma prefeitura se Gestor)",
+        "summary": "Busca usuário por ID (próprio perfil ou mesma organização se Gestor)",
         "operationId": "get_user_by_id",
         "tags": [
           "users"
@@ -1213,32 +1437,6 @@
           }
         },
         "operationId": "list_viagens_aluno",
-        "tags": [
-          "viagens"
-        ]
-      }
-    },
-    "/v1/viagens/gerar-lote": {
-      "post": {
-        "responses": {
-          "201": {
-            "description": "Created",
-            "schema": {
-              "$ref": "#/definitions/ViagemLoteResponse"
-            }
-          }
-        },
-        "operationId": "gerar_viagens_lote",
-        "parameters": [
-          {
-            "name": "payload",
-            "required": true,
-            "in": "body",
-            "schema": {
-              "$ref": "#/definitions/ViagemLoteRequest"
-            }
-          }
-        ],
         "tags": [
           "viagens"
         ]
@@ -1458,9 +1656,9 @@
     }
   },
   "info": {
-    "title": "BusKá API",
+    "title": "MeBusKá API",
     "version": "1.0.0",
-    "description": "\n## Sistema de Gerenciamento de Transporte Escolar\n\nAPI para gerenciamento de rotas, viagens e alunos do transporte escolar municipal.\n\n### Autenticação\nTodos os endpoints (exceto `/auth/login`) requerem autenticação JWT.\nInclua o header: `Authorization: Bearer <seu_token>`\n\n### Roles\n- **ALUNO**: Visualiza rotas, confirma presença em viagens\n- **MOTORISTA**: Gerencia viagens atribuídas, inicia/finaliza trajetos\n- **GESTOR**: Acesso completo à prefeitura (CRUD de rotas, motoristas, relatórios)\n        "
+    "description": "\n## Sistema de Mobilidade Corporativa sob Demanda\n\nAPI para solicitação de viagens, janela de buffer, validação de capacidade por\nsegmento, embarque por QR Code e rastreamento de veículos institucionais.\n\n### Autenticação\nTodos os endpoints (exceto `/auth/login`) requerem autenticação JWT.\nInclua o header: `Authorization: Bearer <seu_token>`\n\n### Roles\n- **ALUNO**: Solicita viagens, declara origem/destino, acompanha o veículo\n- **MOTORISTA**: Inicia percurso, valida embarques, executa o roteiro\n- **GESTOR**: Acesso completo à organização (pontos, janelas, frota, relatórios)\n        "
   },
   "produces": [
     "application/json"
@@ -1521,6 +1719,10 @@
     {
       "name": "alunos",
       "description": "Área do Aluno (App)"
+    },
+    {
+      "name": "ocorrencias",
+      "description": "Registro de ocorrências / problemas"
     },
     {
       "name": "dashboard",
@@ -1620,9 +1822,9 @@
           "type": "string",
           "description": "UUID do usuário"
         },
-        "prefeitura_id": {
+        "organizacao_id": {
           "type": "string",
-          "description": "UUID da prefeitura"
+          "description": "UUID da organização"
         },
         "nome": {
           "type": "string",
@@ -1655,7 +1857,7 @@
         },
         "municipio_nome": {
           "type": "string",
-          "description": "Nome do município (prefeitura)"
+          "description": "Nome do município (organização)"
         },
         "municipio_uf": {
           "type": "string",
@@ -1676,6 +1878,27 @@
         "cnh": {
           "type": "string",
           "description": "CNH (motorista)"
+        }
+      },
+      "type": "object"
+    },
+    "UpdateProfileRequest": {
+      "properties": {
+        "nome": {
+          "type": "string",
+          "description": "Nome completo"
+        },
+        "telefone": {
+          "type": "string",
+          "description": "Telefone"
+        },
+        "receber_notificacoes": {
+          "type": "boolean",
+          "description": "Aceitar notificações"
+        },
+        "cnh": {
+          "type": "string",
+          "description": "CNH (apenas motoristas)"
         }
       },
       "type": "object"
@@ -1882,6 +2105,23 @@
       },
       "type": "object"
     },
+    "OnibusUpdateRequest": {
+      "properties": {
+        "placa": {
+          "type": "string",
+          "description": "Nova placa do veículo"
+        },
+        "modelo": {
+          "type": "string",
+          "description": "Novo modelo"
+        },
+        "capacidade": {
+          "type": "integer",
+          "description": "Nova capacidade de passageiros"
+        }
+      },
+      "type": "object"
+    },
     "RotaCreateRequest": {
       "required": [
         "nome"
@@ -1976,9 +2216,9 @@
           "type": "string",
           "description": "UUID do veículo padrão"
         },
-        "prefeitura_id": {
+        "organizacao_id": {
           "type": "string",
-          "description": "UUID da prefeitura"
+          "description": "UUID da organização"
         },
         "municipio_nome": {
           "type": "string",
@@ -2002,18 +2242,6 @@
         "total": {
           "type": "integer",
           "description": "Total de rotas"
-        }
-      },
-      "type": "object"
-    },
-    "RotaInscricaoRequest": {
-      "required": [
-        "acao"
-      ],
-      "properties": {
-        "acao": {
-          "type": "string",
-          "description": "inscrever ou desinscrever"
         }
       },
       "type": "object"
@@ -2161,9 +2389,9 @@
           "type": "string",
           "description": "UUID do veículo padrão"
         },
-        "prefeitura_id": {
+        "organizacao_id": {
           "type": "string",
-          "description": "UUID da prefeitura"
+          "description": "UUID da organização"
         },
         "municipio_nome": {
           "type": "string",
@@ -2482,38 +2710,6 @@
       },
       "type": "object"
     },
-    "ViagemLoteRequest": {
-      "required": [
-        "data"
-      ],
-      "properties": {
-        "data": {
-          "type": "string",
-          "description": "Data para gerar viagens (YYYY-MM-DD)"
-        }
-      },
-      "type": "object"
-    },
-    "ViagemLoteResponse": {
-      "properties": {
-        "total_rotas_analisadas": {
-          "type": "integer",
-          "description": "Total de rotas analisadas"
-        },
-        "viagens_criadas": {
-          "type": "integer",
-          "description": "Total de viagens criadas"
-        },
-        "detalhes": {
-          "type": "array",
-          "items": {
-            "type": "string",
-            "description": "Detalhes da viagem"
-          }
-        }
-      },
-      "type": "object"
-    },
     "ViagemAcaoRequest": {
       "required": [
         "acao"
@@ -2644,6 +2840,7 @@
     "AlunoSelfSignupRequest": {
       "required": [
         "cpf",
+        "data_nascimento",
         "email",
         "endereco_casa",
         "instituicao_id",
@@ -2680,21 +2877,21 @@
           "type": "string",
           "description": "UUID da instituição"
         },
-        "nome_pai": {
+        "data_nascimento": {
           "type": "string",
-          "description": "Nome do pai"
+          "description": "Data de nascimento (YYYY-MM-DD)"
         },
-        "cpf_pai": {
+        "nome_responsavel": {
           "type": "string",
-          "description": "CPF do pai"
+          "description": "Nome do responsável"
         },
-        "nome_mae": {
+        "cpf_responsavel": {
           "type": "string",
-          "description": "Nome da mãe"
+          "description": "CPF do responsável"
         },
-        "cpf_mae": {
+        "email_responsavel": {
           "type": "string",
-          "description": "CPF da mãe"
+          "description": "E-mail do responsável (obrigatório para menores)"
         },
         "endereco_casa": {
           "$ref": "#/definitions/EnderecoInput"
@@ -2753,6 +2950,18 @@
           "type": "string",
           "description": "Nome completo"
         },
+        "email": {
+          "type": "string",
+          "description": "E-mail"
+        },
+        "telefone": {
+          "type": "string",
+          "description": "Telefone"
+        },
+        "cpf": {
+          "type": "string",
+          "description": "CPF"
+        },
         "matricula": {
           "type": "string",
           "description": "Matrícula"
@@ -2761,14 +2970,43 @@
           "type": "string",
           "description": "Nome da escola"
         },
+        "instituicao_id": {
+          "type": "string",
+          "description": "UUID da instituição"
+        },
         "status": {
           "type": "string",
-          "description": "Status (PENDING_SIGNUP, ACTIVE, DISABLED)"
+          "description": "Status (PENDING_SIGNUP, PENDING_APPROVAL, ACTIVE, DISABLED)"
         },
         "signup_completed_at": {
           "type": "string",
           "format": "date-time",
           "description": "Data de conclusão do cadastro"
+        },
+        "data_nascimento": {
+          "type": "string",
+          "description": "Data de nascimento"
+        },
+        "is_minor": {
+          "type": "boolean",
+          "description": "Menor de idade"
+        },
+        "email_responsavel": {
+          "type": "string",
+          "description": "E-mail do responsável"
+        },
+        "nome_responsavel": {
+          "type": "string",
+          "description": "Nome do responsável"
+        },
+        "cpf_responsavel": {
+          "type": "string",
+          "description": "CPF do responsável"
+        },
+        "guardian_consented_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Data/hora do consentimento do responsável"
         }
       },
       "type": "object"
@@ -2787,21 +3025,13 @@
           "type": "string",
           "description": "Matrícula escolar"
         },
-        "nome_pai": {
+        "nome_responsavel": {
           "type": "string",
-          "description": "Nome do pai"
+          "description": "Nome do responsável"
         },
-        "cpf_pai": {
+        "cpf_responsavel": {
           "type": "string",
-          "description": "CPF do pai"
-        },
-        "nome_mae": {
-          "type": "string",
-          "description": "Nome da mãe"
-        },
-        "cpf_mae": {
-          "type": "string",
-          "description": "CPF da mãe"
+          "description": "CPF do responsável"
         },
         "endereco_casa": {
           "$ref": "#/definitions/EnderecoInput"
@@ -2820,6 +3050,78 @@
         "total": {
           "type": "integer",
           "description": "Total de alunos"
+        }
+      },
+      "type": "object"
+    },
+    "GuardianConsentResponse": {
+      "properties": {
+        "nome": {
+          "type": "string",
+          "description": "Nome do menor"
+        },
+        "data_nascimento": {
+          "type": "string",
+          "description": "Data de nascimento"
+        },
+        "is_minor": {
+          "type": "boolean",
+          "description": "Menor de idade"
+        },
+        "guardian_consented_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Consentimento já registrado"
+        }
+      },
+      "type": "object"
+    },
+    "OcorrenciaInput": {
+      "required": [
+        "tipo"
+      ],
+      "properties": {
+        "tipo": {
+          "type": "string",
+          "description": "ATRASO | SUPERLOTACAO | COMPORTAMENTO | CANCELAMENTO | OUTRO",
+          "example": "ATRASO"
+        },
+        "descricao": {
+          "type": "string",
+          "description": "Descrição opcional do problema"
+        },
+        "viagem_id": {
+          "type": "string",
+          "description": "ID da viagem relacionada (opcional)"
+        }
+      },
+      "type": "object"
+    },
+    "OcorrenciaResponse": {
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "autor_id": {
+          "type": "string"
+        },
+        "autor_nome": {
+          "type": "string"
+        },
+        "viagem_id": {
+          "type": "string"
+        },
+        "tipo": {
+          "type": "string"
+        },
+        "descricao": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "created_at": {
+          "type": "string"
         }
       },
       "type": "object"
