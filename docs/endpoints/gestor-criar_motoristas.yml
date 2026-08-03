@@ -1,0 +1,83 @@
+---
+tags:
+  - Gestor
+summary: Criar Novo Motorista
+description: |
+  Cria um novo **motorista** (usuário com papel de motorista) vinculado ao mesmo município do gestor autenticado.  
+  Apenas usuários com o papel **gestor** podem acessar este endpoint.  
+  Requer um **JWT token** válido no cabeçalho `Authorization`.
+operationId: criarMotoristaGestor
+security:
+  - BearerAuth: []
+parameters:
+  - in: header
+    name: Authorization
+    required: true
+    type: string
+    description: JWT token para autenticação.
+    example: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...ExAMPLE_TOKEN"
+  - in: body
+    name: body
+    required: true
+    description: JSON contendo os dados do motorista a ser criado.
+    schema:
+      type: object
+      required:
+        - nome
+        - email
+        - password
+      properties:
+        nome:
+          type: string
+          example: "João Motorista"
+          description: Nome completo do motorista.
+        email:
+          type: string
+          format: email
+          example: "joao.motorista@buska.app"
+          description: Endereço de e-mail único do motorista.
+        password:
+          type: string
+          format: password
+          example: "senha123"
+          description: Senha de acesso do motorista.
+    examples:
+      Criar Motorista:
+        summary: Exemplo — criação de motorista
+        value:
+          nome: "João Motorista"
+          email: "joao.motorista@buska.app"
+          password: "senha123"
+responses:
+  201:
+    description: Motorista criado com sucesso.
+    schema:
+      type: object
+      properties:
+        message:
+          type: string
+          example: "Motorista criado com sucesso."
+  400:
+    description: Requisição inválida — campos obrigatórios ausentes.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Nome, email e senha são obrigatórios"
+  403:
+    description: Acesso negado — apenas gestores podem criar motoristas.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Access restricted to gestores"
+  401:
+    description: Token ausente ou inválido.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Missing Authorization Header"

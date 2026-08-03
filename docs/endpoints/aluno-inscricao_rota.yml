@@ -1,0 +1,88 @@
+---
+tags:
+  - Aluno
+summary: Inscrever ou Desinscrever-se em uma Rota
+description: |
+  Permite que o aluno se inscreva ou cancele sua inscrição em uma rota específica.  
+  Apenas usuários com o papel **aluno** podem acessar este endpoint.  
+  É necessário um **token JWT** válido no cabeçalho `Authorization`.
+operationId: gerenciarInscricaoRota
+security:
+  - BearerAuth: []
+parameters:
+  - in: header
+    name: Authorization
+    required: true
+    type: string
+    description: Token JWT de autenticação.
+    example: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...ExAMPLE_TOKEN"
+  - in: path
+    name: rota_id
+    required: true
+    type: integer
+    description: ID da rota na qual o aluno deseja se inscrever ou desinscrever.
+    example: 7
+  - in: body
+    name: body
+    required: true
+    description: JSON contendo a ação a ser realizada.
+    schema:
+      type: object
+      required:
+        - acao
+      properties:
+        acao:
+          type: string
+          enum: ["inscrever", "desinscrever"]
+          example: "inscrever"
+          description: Define se o aluno quer se inscrever ou cancelar a inscrição na rota.
+    examples:
+      Inscrever-se:
+        summary: Exemplo — inscrição em rota
+        value:
+          acao: "inscrever"
+      Desinscrever-se:
+        summary: Exemplo — cancelamento de inscrição
+        value:
+          acao: "desinscrever"
+responses:
+  200:
+    description: Ação realizada com sucesso (inscrição ou cancelamento).
+    schema:
+      type: object
+      properties:
+        message:
+          type: string
+          example: "Aluno inscrito na rota com sucesso."
+  400:
+    description: Requisição inválida — ação incorreta ou ausente.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Ação inválida. Use 'inscrever' ou 'desinscrever'."
+  403:
+    description: Acesso negado — apenas alunos podem alterar inscrições.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Access restricted to alunos"
+  404:
+    description: Rota não encontrada.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Rota não encontrada"
+  401:
+    description: Token ausente ou inválido.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Missing Authorization Header"

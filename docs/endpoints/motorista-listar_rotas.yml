@@ -1,0 +1,62 @@
+---
+tags:
+  - Motorista
+summary: Listar Rotas do Motorista
+description: |
+  Retorna todas as rotas criadas ou atribuídas ao motorista autenticado.  
+  Apenas usuários com o papel **motorista** podem acessar este endpoint.  
+  Requer um **JWT token** válido no cabeçalho `Authorization`.
+operationId: listarRotasMotorista
+security:
+  - BearerAuth: []
+parameters:
+  - in: header
+    name: Authorization
+    required: true
+    type: string
+    description: JWT token para autenticação.
+    example: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...ExAMPLE_TOKEN"
+responses:
+  200:
+    description: Lista de rotas do motorista retornada com sucesso.
+    schema:
+      type: array
+      items:
+        type: object
+        properties:
+          id:
+            type: integer
+            example: 5
+            description: ID da rota.
+          nome:
+            type: string
+            example: "Rota Principal"
+            description: Nome da rota.
+          municipio_id:
+            type: integer
+            example: 3
+            description: ID do município associado à rota.
+    examples:
+      application/json:
+        - id: 1
+          nome: "Rota Central"
+          municipio_id: 3
+        - id: 2
+          nome: "Rota Escola"
+          municipio_id: 3
+  403:
+    description: Acesso negado — apenas motoristas podem listar rotas.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Access restricted to motoristas"
+  401:
+    description: Token ausente ou inválido.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Missing Authorization Header"

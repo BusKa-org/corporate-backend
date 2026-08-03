@@ -1,0 +1,89 @@
+---
+tags:
+  - User
+summary: Update User Profile
+description: |
+  Allows the authenticated user to update their profile information.  
+  Requires a valid **JWT access token** provided in the `Authorization` header as a Bearer token.
+operationId: updateUser
+security:
+  - BearerAuth: []
+parameters:
+  - in: header
+    name: Authorization
+    required: true
+    type: string
+    description: Bearer token for authentication.
+    example: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...VN9JSIExAMPLEt0kENoTREAL"
+  - in: body
+    name: body
+    required: true
+    description: JSON object containing the fields to update.
+    schema:
+      type: object
+      properties:
+        nome:
+          type: string
+          example: "Fubica Brasileiro Updated"
+          description: Full name of the user.
+        email:
+          type: string
+          format: email
+          example: "fbrasileiro@buska.app"
+          description: Updated email address.
+        password:
+          type: string
+          format: password
+          example: "novaSenha123"
+          description: New password for the account.
+        municipio:
+          type: string
+          example: "Campina Grande"
+          description: Municipality name to associate the user with.
+    examples:
+      Update Basic Info:
+        summary: Example — Update user name and email
+        value:
+          nome: "Fubica Brasileiro Updated"
+          email: "fubica.updated@buska.app"
+      Update Municipality:
+        summary: Example — Change user municipality
+        value:
+          municipio: "João Pessoa"
+      Update Password:
+        summary: Example — Change user password
+        value:
+          password: "novaSenha123"
+responses:
+  200:
+    description: User updated successfully.
+    schema:
+      type: object
+      properties:
+        message:
+          type: string
+          example: "user updated successfully."
+  400:
+    description: Bad Request. Missing or invalid fields.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Invalid input data"
+  401:
+    description: Unauthorized. Missing or invalid JWT token.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Missing Authorization Header"
+  404:
+    description: User or Municipality not found.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Municipio with Name 'Campina Pequena' not found"

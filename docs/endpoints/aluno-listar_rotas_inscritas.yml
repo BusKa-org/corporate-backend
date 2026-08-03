@@ -1,0 +1,68 @@
+---
+tags:
+  - Aluno
+summary: Listar Rotas em que o Aluno Está Inscrito
+description: |
+  Retorna todas as rotas nas quais o aluno autenticado está inscrito.  
+  Apenas usuários com o papel **aluno** podem acessar este endpoint.  
+  É necessário um **token JWT** válido no cabeçalho `Authorization`.
+operationId: listarRotasInscritasAluno
+security:
+  - BearerAuth: []
+parameters:
+  - in: header
+    name: Authorization
+    required: true
+    type: string
+    description: Token JWT de autenticação.
+    example: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...ExAMPLE_TOKEN"
+responses:
+  200:
+    description: Lista de rotas nas quais o aluno está inscrito.
+    schema:
+      type: array
+      items:
+        type: object
+        properties:
+          id:
+            type: integer
+            example: 3
+            description: ID da rota.
+          nome:
+            type: string
+            example: "Rota Central"
+            description: Nome da rota.
+          motorista_id:
+            type: integer
+            example: 8
+            description: ID do motorista responsável pela rota.
+          municipio_id:
+            type: integer
+            example: 2
+            description: ID do município associado à rota.
+    examples:
+      application/json:
+        - id: 3
+          nome: "Rota Central"
+          motorista_id: 8
+          municipio_id: 2
+        - id: 5
+          nome: "Rota Universitária"
+          motorista_id: 12
+          municipio_id: 2
+  403:
+    description: Acesso negado — apenas alunos podem listar suas rotas.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Access restricted to alunos"
+  401:
+    description: Token ausente ou inválido.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Missing Authorization Header"

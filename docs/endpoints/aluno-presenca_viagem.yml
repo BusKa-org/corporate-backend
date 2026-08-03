@@ -1,0 +1,87 @@
+---
+tags:
+  - Aluno
+summary: Confirmar ou Cancelar Presença em Viagem
+description: |
+  Permite que o aluno confirme ou cancele sua presença em uma viagem específica.  
+  Apenas usuários com o papel **aluno** podem acessar este endpoint.  
+  Requer um **JWT token** válido no cabeçalho `Authorization`.
+operationId: alterarPresencaViagemAluno
+security:
+  - BearerAuth: []
+parameters:
+  - in: header
+    name: Authorization
+    required: true
+    type: string
+    description: JWT token para autenticação.
+    example: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...ExAMPLE_TOKEN"
+  - in: path
+    name: viagem_id
+    required: true
+    type: integer
+    description: ID da viagem para confirmar ou cancelar presença.
+    example: 12
+  - in: body
+    name: body
+    required: true
+    description: JSON contendo o estado da presença do aluno.
+    schema:
+      type: object
+      required:
+        - presente
+      properties:
+        presente:
+          type: boolean
+          example: true
+          description: Define se o aluno está presente (`true`) ou ausente (`false`).
+    examples:
+      Confirmar Presença:
+        summary: Exemplo — confirmar presença
+        value:
+          presente: true
+      Cancelar Presença:
+        summary: Exemplo — cancelar presença
+        value:
+          presente: false
+responses:
+  200:
+    description: Presença confirmada ou cancelada com sucesso.
+    schema:
+      type: object
+      properties:
+        message:
+          type: string
+          example: "Presença confirmada com sucesso."
+  400:
+    description: Requisição inválida — campo presente incorreto ou ausente.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Campo 'presente' deve ser True ou False."
+  403:
+    description: Acesso negado — apenas alunos podem alterar presença.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Access restricted to alunos"
+  404:
+    description: Viagem não encontrada.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Viagem não encontrada"
+  401:
+    description: Token ausente ou inválido.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Missing Authorization Header"

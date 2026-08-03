@@ -1,0 +1,68 @@
+---
+tags:
+  - Gestor
+summary: Listar Rotas do Município
+description: |
+  Retorna todas as rotas associadas ao município do gestor autenticado.  
+  Apenas usuários com o papel **gestor** podem acessar este endpoint.  
+  Requer um **JWT token** válido no cabeçalho `Authorization`.
+operationId: listarRotasGestor
+security:
+  - BearerAuth: []
+parameters:
+  - in: header
+    name: Authorization
+    required: true
+    type: string
+    description: JWT token para autenticação.
+    example: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...ExAMPLE_TOKEN"
+responses:
+  200:
+    description: Lista de rotas do município retornada com sucesso.
+    schema:
+      type: array
+      items:
+        type: object
+        properties:
+          id:
+            type: integer
+            example: 7
+            description: ID da rota.
+          nome:
+            type: string
+            example: "Rota Central"
+            description: Nome da rota.
+          motorista_id:
+            type: integer
+            example: 12
+            description: ID do motorista responsável pela rota.
+          municipio_id:
+            type: integer
+            example: 3
+            description: ID do município ao qual a rota pertence.
+    examples:
+      application/json:
+        - id: 1
+          nome: "Rota Central"
+          motorista_id: 4
+          municipio_id: 3
+        - id: 2
+          nome: "Rota Escolar Norte"
+          motorista_id: 5
+          municipio_id: 3
+  403:
+    description: Acesso negado — apenas gestores podem listar rotas.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Access restricted to gestores"
+  401:
+    description: Token ausente ou inválido.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Missing Authorization Header"

@@ -1,0 +1,139 @@
+---
+tags:
+  - Motorista
+summary: Adicionar Pontos à Rota
+description: |
+  Permite que um motorista adicione pontos (localizações) a uma rota existente.  
+  Cada ponto contém nome, latitude e longitude.  
+  Apenas usuários com o papel **motorista** podem acessar este endpoint.  
+  Requer um **JWT token** válido no cabeçalho `Authorization`.
+operationId: adicionarPonto
+security:
+  - BearerAuth: []
+parameters:
+  - in: header
+    name: Authorization
+    required: true
+    type: string
+    description: JWT token para autenticação.
+    example: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...ExAMPLE_TOKEN"
+  - in: path
+    name: rota_id
+    required: true
+    type: integer
+    description: ID da rota à qual os pontos serão adicionados.
+    example: 5
+  - in: body
+    name: body
+    required: true
+    description: JSON contendo os pontos a adicionar.
+    schema:
+      type: object
+      required:
+        - municipio_id
+        - pontos
+      properties:
+        municipio_id:
+          type: integer
+          example: 1
+          description: ID do município ao qual a rota pertence.
+        pontos:
+          type: array
+          description: Lista de pontos da rota.
+          items:
+            type: object
+            required:
+              - nome
+              - latitude
+              - longitude
+            properties:
+              nome:
+                type: string
+                example: "Ponto Central"
+                description: Nome do ponto de parada.
+              latitude:
+                type: number
+                format: float
+                example: -7.23056
+                description: Latitude do ponto.
+              longitude:
+                type: number
+                format: float
+                example: -35.88111
+                description: Longitude do ponto.
+    examples:
+      Adicionar Pontos:
+        summary: Exemplo — adicionar dois pontos a uma rota
+        value:
+          municipio_id: 1
+          pontos:
+            - nome: "Ponto Central"
+              latitude: -7.23056
+              longitude: -35.88111
+            - nome: "Escola Municipal"
+              latitude: -7.22500
+              longitude: -35.87000
+responses:
+  201:
+    description: Pontos adicionados com sucesso à rota.
+    schema:
+      type: object
+      properties:
+        message:
+          type: string
+          example: "Pontos adicionados a rota"
+        rota:
+          type: object
+          properties:
+            id:
+              type: integer
+              example: 5
+            nome:
+              type: string
+              example: "Rota Principal"
+            pontos:
+              type: array
+              items:
+                type: object
+                properties:
+                  nome:
+                    type: string
+                    example: "Ponto Central"
+                  latitude:
+                    type: number
+                    example: -7.23056
+                  longitude:
+                    type: number
+                    example: -35.88111
+  400:
+    description: Requisição inválida — dados faltando ou formato incorreto.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "A rota deve conter pelo menos um ponto válido"
+  403:
+    description: Acesso negado — apenas motoristas podem adicionar pontos.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Access restricted to motoristas"
+  404:
+    description: Rota não encontrada.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Rota não encontrada"
+  401:
+    description: Token ausente ou inválido.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Missing Authorization Header"

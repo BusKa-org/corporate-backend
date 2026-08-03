@@ -1,0 +1,96 @@
+---
+tags:
+  - Aluno
+summary: Listar Viagens Disponíveis no Município
+description: |
+  Retorna todas as viagens associadas às rotas do município do aluno autenticado.  
+  Apenas usuários com o papel **aluno** podem acessar este endpoint.  
+  Requer um **token JWT** válido no cabeçalho `Authorization`.
+operationId: listarViagensDisponiveisAluno
+security:
+  - BearerAuth: []
+parameters:
+  - in: header
+    name: Authorization
+    required: true
+    type: string
+    description: Token JWT de autenticação.
+    example: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Miwicm9sZSI6ImFsdW5vIn0.ExAMPLE_TOKEN"
+responses:
+  200:
+    description: Lista de viagens disponíveis no município do aluno.
+    schema:
+      type: array
+      items:
+        type: object
+        properties:
+          id:
+            type: integer
+            example: 15
+            description: ID da viagem.
+          data:
+            type: string
+            format: date
+            example: "2025-11-09"
+            description: Data da viagem.
+          horario_inicio:
+            type: string
+            example: "07:30:00"
+            description: Horário de início da viagem (se iniciado).
+          horario_fim:
+            type: string
+            example: "08:15:00"
+            description: Horário de término da viagem (se finalizado).
+          tipo:
+            type: string
+            enum: ["IDA", "VOLTA"]
+            example: "IDA"
+            description: Tipo da viagem.
+          rota_id:
+            type: integer
+            example: 3
+            description: ID da rota associada.
+          motorista_id:
+            type: integer
+            example: 5
+            description: ID do motorista responsável.
+    examples:
+      application/json:
+        - id: 15
+          data: "2025-11-09"
+          horario_inicio: "07:30:00"
+          horario_fim: null
+          tipo: "IDA"
+          rota_id: 3
+          motorista_id: 5
+        - id: 16
+          data: "2025-11-09"
+          horario_inicio: "17:00:00"
+          horario_fim: null
+          tipo: "VOLTA"
+          rota_id: 3
+          motorista_id: 5
+  400:
+    description: Aluno sem município cadastrado.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Aluno não possui município cadastrado"
+  403:
+    description: Acesso negado — apenas alunos podem listar viagens.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Access restricted to alunos"
+  401:
+    description: Token ausente ou inválido.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Missing Authorization Header"

@@ -1,0 +1,736 @@
+name: BusKá Backend CI/CD
+
+on:
+  push:
+    branches: [main, release/**]
+  pull_request:
+    branches: [main, release/**]
+  workflow_dispatch:
+    inputs:
+      GIT_REFERENCE:
+        description: "Optional: branch/tag/SHA. If empty, uses the current branch."
+        required: false
+        default: ""
+      SHOULD_RUN_TESTS_BEFORE_BUILD:
+        description: "Run tests before build?"
+        type: boolean
+        required: false
+        default: true
+      SHOULD_TAG_LATEST:
+        description: "Tag as :latest? (recommended only on main)"
+        type: boolean
+        required: false
+        default: false
+
+concurrency:
+  group: mebuska-corporate-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  pull-requests: write
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.12"
+
+# ---------------------------
+# Helper "variables" (jobs use env.RESOLVED_REF)
+# ---------------------------
+
+jobs:
+  meta:
+    name: Resolve git ref
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      resolved_ref: ${{ steps.ref.outputs.resolved_ref }}
+      should_run_tests: ${{ steps.flags.outputs.should_run_tests }}
+      should_tag_latest: ${{ steps.flags.outputs.should_tag_latest }}
+    steps:
+      - name: "Resolve ref (manual: input or current branch; else: sha)"
+        id: ref
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            if [ -n "${{ inputs.GIT_REFERENCE }}" ]; then
+              echo "resolved_ref=${{ inputs.GIT_REFERENCE }}" >> "$GITHUB_OUTPUT"
+            else
+              echo "resolved_ref=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo "resolved_ref=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: "Resolve flags"
+        id: flags
+        shell: bash
+        run: |
+          SHOULD_RUN="true"
+          SHOULD_LATEST="false"
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            SHOULD_RUN="${{ inputs.SHOULD_RUN_TESTS_BEFORE_BUILD }}"
+            SHOULD_LATEST="${{ inputs.SHOULD_TAG_LATEST }}"
+          fi
+
+          echo "should_run_tests=$SHOULD_RUN" >> "$GITHUB_OUTPUT"
+          echo "should_tag_latest=$SHOULD_LATEST" >> "$GITHUB_OUTPUT"
+
+  lint:
+    name: Code Quality & Security
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: meta
+    env:
+      RESOLVED_REF: ${{ needs.meta.outputs.resolved_ref }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RESOLVED_REF }}
+          fetch-depth: 0
+
+      - name: Show disk space before linting
+        shell: bash
+        run: |
+          echo "== df -h =="
+          df -h
+          echo
+          echo "== docker system df =="
+          docker system df || true
+          echo
+          echo "== largest dirs =="
+          du -h -d1 . 2>/dev/null | sort -hr | head -20 || true
+
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+
+      - name: "Install dependencies (dev)"
+        run: uv sync --frozen --dev
+
+      - name: Run Ruff Linter
+        run: uv run ruff check app/ tests/
+
+      - name: Check formatting with Black
+        run: uv run black --check app/ tests/
+
+      - name: Security Scan - Bandit
+        id: bandit
+        run: uv run bandit -r app/ -f json -o bandit-report.json
+        continue-on-error: true
+
+      - name: Summarize Bandit
+        id: bandit_summary
+        if: always()
+        shell: bash
+        run: |
+          if [ -f bandit-report.json ]; then
+            COUNT=$(python -c "import json; print(len(json.load(open('bandit-report.json', encoding='utf-8')).get('results', [])))")
+          else
+            COUNT=0
+          fi
+          echo "bandit_count=$COUNT" >> "$GITHUB_OUTPUT"
+          echo "Bandit findings: $COUNT"
+
+      - name: Dependency Vulnerability Check
+        id: deps
+        run: uv run pip-audit --format=json --output=pip-audit-report.json
+        continue-on-error: true
+
+      - name: Summarize Dependency Vulnerabilities
+        id: deps_summary
+        if: always()
+        shell: bash
+        run: |
+          if [ -f pip-audit-report.json ]; then
+            COUNT=$(python -c "import json; data=json.load(open('pip-audit-report.json', encoding='utf-8')); print(sum(len(pkg.get('vulns', [])) for pkg in data.get('dependencies', [])) if isinstance(data.get('dependencies', []), list) else 0)")
+          else
+            COUNT=0
+          fi
+          echo "deps_count=$COUNT" >> "$GITHUB_OUTPUT"
+          echo "Dependency vulnerabilities: $COUNT"
+
+      - name: Upload Security Reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-reports
+          path: |
+            bandit-report.json
+            pip-audit-report.json
+          retention-days: 30
+
+      - name: Show disk space after checking dependencies
+        if: always()
+        shell: bash
+        run: |
+          echo "== df -h =="
+          df -h
+          echo
+          echo "== uv cache dir =="
+          uv cache dir || true
+          echo "== largest dirs =="
+          du -h -d1 . 2>/dev/null | sort -hr | head -20 || true
+
+    outputs:
+      bandit_outcome: ${{ steps.bandit.outcome }}
+      deps_outcome: ${{ steps.deps.outcome }}
+      bandit_count: ${{ steps.bandit_summary.outputs.bandit_count }}
+      deps_count: ${{ steps.deps_summary.outputs.deps_count }}
+
+  test:
+    name: "Tests"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [meta, lint]
+    if: needs.meta.outputs.should_run_tests == 'true'
+    env:
+      RESOLVED_REF: ${{ needs.meta.outputs.resolved_ref }}
+    services:
+      postgres:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_USER: buska_user
+          POSTGRES_PASSWORD: buska_pass
+          POSTGRES_DB: buska_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U buska_user -d buska_db"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RESOLVED_REF }}
+          fetch-depth: 0
+
+      - name: Show disk space before tests
+        shell: bash
+        run: |
+          echo "== df -h =="
+          df -h
+          echo
+          echo "== docker system df =="
+          docker system df || true
+          echo
+          echo "== largest dirs =="
+          du -h -d1 . 2>/dev/null | sort -hr | head -20 || true
+
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+
+      - name: "Install dependencies (dev)"
+        run: uv sync --frozen --dev
+
+      - name: "Wait for PostgreSQL"
+        run: |
+          until pg_isready -h localhost -p 5432 -U buska_user -d buska_db; do
+            echo "Waiting for postgres..."
+            sleep 2
+          done
+
+      - name: "Run Integration (DB) with Coverage"
+        id: coverage
+        env:
+          ENV: test
+          DB_USER: buska_user
+          DB_PASSWORD: buska_pass
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_NAME: buska_db
+          JWT_SECRET_KEY: test_secret
+        run: |
+          uv run pytest -m "not e2e" \
+            --cov=app --cov-branch --cov-report=term-missing --cov-report=xml --cov-report=html
+
+          LINE_COV=$(grep -oP 'line-rate="\K[0-9.]+' coverage.xml | head -1 | awk '{printf "%.0f", $1*100}')
+          BRANCH_COV=$(grep -oP 'branch-rate="\K[0-9.]+' coverage.xml | head -1 | awk '{printf "%.0f", $1*100}')
+
+          echo "COVERAGE_PERCENT=${LINE_COV}%" >> "$GITHUB_OUTPUT"
+          echo "BRANCH_COVERAGE_PERCENT=${BRANCH_COV}%" >> "$GITHUB_OUTPUT"
+
+          echo "Line coverage: ${LINE_COV}%"
+          echo "Branch coverage: ${BRANCH_COV}%"
+
+      - name: "Upload Coverage Reports (DB)"
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-reports-db
+          path: |
+            coverage.xml
+            htmlcov/
+          retention-days: 30
+
+      - name: "Comment CI Summary on PR"
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const lineCov = "${{ steps.coverage.outputs.COVERAGE_PERCENT }}";
+            const branchCov = "${{ steps.coverage.outputs.BRANCH_COVERAGE_PERCENT }}";
+            const banditOutcome = "${{ needs.lint.outputs.bandit_outcome }}";
+            const depsOutcome = "${{ needs.lint.outputs.deps_outcome }}";
+            const banditCount = "${{ needs.lint.outputs.bandit_count }}";
+            const depsCount = "${{ needs.lint.outputs.deps_count }}";
+            const workflow = context.workflow;
+            const sha = context.sha.substring(0, 7);
+            const ref = context.payload.pull_request?.head?.ref || context.ref;
+
+            const numericLineCov = parseInt(lineCov.replace('%', ''), 10);
+
+            let status = "🔴 Needs improvement";
+            if (numericLineCov >= 80) status = "🟢 Good";
+            else if (numericLineCov >= 60) status = "🟡 Acceptable";
+
+            const formatOutcome = (outcome) => {
+              if (outcome === "success") return "✅ Success";
+              if (outcome === "failure") return "❌ Failed";
+              if (outcome === "cancelled") return "⚪ Cancelled";
+              if (outcome === "skipped") return "⏭️ Skipped";
+              return "❔ Unknown";
+            };
+
+            const banditDetails =
+              banditOutcome === "failure"
+                ? `${banditCount} finding(s) detected`
+                : banditOutcome === "success"
+                  ? `${banditCount} finding(s)`
+                  : "Static security scan finished";
+
+            const depsDetails =
+              depsOutcome === "failure"
+                ? `${depsCount} known vulnerability(ies) detected`
+                : depsOutcome === "success"
+                  ? `${depsCount} known vulnerability(ies)`
+                  : "Dependency vulnerability scan finished";
+
+
+            const body = [
+              "## 📊 CI Summary",
+              "",
+              "| Check | Status | Details |",
+              "|---|---|---|",
+              `| Coverage | ${status} | Line: **${lineCov}**, Branch: **${branchCov}** |`,
+              `| Bandit | ${formatOutcome(banditOutcome)} | ${banditDetails} |`,
+              `| Dependencies | ${formatOutcome(depsOutcome)} | ${depsDetails} |`,
+              "",
+              `**Workflow:** \`${workflow}\``,
+              `**Branch:** \`${ref}\``,
+              `**Commit:** \`${sha}\``,
+              "",
+              "### Notes",
+              "- HTML coverage report was uploaded as an artifact.",
+              "- Security scan reports were uploaded as workflow artifacts.",
+              "- This comment is automatically updated on each new push to this PR.",
+            ].join("\n");
+
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+
+            const comments = await github.rest.issues.listComments({
+              owner,
+              repo,
+              issue_number,
+            });
+
+            const botComment = comments.data.find(
+              c => c.user.type === "Bot" && c.body.includes("## 📊 CI Summary")
+            );
+
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: botComment.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number,
+                body,
+              });
+            }
+
+      - name: "Notify CI Failure (Discord)"
+        if: failure()
+        run: |
+          curl -X POST -H "Content-Type: application/json" \
+          -d '{"content": "❌ **CI Failed!** Error in DB tests.\n**Branch:** `${{ github.ref_name }}`\n**Commit:** `${{ github.sha }}`"}' \
+          ${{ secrets.DISCORD_WEBHOOK }}
+
+      - name: Light cleanup after tests
+        if: always()
+        shell: bash
+        run: |
+          rm -rf htmlcov .coverage coverage.xml || true
+          docker system df || true
+          df -h
+
+    outputs:
+      coverage: ${{ steps.coverage.outputs.COVERAGE_PERCENT }}
+      branch_coverage: ${{ steps.coverage.outputs.BRANCH_COVERAGE_PERCENT }}
+
+  build:
+    name: "Build Docker Image"
+    runs-on: ubuntu-latest
+    needs: [meta, lint, test]
+    if: |
+      always() &&
+      needs.lint.result == 'success' &&
+      (
+        needs.meta.outputs.should_run_tests != 'true' ||
+        needs.test.result == 'success'
+      )
+    env:
+      RESOLVED_REF: ${{ needs.meta.outputs.resolved_ref }}
+      SHOULD_TAG_LATEST: ${{ needs.meta.outputs.should_tag_latest }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RESOLVED_REF }}
+          fetch-depth: 0
+
+      - name: Show disk space before build
+        shell: bash
+        run: |
+          echo "== df -h =="
+          df -h
+          echo
+          echo "== docker system df =="
+          docker system df || true
+          echo
+          echo "== largest dirs =="
+          du -h -d1 . 2>/dev/null | sort -hr | head -20 || true
+
+      - name: "Compute docker tags"
+        id: tags
+        shell: bash
+        run: |
+          # sanitize ref for docker tag
+          REF="${{ env.RESOLVED_REF }}"
+          SAFE_REF=$(echo "$REF" | tr '/:@' '---' | tr -cd '[:alnum:]._-' | cut -c1-80)
+
+          PRIMARY_TAG="mebuska-corporate:${{ github.sha }}"
+          SECONDARY_TAG="mebuska-corporate:${SAFE_REF}-${{ github.run_number }}"
+
+          TAGS="${PRIMARY_TAG}
+          ${SECONDARY_TAG}"
+
+          if [ "${{ github.ref }}" = "refs/heads/main" ] || [ "${{ env.SHOULD_TAG_LATEST }}" = "true" ]; then
+            TAGS="${TAGS}
+          mebuska-corporate:latest"
+          fi
+
+          echo "primary_image_tag=${PRIMARY_TAG}" >> "$GITHUB_OUTPUT"
+          echo "tags<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$TAGS" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - name: "Create Development .env"
+        run: |
+          cat > .env <<EOF
+          DB_USER=buska_user
+          DB_PASSWORD=buska_pass
+          DB_HOST=localhost
+          DB_PORT=5432
+          DB_NAME=buska_db
+          JWT_SECRET_KEY=${{ secrets.JWT_SECRET_KEY_DEV }}
+          JWT_EXPIRES_HOURS=2
+          FLASK_ENV=development
+          FLASK_DEBUG=True
+          DEBUG=True
+          DEVELOPMENT_ENV=true
+          EOF
+
+      - name: "Build Docker Image"
+        shell: bash
+        run: |
+          echo "Building tags:"
+          echo "${{ steps.tags.outputs.tags }}"
+
+          BUILD_TAG_ARGS=""
+          while IFS= read -r tag; do
+            [ -n "$tag" ] && BUILD_TAG_ARGS="$BUILD_TAG_ARGS -t $tag"
+          done <<< "${{ steps.tags.outputs.tags }}"
+
+          docker build $BUILD_TAG_ARGS .
+
+      - name: Save Docker Image
+        if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+        run: |
+          docker save "${{ steps.tags.outputs.primary_image_tag }}" | gzip > mebuska-corporate.tar.gz
+          printf '%s\n' "${{ steps.tags.outputs.primary_image_tag }}" > image-tag.txt
+
+      - name: "Upload Docker Image Artifact (main only)"
+        if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-image
+          path: |
+            mebuska-corporate.tar.gz
+            image-tag.txt
+          retention-days: 7
+
+      - name: Show disk space after saving Docker image
+        if: always()
+        shell: bash
+        run: |
+          docker images || true
+          docker system df || true
+          df -h
+
+      - name: Light cleanup after build
+        if: always()
+        shell: bash
+        run: |
+          rm -f .env mebuska-corporate.tar.gz image-tag.txt || true
+          docker system df || true
+          df -h
+
+  deploy:
+    name: Deploy to Production
+    runs-on: self-hosted
+    timeout-minutes: 40
+    needs: [build, test]
+    if: |
+      startsWith(github.ref, 'refs/tags/v') &&
+      needs.build.result == 'success' &&
+      needs.test.result == 'success'
+    environment:
+      name: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show disk space before deploy
+        shell: bash
+        run: |
+          echo "== df -h =="
+          df -h
+          echo
+          echo "== docker system df =="
+          docker system df || true
+          echo
+          echo "== docker ps -a =="
+          docker ps -a || true
+
+      - name: "Download Docker Image"
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-image
+
+      - name: Load Docker Image
+        shell: bash
+        run: |
+          docker load < mebuska-corporate.tar.gz
+          echo "Loaded image:"
+          cat image-tag.txt
+          docker images | head -20
+
+          export API_IMAGE=$(cat image-tag.txt)
+          echo "API_IMAGE=$API_IMAGE" >> $GITHUB_ENV
+
+      - name: "Create .env.prod"
+        env:
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          MAIL_SERVER: ${{ secrets.MAIL_SERVER }}
+          MAIL_PORT: ${{ secrets.MAIL_PORT }}
+          MAIL_USERNAME: ${{ secrets.MAIL_USERNAME }}
+          MAIL_PASSWORD: ${{ secrets.MAIL_PASSWORD }}
+          MAIL_USE_TLS: ${{ secrets.MAIL_USE_TLS }}
+          FRONTEND_URL: ${{ secrets.FRONTEND_URL }}
+          CORS_ORIGINS: ${{ secrets.CORS_ORIGINS }}
+          FIREBASE_CREDENTIALS: ${{ secrets.FIREBASE_CREDENTIALS }}
+        run: |
+          cat > .env.prod <<EOF
+          DB_USER=${DB_USER}
+          DB_PASSWORD=${DB_PASSWORD}
+          DB_NAME=${DB_NAME}
+          API_PORT=5000
+          JWT_SECRET_KEY=${JWT_SECRET}
+          JWT_EXPIRES_HOURS=2
+          FLASK_ENV=production
+          MAIL_SERVER=${MAIL_SERVER}
+          MAIL_PORT=${MAIL_PORT:-587}
+          MAIL_USERNAME=${MAIL_USERNAME}
+          MAIL_PASSWORD=${MAIL_PASSWORD}
+          MAIL_USE_TLS=${MAIL_USE_TLS:-true}
+          FRONTEND_URL=${FRONTEND_URL}
+          CORS_ORIGINS=${CORS_ORIGINS}
+          FIREBASE_CREDENTIALS=${FIREBASE_CREDENTIALS}
+          EOF
+          chmod 600 .env.prod
+
+      - name: Start database first
+        run: |
+          echo "Stopping existing containers..."
+          docker-compose -f docker-compose.prod.yml down || true
+          echo "Starting database..."
+          docker-compose -f docker-compose.prod.yml --env-file .env.prod up -d db
+
+      - name: Wait for database
+        env:
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+        run: |
+          for i in {1..60}; do
+            if docker exec buska_db_prod pg_isready -U "$DB_USER" -d "$DB_NAME" 2>/dev/null; then
+              echo "Database is ready"
+              exit 0
+            fi
+            echo "Waiting for database... ($i/60)"
+            sleep 2
+          done
+          echo "Database did not become ready in time"
+          exit 1
+
+      - name: "Ensure DB extensions (idempotent)"
+        env:
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+        run: |
+          docker exec buska_db_prod psql -U "$DB_USER" -d "$DB_NAME" -c 'CREATE EXTENSION IF NOT EXISTS "uuid-ossp";' || true
+
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+
+      - name: "Install dependencies"
+        run: uv sync --frozen --dev
+
+      - name: "Run migrations"
+        env:
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+          DB_HOST: localhost
+          DB_PORT: "5432"
+          JWT_SECRET_KEY: ${{ secrets.JWT_SECRET }}
+        run: uv run alembic upgrade head
+
+      - name: "Seed database (skips if data already exists)"
+        env:
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+          DB_HOST: localhost
+          DB_PORT: "5432"
+          JWT_SECRET_KEY: ${{ secrets.JWT_SECRET }}
+          FIREBASE_CREDENTIALS: ${{ secrets.FIREBASE_CREDENTIALS }}
+          MAIL_SERVER: ${{ secrets.MAIL_SERVER }}
+          MAIL_USERNAME: ${{ secrets.MAIL_USERNAME }}
+          MAIL_PASSWORD: ${{ secrets.MAIL_PASSWORD }}
+          FRONTEND_URL: ${{ secrets.FRONTEND_URL }}
+          MUNICIPIOS_CSV_PATH: ${{ secrets.MUNICIPIOS_CSV_PATH }}
+          IES_CSV_PATH: ${{ secrets.IES_CSV_PATH }}
+          ESCOLAS_CSV_PATH: ${{ secrets.ESCOLAS_CSV_PATH }}
+        run: uv run python seed.py
+
+      - name: Deploy application containers
+        run: |
+          echo "Deploying application containers..."
+          docker-compose -f docker-compose.prod.yml --env-file .env.prod up -d api scheduler
+
+      - name: "Health Check"
+        run: |
+          for i in {1..30}; do
+            if curl -sf http://localhost:5000/health > /dev/null; then
+              echo "API is healthy"
+              exit 0
+            fi
+            echo "Waiting for API... ($i/30)"
+            sleep 5
+          done
+          echo "Health check failed"
+          echo "==== docker ps ===="
+          docker ps
+          echo "==== docker logs buska_api ===="
+          docker logs buska_api || true
+          exit 1
+
+      # Os jobs de background ficaram desligados em produção sem que nada
+      # sinalizasse. Um scheduler morto agora reprova o deploy.
+      - name: "Scheduler Check"
+        run: |
+          if [ "$(docker inspect -f '{{.State.Running}}' buska_scheduler)" != "true" ]; then
+            echo "Scheduler container is not running"
+            docker logs buska_scheduler || true
+            exit 1
+          fi
+
+          if ! docker logs buska_scheduler 2>&1 | grep -q "Scheduler up with"; then
+            echo "Scheduler started but registered no jobs"
+            docker logs buska_scheduler || true
+            exit 1
+          fi
+
+          echo "Scheduler is running with jobs:"
+          docker logs buska_scheduler 2>&1 | grep "Scheduler up with"
+
+      - name: Smoke test - OpenAPI
+        run: |
+          curl -sf http://localhost:5000/swagger.json > /dev/null
+
+      - name: Smoke test - login route reachable
+        run: |
+          status=$(curl -s -o /tmp/login_response.txt -w "%{http_code}" \
+            -X POST http://localhost:5000/v1/auth/login \
+            -H "Content-Type: application/json" \
+            -d '{"email":"invalid@example.com","password":"invalid-password"}')
+
+          echo "HTTP status: $status"
+          test "$status" = "400" -o "$status" = "401"
+
+      - name: Show container logs on failure
+        if: failure()
+        run: |
+          echo "==== docker ps ===="
+          docker ps || true
+          echo "==== docker compose ps ===="
+          docker compose -f docker-compose.prod.yml --env-file .env.prod ps || true
+          echo "==== docker logs buska_api ===="
+          docker logs buska_api || true
+          echo "==== docker logs buska_scheduler ===="
+          docker logs buska_scheduler || true
+          echo "==== docker logs buska_db_prod ===="
+          docker logs buska_db_prod || true
+
+      - name: "Notify Discord Success"
+        if: success()
+        run: |
+          MSG="🚀 **BusKá Backend Deployed!**\n**Version:** \`${{ github.run_number }}\`\n**Coverage: Line** \`${{ needs.test.outputs.coverage }}\`\n**Coverage: Branch** \`${{ needs.test.outputs.branch_coverage }}\`\n**Commit:** \`${GITHUB_SHA:0:7}\`"
+          PAYLOAD='{"embeds": [{"title": "Production Deployment", "description": "'"$MSG"'", "color": 3066993, "timestamp": "'$(date -u +%Y-%m-%dT%H:%M:%S.000Z)'"}]}'
+          curl -X POST -H "Content-Type: application/json" -d "$PAYLOAD" ${{ secrets.DISCORD_WEBHOOK }}
+
+      - name: "Notify Discord Failure"
+        if: failure()
+        run: |
+          MSG="❌ **Deployment Failed!**\n**Branch:** \`${{ github.ref_name }}\`\n**Run:** \`${{ github.run_number }}\`"
+          PAYLOAD='{"embeds": [{"title": "Deployment Error", "description": "'"$MSG"'", "color": 15158332}]}'
+          curl -X POST -H "Content-Type: application/json" -d "$PAYLOAD" ${{ secrets.DISCORD_WEBHOOK }}
+
+      - name: Cleanup self-hosted runner
+        if: always()
+        shell: bash
+        run: |
+          rm -f .env.prod mebuska-corporate.tar.gz image-tag.txt /tmp/login_response.txt || true
+          docker image prune -af || true
+          docker builder prune -af || true
+          docker container prune -f || true
+          docker system df || true
+          df -h

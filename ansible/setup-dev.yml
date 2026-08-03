@@ -1,0 +1,92 @@
+---
+- name: Setup Buska Backend - Development
+  hosts: localhost
+  connection: local
+  vars:
+    project_dir: "{{ lookup('env', 'PWD') | default('/Users/julio/Documents/25.2/projeto1/mebuska-corporate') }}"
+    python_version: "3.12"
+    venv_path: "{{ project_dir }}/.venv"
+    clean_db: "{{ clean_database | default(false) }}"  # Pass as: -e clean_database=true
+
+  tasks:
+    - name: Check if Python 3.12+ is installed
+      shell: python3 --version
+      register: python_version_output
+      failed_when: false
+
+    - name: Display Python version
+      debug:
+        msg: "Python version: {{ python_version_output.stdout }}"
+
+    - name: Check if venv exists
+      stat:
+        path: "{{ venv_path }}"
+      register: venv_check
+
+    - name: Create virtual environment if it doesn't exist
+      shell: python3 -m venv {{ venv_path }}
+      when: not venv_check.stat.exists
+
+    - name: Install dependencies via pip
+      shell: |
+        cd {{ project_dir }}
+        source {{ venv_path }}/bin/activate
+        pip install --upgrade pip
+        pip install -e .
+      args:
+        executable: /bin/bash
+      changed_when: false
+
+    - name: Check if Docker is running
+      shell: docker ps > /dev/null 2>&1
+      register: docker_check
+      failed_when: false
+
+    - name: Clean up old database container (only if Docker is running AND clean_db is true)
+      shell: |
+        docker compose -f {{ project_dir }}/infra/database.yml down --volumes 2>/dev/null || true
+        sleep 2
+      args:
+        executable: /bin/bash
+      when:
+        - docker_check.rc == 0
+        - clean_db | bool
+      changed_when: false
+
+    - name: Display warning about existing database
+      debug:
+        msg: "Database already exists. Skipping cleanup. To reinitialize, run with: -e clean_database=true"
+      when:
+        - docker_check.rc == 0
+        - not (clean_db | bool)
+
+    - name: Warn if Docker is not running
+      debug:
+        msg: "WARNING: Docker is not running. Please start Docker Desktop and run 'make initdb' manually."
+      when: docker_check.rc != 0
+
+    - name: Initialize database (only if Docker is running)
+      shell: |
+        cd {{ project_dir }}
+        source {{ venv_path }}/bin/activate
+        make initdb
+      args:
+        executable: /bin/bash
+      when: docker_check.rc == 0
+      changed_when: false
+      register: initdb_result
+      until: initdb_result.rc == 0
+      retries: 3
+      delay: 5
+
+    - name: Display setup complete message
+      debug:
+        msg: |
+          Setup completed!
+
+          Next steps:
+          1. Make sure Docker Desktop is running
+          2. Run: source .venv/bin/activate
+          3. Run: make run
+
+          API will be available at: http://localhost:5000/docs

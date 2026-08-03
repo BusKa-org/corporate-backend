@@ -1,0 +1,62 @@
+---
+tags:
+  - Gestor
+summary: Listar Motoristas do Município
+description: |
+  Retorna todos os motoristas cadastrados no município do gestor autenticado.  
+  Apenas usuários com o papel **gestor** podem acessar este endpoint.  
+  Requer um **JWT token** válido no cabeçalho `Authorization`.
+operationId: listarMotoristasGestor
+security:
+  - BearerAuth: []
+parameters:
+  - in: header
+    name: Authorization
+    required: true
+    type: string
+    description: JWT token para autenticação.
+    example: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...ExAMPLE_TOKEN"
+responses:
+  200:
+    description: Lista de motoristas retornada com sucesso.
+    schema:
+      type: array
+      items:
+        type: object
+        properties:
+          id:
+            type: integer
+            example: 4
+            description: ID do motorista.
+          nome:
+            type: string
+            example: "João Motorista"
+            description: Nome completo do motorista.
+          email:
+            type: string
+            example: "joao.motorista@buska.app"
+            description: Endereço de e-mail do motorista.
+    examples:
+      application/json:
+        - id: 4
+          nome: "João Motorista"
+          email: "joao.motorista@buska.app"
+        - id: 5
+          nome: "Maria Transporte"
+          email: "maria.transporte@buska.app"
+  403:
+    description: Acesso negado — apenas gestores podem listar motoristas.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Access restricted to gestores"
+  401:
+    description: Token ausente ou inválido.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Missing Authorization Header"

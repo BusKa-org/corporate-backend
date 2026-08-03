@@ -1,0 +1,54 @@
+---
+tags:
+  - User
+summary: Get Current Authenticated User
+description: |
+  Returns the profile of the currently authenticated user.  
+  Requires a valid **JWT access token** in the `Authorization` header as a Bearer token.
+operationId: getCurrentUser
+security:
+  - BearerAuth: []
+parameters:
+  - in: header
+    name: Authorization
+    required: true
+    type: string
+    description: Bearer token for authentication.
+    example: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...VN9JSIExAMPLEt0kENoTREAL"
+responses:
+  200:
+    description: Successfully retrieved the authenticated user's data.
+    schema:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 4
+        nome:
+          type: string
+          example: Fubica Brasileiro
+        email:
+          type: string
+          example: fbrasileiro@buska.app
+        municipio:
+          type: integer
+          example: 1
+        role:
+          type: string
+          example: gestor
+  401:
+    description: Unauthorized. Missing or invalid JWT token.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: Missing Authorization Header
+  404:
+    description: User not found.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: user not found

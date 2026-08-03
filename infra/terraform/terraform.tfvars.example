@@ -1,0 +1,7 @@
+instance_name    = "buska-core-app-01"
+image_id         = "<image-uuid>"
+flavor_id        = "<flavor-id>"
+key_pair         = "<keypair-name>"
+security_groups  = ["default"]
+network_name     = "<network-name>"
+cloud_name       = "openstack"

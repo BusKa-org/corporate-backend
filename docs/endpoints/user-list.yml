@@ -1,0 +1,79 @@
+---
+tags:
+  - User
+summary: List All Users
+description: |
+  Returns a list of all registered users in the system.  
+  **Access restricted to users with the `gestor` role.**  
+  Requires a valid **JWT access token** in the `Authorization` header.
+operationId: listUsers
+security:
+  - BearerAuth: []
+parameters:
+  - in: header
+    name: Authorization
+    required: true
+    type: string
+    description: Bearer token for authentication.
+    example: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...vEXAMPLE_TOKEN"
+responses:
+  200:
+    description: List of users returned successfully.
+    schema:
+      type: array
+      items:
+        type: object
+        properties:
+          id:
+            type: integer
+            example: 7
+            description: User ID.
+          nome:
+            type: string
+            example: "John Foo"
+            description: Full name of the user.
+          email:
+            type: string
+            example: "jfoo@buska.app"
+            description: Email address of the user.
+          municipio:
+            type: integer
+            example: 1
+            description: Municipality ID associated with the user.
+          role:
+            type: string
+            example: "aluno"
+            description: User role (e.g., aluno, motorista, gestor).
+    examples:
+      application/json:
+        - id: 1
+          nome: "Fubica Brasileiro"
+          email: "fbrasileiro@buska.app"
+          municipio: 1
+          role: "gestor"
+        - id: 2
+          nome: "John Foo"
+          email: "jfoo@buska.app"
+          municipio: 1
+          role: "aluno"
+        - id: 3
+          nome: "João Motorista"
+          email: "joao@buska.app"
+          municipio: 1
+          role: "motorista"
+  403:
+    description: Forbidden. The current user is not authorized (not a gestor).
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Unauthorized"
+  401:
+    description: Unauthorized. Missing or invalid JWT token.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Missing Authorization Header"

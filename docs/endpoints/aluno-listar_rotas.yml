@@ -1,0 +1,76 @@
+---
+tags:
+  - Aluno
+summary: Listar Rotas do Município
+description: |
+  Retorna todas as rotas disponíveis no município do aluno autenticado.  
+  Apenas usuários com o papel **aluno** podem acessar este endpoint.  
+  Requer um **JWT token** válido no cabeçalho `Authorization`.
+operationId: listarRotasAluno
+security:
+  - BearerAuth: []
+parameters:
+  - in: header
+    name: Authorization
+    required: true
+    type: string
+    description: JWT token para autenticação.
+    example: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...ExAMPLE_TOKEN"
+responses:
+  200:
+    description: Lista de rotas disponíveis retornada com sucesso.
+    schema:
+      type: array
+      items:
+        type: object
+        properties:
+          id:
+            type: integer
+            example: 5
+            description: ID da rota.
+          nome:
+            type: string
+            example: "Rota Principal"
+            description: Nome da rota.
+          motorista_id:
+            type: integer
+            example: 3
+            description: ID do motorista responsável pela rota.
+          municipio_id:
+            type: integer
+            example: 1
+            description: ID do município da rota.
+    examples:
+      application/json:
+        - id: 1
+          nome: "Rota Central"
+          motorista_id: 7
+          municipio_id: 2
+        - id: 2
+          nome: "Rota Escolar"
+          motorista_id: 8
+          municipio_id: 2
+  400:
+    description: Aluno sem município cadastrado.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Aluno não possui município cadastrado"
+  403:
+    description: Acesso negado — apenas alunos podem listar rotas.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Access restricted to alunos"
+  401:
+    description: Token ausente ou inválido.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Missing Authorization Header"

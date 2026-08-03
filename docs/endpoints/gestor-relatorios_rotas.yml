@@ -1,0 +1,66 @@
+---
+tags:
+  - Gestor
+summary: Relatório de Viagens por Rota
+description: |
+  Retorna um relatório simples com o total de viagens e o número de viagens concluídas por rota.  
+  O relatório é gerado apenas para as rotas do município do gestor autenticado.  
+  Apenas usuários com o papel **gestor** podem acessar este endpoint.  
+  Requer um **JWT token** válido no cabeçalho `Authorization`.
+operationId: relatoriosRotasGestor
+security:
+  - BearerAuth: []
+parameters:
+  - in: header
+    name: Authorization
+    required: true
+    type: string
+    description: JWT token para autenticação.
+    example: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...ExAMPLE_TOKEN"
+responses:
+  200:
+    description: Relatório de rotas retornado com sucesso.
+    schema:
+      type: array
+      items:
+        type: object
+        properties:
+          rota:
+            type: string
+            example: "Rota Central"
+            description: Nome da rota.
+          total_viagens:
+            type: integer
+            example: 12
+            description: Total de viagens registradas para a rota.
+          completas:
+            type: integer
+            example: 9
+            description: Número de viagens concluídas (com horário de término registrado).
+    examples:
+      application/json:
+        - rota: "Rota Central"
+          total_viagens: 12
+          completas: 9
+        - rota: "Rota Escolar Norte"
+          total_viagens: 8
+          completas: 7
+        - rota: "Rota Rural"
+          total_viagens: 5
+          completas: 5
+  403:
+    description: Acesso negado — apenas gestores podem acessar relatórios.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Access restricted to gestores"
+  401:
+    description: Token ausente ou inválido.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Missing Authorization Header"

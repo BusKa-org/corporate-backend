@@ -1,0 +1,83 @@
+---
+tags:
+  - Motorista
+summary: Listar Viagens do Motorista
+description: |
+  Retorna todas as viagens (trips) associadas ao motorista autenticado.  
+  Disponível apenas para usuários com o papel **motorista**.  
+  Requer um **JWT token** válido no cabeçalho `Authorization`.
+operationId: listarViagensMotorista
+security:
+  - BearerAuth: []
+parameters:
+  - in: header
+    name: Authorization
+    required: true
+    type: string
+    description: JWT token para autenticação.
+    example: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...ExAMPLE_TOKEN"
+responses:
+  200:
+    description: Lista de viagens do motorista retornada com sucesso.
+    schema:
+      type: array
+      items:
+        type: object
+        properties:
+          id:
+            type: integer
+            example: 5
+            description: ID da viagem.
+          data:
+            type: string
+            format: date-time
+            example: "2025-11-08T14:30:00Z"
+            description: Data da viagem.
+          horario_inicio:
+            type: string
+            format: date-time
+            example: "2025-11-08T14:35:00Z"
+            description: Horário de início da viagem.
+          horario_fim:
+            type: string
+            format: date-time
+            example: "2025-11-08T16:10:00Z"
+            description: Horário de término da viagem (se finalizada).
+          rota_id:
+            type: integer
+            example: 2
+            description: ID da rota associada à viagem.
+          tipo:
+            type: string
+            example: "ida"
+            description: "Tipo da viagem (ex: ida, volta)."
+    examples:
+      application/json:
+        - id: 1
+          data: "2025-11-08T14:00:00Z"
+          horario_inicio: "2025-11-08T14:10:00Z"
+          horario_fim: "2025-11-08T15:20:00Z"
+          rota_id: 3
+          tipo: "ida"
+        - id: 2
+          data: "2025-11-08T17:00:00Z"
+          horario_inicio: "2025-11-08T17:05:00Z"
+          horario_fim: null
+          rota_id: 3
+          tipo: "volta"
+  403:
+    description: Acesso negado — apenas motoristas podem listar viagens.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Access restricted to motoristas"
+  401:
+    description: Token ausente ou inválido.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Missing Authorization Header"

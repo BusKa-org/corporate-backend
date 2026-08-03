@@ -1,0 +1,57 @@
+---
+tags:
+  - Motorista
+summary: Iniciar Viagem
+description: |
+  Marca uma viagem como **iniciada**.  
+  Disponível apenas para usuários com o papel **motorista**.  
+  Requer um **JWT token** válido no cabeçalho `Authorization`.
+operationId: iniciarViagem
+security:
+  - BearerAuth: []
+parameters:
+  - in: header
+    name: Authorization
+    required: true
+    type: string
+    description: JWT token para autenticação.
+    example: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...ExAMPLE_TOKEN"
+  - in: path
+    name: viagem_id
+    required: true
+    type: integer
+    description: ID da viagem a ser iniciada.
+    example: 12
+responses:
+  200:
+    description: Viagem iniciada com sucesso.
+    schema:
+      type: object
+      properties:
+        message:
+          type: string
+          example: "Viagem iniciada com sucesso."
+  403:
+    description: Acesso negado — apenas motoristas podem iniciar viagens.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Access restricted to motoristas"
+  404:
+    description: Viagem não encontrada.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Viagem not found"
+  401:
+    description: Token ausente ou inválido.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Missing Authorization Header"

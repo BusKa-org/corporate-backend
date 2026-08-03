@@ -1,0 +1,114 @@
+---
+tags:
+  - Authentication
+summary: User Registration
+description: |
+  Registers a new user in the system.  
+  The user must provide a name, email, password, and municipality.  
+  The role defaults to **aluno**, but can be specified as **motorista** or **gestor** if allowed by business rules.
+operationId: authRegister
+parameters:
+  - in: body
+    name: body
+    required: true
+    description: JSON payload containing the user's registration information.
+    schema:
+      type: object
+      required:
+        - nome
+        - email
+        - password
+        - municipio
+      properties:
+        nome:
+          type: string
+          example: John Foo 
+          description: Full name of the user.
+        email:
+          type: string
+          format: email
+          example: user@buska.app
+          description: Unique email for login.
+        password:
+          type: string
+          format: password
+          example: senha123
+          description: Password for the account.
+        municipio:
+          type: string
+          example: Campina Grande
+          description: Municipality name where the user is registered.
+        role:
+          type: string
+          example: aluno
+          description: User role (e.g., 'aluno', 'motorista', 'gestor'). Defaults to 'aluno'.
+    examples:
+      Register Gestor:
+        summary: Example — Register a Gestor user
+        value:
+          nome: "Fubica Brasileiro"
+          email: "fbrasileiro@buska.app"
+          password: "senha123"
+          municipio: "Campina Grande"
+          role: "gestor"
+      Register Aluno:
+        summary: Example — Register an Aluno user
+        value:
+          nome: "John Foo"
+          email: "jfoo@buska.app"
+          password: "senha123"
+          municipio: "Campina Grande"
+
+responses:
+  201:
+    description: User registered successfully.
+    schema:
+      type: object
+      properties:
+        message:
+          type: string
+          example: User registered successfully.
+        user:
+          type: object
+          properties:
+            id:
+              type: integer
+              example: 12
+            nome:
+              type: string
+              example: Fubica Brasileiro
+            email:
+              type: string
+              example: fbrasileiro@buska.app
+            role:
+              type: string
+              example: gestor
+            municipio:
+              type: object
+              properties:
+                id:
+                  type: integer
+                  example: 1
+                nome:
+                  type: string
+                  example: Campina Grande
+                uf:
+                  type: string
+                  example: PB
+  400:
+    description: Missing required fields or invalid data.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: Missing required field
+  404:
+    description: Municipality not found.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Municipio with Name 'Campina Pequena' not found"
+

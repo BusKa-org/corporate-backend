@@ -1,0 +1,89 @@
+---
+tags:
+  - Motorista
+summary: Criar Nova Rota
+description: |
+  Permite que um motorista crie uma nova rota.  
+  O município é automaticamente associado com base no motorista autenticado.  
+  Apenas usuários com o papel **motorista** podem acessar este endpoint.  
+  Requer um **JWT token** válido no cabeçalho `Authorization`.
+operationId: criarRota
+security:
+  - BearerAuth: []
+parameters:
+  - in: header
+    name: Authorization
+    required: true
+    type: string
+    description: JWT token para autenticação.
+    example: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...ExAMPLE_TOKEN"
+  - in: body
+    name: body
+    required: true
+    description: JSON com os dados da rota a ser criada.
+    schema:
+      type: object
+      required:
+        - nome
+      properties:
+        nome:
+          type: string
+          example: "Rota Principal"
+          description: Nome da rota a ser criada.
+    examples:
+      Criar Rota:
+        summary: Exemplo — criação de rota simples
+        value:
+          nome: "Rota Principal"
+responses:
+  201:
+    description: Rota criada com sucesso.
+    schema:
+      type: object
+      properties:
+        message:
+          type: string
+          example: "Rota criada com sucesso"
+        rota:
+          type: object
+          properties:
+            id:
+              type: integer
+              example: 10
+              description: ID gerado para a rota.
+            nome:
+              type: string
+              example: "Rota Principal"
+              description: Nome da rota.
+            municipio_id:
+              type: integer
+              example: 3
+              description: ID do município associado.
+            motorista_id:
+              type: integer
+              example: 7
+              description: ID do motorista que criou a rota.
+  400:
+    description: Motorista sem município cadastrado.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Motorista não tem nenhum município cadastrado"
+  403:
+    description: Acesso negado — apenas motoristas podem criar rotas.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Access restricted to motoristas"
+  401:
+    description: Token ausente ou inválido.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Missing Authorization Header"

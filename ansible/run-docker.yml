@@ -1,0 +1,96 @@
+---
+- name: Run Buska Backend - Docker Development
+  hosts: localhost
+  connection: local
+  vars:
+    project_dir: "{{ lookup('env', 'PWD') | default('/Users/julio/Documents/25.2/projeto1/mebuska-corporate') }}"
+    docker_compose_file: "docker-compose.prod.yml"
+    env_file: ".env.prod"
+
+  tasks:
+    - name: Check if Docker is running
+      shell: docker ps > /dev/null 2>&1
+      register: docker_check
+      failed_when: false
+      changed_when: false
+
+    - name: Fail if Docker is not running
+      fail:
+        msg: "Docker is not running. Please start Docker Desktop and try again."
+      when: docker_check.rc != 0
+
+    - name: Check if .env.prod exists
+      stat:
+        path: "{{ project_dir }}/{{ env_file }}"
+      register: env_file_check
+
+    - name: Create .env.prod from example if it doesn't exist
+      shell: |
+        cd {{ project_dir }}
+        cp .env.example {{ env_file }}
+        echo "Created .env.prod from .env.example"
+        echo "Please edit {{ env_file }} with your actual credentials"
+      args:
+        executable: /bin/bash
+      when: not env_file_check.stat.exists
+      changed_when: false
+
+    - name: Build Docker image
+      shell: |
+        cd {{ project_dir }}
+        docker build -t mebuska-corporate:latest .
+      register: build_output
+      changed_when: "'Successfully tagged' in build_output.stdout or 'Successfully built' in build_output.stdout"
+
+    - name: Stop existing containers (if any)
+      shell: |
+        cd {{ project_dir }}
+        docker compose -f {{ docker_compose_file }} down 2>/dev/null || true
+      args:
+        executable: /bin/bash
+      changed_when: false
+
+    - name: Start containers
+      shell: |
+        cd {{ project_dir }}
+        docker compose -f {{ docker_compose_file }} --env-file {{ env_file }} up -d
+      register: compose_up
+      changed_when: true
+
+    - name: Get API port from .env.prod
+      shell: grep '^API_PORT=' {{ project_dir }}/{{ env_file }} | cut -d'=' -f2
+      register: api_port_result
+      changed_when: false
+
+    - name: Set API port variable
+      set_fact:
+        api_port: "{{ api_port_result.stdout | default('5000') }}"
+
+    - name: Wait for API to be ready
+      uri:
+        url: "http://localhost:{{ api_port }}/docs/"
+        method: GET
+        status_code: 200
+      register: result
+      until: result.status == 200
+      retries: 10
+      delay: 5
+      ignore_errors: yes
+
+    - name: Display success message
+      debug:
+        msg: |
+          Buska Backend is running!
+
+          API URL: http://localhost:{{ api_port }}
+          Documentation: http://localhost:{{ api_port }}/docs
+
+          Docker containers:
+          - buska_api: API Flask (Gunicorn)
+          - buska_db_prod: PostgreSQL + PostGIS
+
+          Useful commands:
+          - View logs: docker compose -f {{ docker_compose_file }} logs -f
+          - Stop: docker compose -f {{ docker_compose_file }} down
+          - Clean: docker compose -f {{ docker_compose_file }} down --volumes
+          - Rebuild: docker compose -f {{ docker_compose_file }} build --no-cache

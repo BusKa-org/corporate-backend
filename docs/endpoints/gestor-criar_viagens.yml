@@ -1,0 +1,137 @@
+---
+tags:
+  - Gestor
+summary: Criar Nova Viagem
+description: |
+  Permite que um **gestor** crie uma nova viagem associada a uma rota e a um motorista.  
+  O município é automaticamente associado com base no gestor autenticado.  
+  Apenas usuários com o papel **gestor** podem acessar este endpoint.  
+  Requer um **JWT token** válido no cabeçalho `Authorization`.
+operationId: criarViagem
+security:
+  - BearerAuth: []
+parameters:
+  - in: header
+    name: Authorization
+    required: true
+    type: string
+    description: JWT token para autenticação.
+    example: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...ExAMPLE_TOKEN"
+
+  - in: body
+    name: body
+    required: true
+    description: JSON com os dados da viagem a ser criada.
+    schema:
+      type: object
+      required:
+        - rota_id
+        - motorista_id
+        - data
+        - horario_inicio
+        - tipo
+      properties:
+        rota_id:
+          type: integer
+          example: 5
+          description: ID da rota associada à viagem.
+        motorista_id:
+          type: integer
+          example: 12
+          description: ID do motorista responsável pela viagem.
+        data:
+          type: string
+          format: date
+          example: "2025-11-09"
+          description: Data em que a viagem ocorrerá (YYYY-MM-DD).
+        horario_inicio:
+          type: string
+          format: time
+          example: "07:00"
+          description: Horário de início da viagem (HH:MM).
+        horario_fim:
+          type: string
+          format: time
+          example: "08:30"
+          description: Horário estimado de término da viagem (opcional).
+        tipo:
+          type: string
+          enum: ["IDA", "VOLTA"]
+          example: "IDA"
+          description: Tipo da viagem (IDA ou VOLTA).
+
+    examples:
+      Criar Viagem:
+        summary: Exemplo — criação de viagem simples
+        value:
+          rota_id: 5
+          motorista_id: 12
+          data: "2025-11-09"
+          horario_inicio: "07:00"
+          horario_fim: "08:30"
+          tipo: "IDA"
+
+responses:
+  201:
+    description: Viagem criada com sucesso.
+    schema:
+      type: object
+      properties:
+        message:
+          type: string
+          example: "Viagem criada com sucesso"
+        viagem:
+          type: object
+          properties:
+            id:
+              type: integer
+              example: 20
+              description: ID gerado para a viagem.
+            data:
+              type: string
+              example: "2025-11-09"
+              description: Data da viagem.
+            horario_inicio:
+              type: string
+              example: "07:00:00"
+              description: Horário de início.
+            horario_fim:
+              type: string
+              example: "08:30:00"
+              description: Horário de término (pode ser nulo).
+            tipo:
+              type: string
+              example: "IDA"
+              description: Tipo da viagem (IDA ou VOLTA).
+            rota_id:
+              type: integer
+              example: 5
+              description: ID da rota associada.
+            motorista_id:
+              type: integer
+              example: 12
+              description: ID do motorista responsável.
+  400:
+    description: Erro de validação de dados ou gestor sem município cadastrado.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Campos obrigatórios ausentes"
+  403:
+    description: Acesso negado — apenas gestores podem criar viagens.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Access restricted to gestores"
+  401:
+    description: Token ausente ou inválido.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Missing Authorization Header"

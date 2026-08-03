@@ -1,0 +1,70 @@
+---
+tags:
+  - Authentication
+summary: User Login
+description: Authenticates a user with email and password, returning an access JWT token and user details.
+operationId: authLogin
+parameters:
+  - in: body
+    name: body
+    required: true
+    description: JSON containing user credentials.
+    schema:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          example: user@buska.app
+          description: The user's email address.
+        password:
+          type: string
+          format: password
+          example: senha123
+          description: The user's password.
+responses:
+  200:
+    description: Login successful. Returns JWT access token.
+    schema:
+      type: object
+      properties:
+        access_token:
+          type: string
+        user:
+          type: object
+          properties:
+            id:
+              type: integer
+            email:
+              type: string
+            nome:
+              type: string
+            role:
+              type: string
+  400:
+    description: Bad Request. Missing email or password, or invalid format.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: Email and password are required
+  401:
+    description: Unauthorized. Invalid credentials.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: Invalid credentials
+  404:
+    description: User not found.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: User not found

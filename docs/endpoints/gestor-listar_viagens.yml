@@ -1,0 +1,104 @@
+---
+tags:
+  - Gestor
+summary: Listar Viagens do Município
+description: |
+  Retorna a lista de todas as viagens disponíveis associadas às rotas do município do gestor autenticado.  
+  Apenas usuários com o papel **gestor** podem acessar este endpoint.  
+  Requer um **JWT token** válido no cabeçalho `Authorization`.
+operationId: listarViagens
+security:
+  - BearerAuth: []
+parameters:
+  - in: header
+    name: Authorization
+    required: true
+    type: string
+    description: JWT token para autenticação.
+    example: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...ExAMPLE_TOKEN"
+
+responses:
+  200:
+    description: Lista de viagens encontradas com sucesso.
+    schema:
+      type: array
+      items:
+        type: object
+        properties:
+          id:
+            type: integer
+            example: 15
+            description: ID da viagem.
+          data:
+            type: string
+            format: date
+            example: "2025-11-09"
+            description: Data da viagem.
+          horario_inicio:
+            type: string
+            format: time
+            example: "07:00:00"
+            description: Horário de início da viagem.
+          horario_fim:
+            type: string
+            format: time
+            example: "08:30:00"
+            description: Horário de término da viagem (pode ser nulo).
+          tipo:
+            type: string
+            enum: ["IDA", "VOLTA"]
+            example: "IDA"
+            description: Tipo da viagem (IDA ou VOLTA).
+          rota_id:
+            type: integer
+            example: 5
+            description: ID da rota associada.
+          motorista_id:
+            type: integer
+            example: 12
+            description: ID do motorista responsável pela viagem.
+    examples:
+      Lista de Viagens:
+        summary: Exemplo — viagens do município do gestor
+        value:
+          - id: 15
+            data: "2025-11-09"
+            horario_inicio: "07:00:00"
+            horario_fim: "08:30:00"
+            tipo: "IDA"
+            rota_id: 5
+            motorista_id: 12
+          - id: 16
+            data: "2025-11-09"
+            horario_inicio: "17:00:00"
+            horario_fim: "18:15:00"
+            tipo: "VOLTA"
+            rota_id: 5
+            motorista_id: 12
+
+  400:
+    description: Gestor sem município cadastrado.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Gestor não possui município cadastrado"
+
+  403:
+    description: Acesso negado — apenas gestores podem listar viagens.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Access restricted to gestores"
+
+  401:
+    description: Token ausente ou inválido.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Missing Authorization Header"

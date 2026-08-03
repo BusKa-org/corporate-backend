@@ -1,0 +1,88 @@
+---
+tags:
+  - Aluno
+summary: Listar Viagens do Aluno
+description: |
+  Retorna todas as viagens nas quais o aluno está registrado (via tabela de presenças).  
+  Apenas usuários com o papel **aluno** podem acessar este endpoint.  
+  Requer um **token JWT** válido.
+operationId: listarMinhasViagensAluno
+security:
+  - BearerAuth: []
+parameters:
+  - in: header
+    name: Authorization
+    required: true
+    type: string
+    description: Token JWT de autenticação.
+    example: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...ExAMPLE_TOKEN"
+responses:
+  200:
+    description: Lista de viagens do aluno retornada com sucesso.
+    schema:
+      type: array
+      items:
+        type: object
+        properties:
+          id:
+            type: integer
+            example: 14
+            description: ID da viagem.
+          data:
+            type: string
+            format: date
+            example: "2025-11-10"
+            description: Data da viagem.
+          horario_inicio:
+            type: string
+            example: "07:30:00"
+            description: Horário de início (se já iniciado).
+          horario_fim:
+            type: string
+            example: "08:10:00"
+            description: Horário de término (se finalizado).
+          tipo:
+            type: string
+            enum: ["IDA", "VOLTA"]
+            example: "IDA"
+            description: Tipo da viagem.
+          rota_id:
+            type: integer
+            example: 3
+            description: ID da rota associada à viagem.
+          motorista_id:
+            type: integer
+            example: 5
+            description: ID do motorista responsável.
+    examples:
+      application/json:
+        - id: 10
+          data: "2025-11-08"
+          horario_inicio: "07:00:00"
+          horario_fim: "07:45:00"
+          tipo: "IDA"
+          rota_id: 2
+          motorista_id: 4
+        - id: 11
+          data: "2025-11-08"
+          horario_inicio: "17:00:00"
+          horario_fim: "17:40:00"
+          tipo: "VOLTA"
+          rota_id: 2
+          motorista_id: 4
+  403:
+    description: Acesso negado — apenas alunos podem listar suas viagens.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Access restricted to alunos"
+  401:
+    description: Token ausente ou inválido.
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Missing Authorization Header"

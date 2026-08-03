@@ -1,0 +1,84 @@
+---
+- name: Deploy Buska Backend to OpenStack VM
+  hosts: buska_vm
+  become: yes
+  vars:
+    app_dir: /opt/buska
+    app_repo: "https://github.com/BusKa-org/corporate-backend.git"
+    branch: "routes"
+
+  tasks:
+    - name: Update system packages
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install dependencies
+      apt:
+        name:
+          - docker.io
+          - docker-compose
+          - git
+          - curl
+        state: present
+
+    - name: Start Docker service
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Add current user to docker group
+      user:
+        name: "{{ ansible_user }}"
+        groups: docker
+        append: yes
+
+    - name: Clone repository
+      git:
+        repo: "{{ app_repo }}"
+        dest: "{{ app_dir }}"
+        version: "{{ branch }}"
+        force: yes
+      register: repo_clone
+
+    - name: Copy environment file
+      template:
+        src: env.prod.j2
+        dest: "{{ app_dir }}/.env.prod"
+        mode: '0600'
+      vars:
+        db_password: "{{ vault_db_password }}"
+        jwt_secret: "{{ vault_jwt_secret }}"
+
+    - name: Build Docker image
+      shell: |
+        cd {{ app_dir }}
+        docker build -t mebuska-corporate:latest .
+      register: docker_build
+
+    - name: Deploy containers
+      shell: |
+        cd {{ app_dir }}
+        docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
+      register: docker_up
+
+    - name: Wait for API to be ready
+      uri:
+        url: "http://localhost:5000/docs/"
+        method: GET
+        status_code: 200
+      register: result
+      until: result.status == 200
+      retries: 10
+      delay: 5
+
+    - name: Display deployment summary
+      debug:
+        msg: |
+          Deployment successful!
+
+          API URL: http://{{ ansible_host }}:5000
+          Documentation: http://{{ ansible_host }}:5000/docs
+
+          View logs: docker compose -f {{ app_dir }}/docker-compose.prod.yml logs -f

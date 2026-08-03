@@ -1,0 +1,87 @@
+# As variáveis abaixo precisam estar listadas aqui para chegarem ao container.
+# O --env-file do docker-compose só alimenta a interpolação ${VAR} deste
+# arquivo; ele não injeta nada no processo. FLASK_ENV faltava, o que deixava
+# app.debug=True em produção e desligava todos os jobs de background.
+x-app-env: &app_env
+  DB_HOST: db
+  DB_PORT: 5432
+  DB_USER: ${DB_USER:-buska_user}
+  DB_PASSWORD: ${DB_PASSWORD:-buska_pass}
+  DB_NAME: ${DB_NAME:-buska_db}
+  JWT_SECRET_KEY: ${JWT_SECRET_KEY:-change-me-in-production}
+  JWT_EXPIRES_HOURS: ${JWT_EXPIRES_HOURS:-2}
+  FLASK_ENV: ${FLASK_ENV:-production}
+  TZ: America/Sao_Paulo
+  FIREBASE_CREDENTIALS: ${FIREBASE_CREDENTIALS:-}
+  CORS_ORIGINS: ${CORS_ORIGINS:-}
+  FRONTEND_URL: ${FRONTEND_URL:-}
+  MAIL_SERVER: ${MAIL_SERVER:-}
+  MAIL_PORT: ${MAIL_PORT:-587}
+  MAIL_USERNAME: ${MAIL_USERNAME:-}
+  MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+  MAIL_USE_TLS: ${MAIL_USE_TLS:-true}
+
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    container_name: buska_db_prod
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-buska_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-buska_pass}
+      POSTGRES_DB: ${DB_NAME:-buska_db}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - buska_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-buska_user} -d ${DB_NAME:-buska_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    image: ${API_IMAGE}
+    pull_policy: never
+    container_name: buska_api
+    restart: unless-stopped
+    ports:
+      - "${API_PORT:-5000}:5000"
+    environment:
+      <<: *app_env
+      # São 4 workers do gunicorn. Se cada um subisse o próprio scheduler, as
+      # notificações sairiam quadruplicadas.
+      RUN_SCHEDULER: "false"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - buska_network
+
+  # Processo único e dedicado para os jobs de background, separado da API para
+  # que "o scheduler está de pé?" seja respondível com um docker ps.
+  scheduler:
+    image: ${API_IMAGE}
+    pull_policy: never
+    container_name: buska_scheduler
+    restart: unless-stopped
+    command: ["python", "-m", "app.scheduler_main"]
+    environment:
+      <<: *app_env
+      RUN_SCHEDULER: "true"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - buska_network
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  buska_network:
+    driver: bridge
