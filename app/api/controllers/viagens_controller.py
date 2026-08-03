@@ -11,7 +11,12 @@ from app.schemas.ponto_schema import (
     PontoFlatListResponseSchema,
 )
 from app.schemas.viagem_schema import (
+    CancelamentoResponseSchema,
+    DeclaracaoResponseSchema,
+    DeclaracaoTrajetoRequestSchema,
     MessageResponseSchema,
+    RodadaAtivaResponseSchema,
+    RodadaResponseSchema,
     ViagemAcaoRequestSchema,
     ViagemAgendaAlunoListResponseSchema,
     ViagemAlunoConfirmacaoResponseSchema,
@@ -46,6 +51,87 @@ viagem_agenda_aluno_list_response_schema = ViagemAgendaAlunoListResponseSchema()
 
 
 ponto_flat_list_response_schema = PontoFlatListResponseSchema()
+
+declaracao_trajeto_request_schema = DeclaracaoTrajetoRequestSchema()
+declaracao_response_schema = DeclaracaoResponseSchema()
+rodada_response_schema = RodadaResponseSchema()
+rodada_ativa_response_schema = RodadaAtivaResponseSchema()
+cancelamento_response_schema = CancelamentoResponseSchema()
+
+
+# ==========================================
+# Rodada sob demanda — RF-10 a RF-13 e RF-19
+# ==========================================
+
+
+@api.route("/solicitar")
+class ViagemSolicitarResource(Resource):
+    @api.doc(
+        "solicitar_viagem",
+        responses={
+            201: "Solicitação registrada",
+            400: "Fora da janela de disponibilidade",
+            403: "Sem consentimento vigente",
+        },
+    )
+    @api.response(201, "Solicitação registrada", models["rodada_response"])
+    @jwt_required()
+    def post(self) -> tuple[dict[str, Any], int]:
+        """(Aluno) Solicita o veículo dentro da janela de disponibilidade"""
+        rodada = viagens_service.solicitar_viagem(get_jwt_identity())
+        return rodada_response_schema.dump(rodada), 201
+
+
+@api.route("/rodada-ativa")
+class ViagemRodadaAtivaResource(Resource):
+    @api.doc("get_rodada_ativa")
+    @api.response(200, "Success", models["rodada_ativa_response"])
+    @jwt_required()
+    def get(self) -> tuple[dict[str, Any], int]:
+        """(Aluno) Rodada em andamento e contagem regressiva do buffer"""
+        return (
+            rodada_ativa_response_schema.dump(viagens_service.rodada_ativa(get_jwt_identity())),
+            200,
+        )
+
+
+@api.route("/<string:id>/iniciar-percurso")
+class ViagemIniciarPercursoResource(Resource):
+    @api.doc("iniciar_percurso", responses={200: "Buffer aberto", 400: "Rodada não solicitada"})
+    @api.response(200, "Buffer aberto", models["rodada_response"])
+    @jwt_required()
+    def post(self, id: str) -> tuple[dict[str, Any], int]:
+        """(Motorista) Inicia o percurso e abre a janela de buffer"""
+        rodada = viagens_service.iniciar_percurso(get_jwt_identity(), id)
+        return rodada_response_schema.dump(rodada), 200
+
+
+@api.route("/<string:id>/declaracao")
+class ViagemDeclaracaoResource(Resource):
+    @api.doc(
+        "declarar_trajeto",
+        responses={
+            201: "Embarque confirmado",
+            400: "Rodada não aceita declarações",
+            409: "Indisponibilidade momentânea",
+        },
+    )
+    @api.expect(models["declaracao_trajeto_request"])
+    @api.response(201, "Embarque confirmado", models["declaracao_response"])
+    @jwt_required()
+    def post(self, id: str) -> tuple[dict[str, Any], int]:
+        """(Aluno) Declara origem e destino durante o buffer"""
+        payload = declaracao_trajeto_request_schema.load(request.get_json(silent=True) or {})
+        registro = viagens_service.declarar_trajeto(get_jwt_identity(), id, payload)
+        return declaracao_response_schema.dump(registro), 201
+
+    @api.doc("cancelar_solicitacao", responses={200: "Cancelada", 404: "Sem solicitação"})
+    @api.response(200, "Cancelada", models["cancelamento_response"])
+    @jwt_required()
+    def delete(self, id: str) -> tuple[dict[str, Any], int]:
+        """(Aluno) Cancela a solicitação da rodada"""
+        resultado = viagens_service.cancelar_solicitacao(get_jwt_identity(), id)
+        return cancelamento_response_schema.dump(resultado), 200
 
 
 @api.route("/aluno/agenda")

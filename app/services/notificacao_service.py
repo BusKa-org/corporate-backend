@@ -8,11 +8,11 @@ from firebase_admin import messaging
 
 from app.core.exceptions import AppError, ForbiddenError, NotFoundError, ValidationError
 from app.models.base import db
-from app.models.enum import UserRole
+from app.models.enum import StatusSolicitacao, UserRole, UserStatus
 from app.models.notificacao import Notificacao
 from app.models.rota import RotaAluno
-from app.models.user import User
-from app.models.viagem import AlunosConfirmados
+from app.models.user import Aluno, User
+from app.models.viagem import AlunosConfirmados, Viagem
 from app.utils import audit_logger
 
 logger = logging.getLogger(__name__)
@@ -53,8 +53,6 @@ class NotificacaoService:
 
     @staticmethod
     def notificar_por_gestor(user_id: str, dados: dict[str, Any]) -> dict[str, Any]:
-        from app.models.viagem import Viagem
-
         user = db.session.get(User, user_id)
         if not user:
             raise ForbiddenError("Usuário não encontrado.")
@@ -88,15 +86,23 @@ class NotificacaoService:
         usuarios_notificados = set()
 
         if rota_id:
+            # Fluxo programado herdado: o público de uma *rota* é a lista de
+            # inscritos. A rodada sob demanda não tem inscrição permanente —
+            # nela o público é o da rodada, endereçado por viagem_id abaixo.
             inscricoes = RotaAluno.query.filter_by(rota_id=rota_id).all()
             for insc in inscricoes:
                 usuarios_notificados.add(insc.aluno_id)
         elif viagem_id:
-            confirmados = AlunosConfirmados.query.filter_by(
-                viagem_id=viagem_id, confirmacao=True
+            # Numa rodada sob demanda o interessado ainda sem trajeto declarado
+            # também precisa receber o aviso, então o corte é por status, não
+            # pelo booleano de confirmação do fluxo programado.
+            participantes = AlunosConfirmados.query.filter(
+                AlunosConfirmados.viagem_id == viagem_id,
+                AlunosConfirmados.status != StatusSolicitacao.CANCELADO,
             ).all()
-            for conf in confirmados:
-                usuarios_notificados.add(conf.aluno_id)
+            for conf in participantes:
+                if conf.confirmacao or conf.status == StatusSolicitacao.INTERESSADO:
+                    usuarios_notificados.add(conf.aluno_id)
         else:
             raise ValidationError("Informe o ID de uma rota (rota_id) ou viagem (viagem_id).")
 
@@ -143,6 +149,133 @@ class NotificacaoService:
         except Exception as e:
             db.session.rollback()
             raise AppError(f"Erro ao atualizar notificação: {str(e)}", 500)
+
+    # ==========================================
+    # Rodada sob demanda (RF-10 a RF-12, RF-15, RF-19)
+    # ==========================================
+    #
+    # Nenhum dos métodos abaixo faz commit: são chamados de dentro da transação
+    # que muda o estado da rodada, e a notificação não pode sobreviver a um
+    # rollback dessa mudança.
+
+    @staticmethod
+    def notificar_motorista_demanda(viagem: Viagem) -> None:
+        """RF-10: a primeira solicitação da rodada chama o motorista."""
+        if not viagem.motorista_id:
+            logger.warning(f"Rodada {viagem.id} sem motorista: demanda não notificada")
+            return
+
+        NotificacaoService._criar_notificacao_interna(
+            usuario_id=viagem.motorista_id,
+            titulo="🚌 Há demanda para o veículo",
+            mensagem="Um aluno solicitou o veículo. Inicie o percurso para abrir a janela de declarações.",
+        )
+
+    @staticmethod
+    def _alunos_aptos(organizacao_id: Any) -> list[Aluno]:
+        """RF-12: aluno apto é o autenticável da organização, com consentimento
+        vigente e que aceita notificações."""
+        from app.services import consentimento_service
+
+        alunos = (
+            db.session.query(Aluno)
+            .filter(Aluno.organizacao_id == organizacao_id, Aluno.status != UserStatus.DISABLED)
+            .all()
+        )
+        # ponytail: uma consulta de consentimento por aluno. O circuito tem
+        # dezenas de alunos, não milhares; se virar gargalo, troque por um JOIN
+        # com consentimento na versão vigente do termo.
+        return [
+            a
+            for a in alunos
+            if getattr(a, "receber_notificacoes", True)
+            and consentimento_service.tem_consentimento_vigente(str(a.usuario_id))
+        ]
+
+    @staticmethod
+    def notificar_broadcast_buffer(viagem: Viagem, segundos_restantes: int) -> int:
+        """RF-12: broadcast da abertura do buffer, com o tempo que resta."""
+        rota = viagem.rota or (viagem.horario_rota.rota if viagem.horario_rota else None)
+        if not rota:
+            return 0
+
+        minutos = max(1, round(segundos_restantes / 60))
+        destinatarios = NotificacaoService._alunos_aptos(rota.organizacao_id)
+
+        for aluno in destinatarios:
+            NotificacaoService._criar_notificacao_interna(
+                usuario_id=aluno.usuario_id,
+                titulo="🚌 O veículo vai sair!",
+                mensagem=(
+                    f"O percurso começa em {minutos} min. "
+                    "Declare seu ponto de embarque e desembarque agora para garantir a vaga."
+                ),
+            )
+
+        return len(destinatarios)
+
+    @staticmethod
+    def notificar_gestor_demanda_nao_atendida(viagem: Viagem) -> None:
+        """RF-11 fluxo secundário 1: motorista não iniciou dentro do prazo."""
+        rota = viagem.rota
+        if not rota:
+            return
+
+        gestores = (
+            db.session.query(User)
+            .filter_by(organizacao_id=rota.organizacao_id, role=UserRole.GESTOR)
+            .all()
+        )
+        for gestor in gestores:
+            NotificacaoService._criar_notificacao_interna(
+                usuario_id=gestor.id,
+                titulo="⚠️ Demanda sem atendimento",
+                mensagem=(
+                    f"Há solicitações no circuito {rota.nome} e o motorista não iniciou o "
+                    "percurso dentro do prazo. Trate a demanda manualmente."
+                ),
+            )
+
+    @staticmethod
+    def notificar_motorista_desistencia(viagem: Viagem, aluno_nome: str) -> None:
+        """RF-19 fluxo secundário 1: desistência depois da partida é no-show."""
+        if not viagem.motorista_id:
+            return
+
+        NotificacaoService._criar_notificacao_interna(
+            usuario_id=viagem.motorista_id,
+            titulo="Passageiro desistiu",
+            mensagem=f"{aluno_nome} não vai embarcar nesta rodada. A vaga não foi reaberta.",
+        )
+
+    @staticmethod
+    def notificar_rodada_cancelada(viagem: Viagem) -> None:
+        """RF-15 fluxo secundário 1: buffer encerrou sem nenhum embarque."""
+        if not viagem.motorista_id:
+            return
+
+        NotificacaoService._criar_notificacao_interna(
+            usuario_id=viagem.motorista_id,
+            titulo="Rodada cancelada",
+            mensagem="O tempo do buffer acabou sem embarques confirmados. O veículo volta a ficar ocioso.",
+        )
+
+    @staticmethod
+    def notificar_rodada_consolidada(viagem: Viagem, alunos_ids: list[Any]) -> None:
+        """Fim do buffer com embarques: avisa motorista e passageiros."""
+        if viagem.motorista_id:
+            NotificacaoService._criar_notificacao_interna(
+                usuario_id=viagem.motorista_id,
+                titulo="🚌 Roteiro fechado",
+                mensagem=f"A rodada começou com {len(alunos_ids)} passageiro(s) confirmado(s).",
+            )
+
+        for aluno_id in alunos_ids:
+            NotificacaoService._criar_notificacao_interna(
+                usuario_id=aluno_id,
+                titulo="✅ Embarque confirmado",
+                mensagem="O veículo saiu para o percurso. Acompanhe a viagem pelo aplicativo.",
+            )
 
     @staticmethod
     def notificar_alunos_viagem_iniciada(viagem_id: str) -> None:

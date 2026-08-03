@@ -26,6 +26,10 @@ def verificar_viagens_24h(app):
         ).all()
 
         for viagem in viagens:
+            # Lembrete de 24h só existe no fluxo programado, que é o único com
+            # data e hora sabidas de antemão. Uma rodada sob demanda nasce e
+            # morre no mesmo dia, então nunca cai neste filtro — e por isso
+            # aqui o público continua sendo a lista de inscritos da rota.
             if not viagem.horario_rota:
                 continue
             inscricoes = RotaAluno.query.filter_by(rota_id=viagem.horario_rota.rota_id).all()

@@ -6,9 +6,18 @@ from typing import Any
 from marshmallow import ValidationError as MarshmallowValidationError, fields, validates_schema
 from marshmallow.validate import OneOf, Range
 
-from app.models.enum import StatusViagem
+from app.models.enum import StatusSolicitacao, StatusViagem
 from app.schemas.common import BaseSchema
 from app.schemas.validators import validate_uuid4
+
+
+def _participantes_da_rodada(viagem: Any) -> int:
+    """Numa rodada sob demanda não há roster: o público é quem entrou na
+    rodada e não desistiu (RF-10, RF-13)."""
+    return sum(
+        1 for a in (viagem.alunos_confirmados or []) if a.status != StatusSolicitacao.CANCELADO
+    )
+
 
 # -------------------------
 # Common helpers / fields
@@ -176,7 +185,10 @@ class ViagemResponseSchema(BaseSchema):
     alunos_confirmados_count = fields.Method("get_alunos_confirmados_count")
 
     def get_total_alunos(self, obj):
-        """Total students enrolled in the route."""
+        """Público da viagem: na rodada sob demanda são os participantes da
+        própria rodada; no fluxo programado herdado, os inscritos na rota."""
+        if obj.rota_id:
+            return _participantes_da_rodada(obj)
         if obj.horario_rota and obj.horario_rota.rota:
             return len(obj.horario_rota.rota.alunos_inscritos)
         return 0
@@ -276,7 +288,9 @@ class ViagemAgendaAlunoResponseSchema(BaseSchema):
         return 0
 
     def get_total_alunos(self, obj):
-        """Total students subscribed to the route."""
+        """Ver ViagemResponseSchema.get_total_alunos."""
+        if obj.rota_id:
+            return _participantes_da_rodada(obj)
         if obj.horario_rota and obj.horario_rota.rota:
             from app.models.rota import RotaAluno
 
@@ -317,6 +331,60 @@ class ViagemAgendaAlunoResponseSchema(BaseSchema):
     def get_ponto_embarque_id(self, obj):
         c = self._find_confirmacao(obj)
         return str(c.ponto_embarque_id) if (c and c.ponto_embarque_id) else None
+
+
+# ==========================================
+# Rodada sob demanda (RF-10 a RF-13, RF-19)
+# ==========================================
+
+
+class DeclaracaoTrajetoRequestSchema(BaseSchema):
+    """RF-13: origem e destino entre os pontos fixos do circuito."""
+
+    ponto_origem_id = fields.UUID(required=True)
+    ponto_destino_id = fields.UUID(required=True)
+
+    @validates_schema
+    def validate_pontos(self, data: dict[str, Any], **kwargs) -> None:
+        if data.get("ponto_origem_id") == data.get("ponto_destino_id"):
+            raise MarshmallowValidationError(
+                {"ponto_destino_id": ["A origem e o destino precisam ser pontos diferentes."]}
+            )
+
+
+class RodadaResponseSchema(BaseSchema):
+    """Estado da rodada e contagem regressiva do buffer."""
+
+    viagem_id = fields.String()
+    status = fields.String()
+    buffer_expira_em = fields.DateTime(allow_none=True)
+    segundos_restantes = fields.Integer()
+    minha_situacao = fields.String(allow_none=True)
+    motorista_notificado = fields.Boolean()
+
+
+class RodadaAtivaResponseSchema(BaseSchema):
+    em_operacao = fields.Boolean()
+    rodada = fields.Nested(RodadaResponseSchema, allow_none=True)
+
+
+class CancelamentoResponseSchema(BaseSchema):
+    message = fields.String()
+    vaga_liberada = fields.Boolean()
+
+
+class DeclaracaoResponseSchema(BaseSchema):
+    """Linha da rodada depois da validação de capacidade (RF-14)."""
+
+    viagem_id = fields.String()
+    aluno_id = fields.String()
+    status = fields.Method("get_status")
+    ponto_embarque_id = fields.String(allow_none=True)
+    ponto_destino_id = fields.String(allow_none=True)
+    declarado_em = fields.DateTime(allow_none=True)
+
+    def get_status(self, obj) -> str | None:
+        return obj.status.name if obj.status else None
 
 
 class ViagemListResponseSchema(BaseSchema):

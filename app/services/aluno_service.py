@@ -78,6 +78,20 @@ def _send_guardian_consent_email(aluno: Aluno) -> None:
 # ─── Guardian consent ──────────────────────────────────────────────────────────
 
 
+def _notificar_gestores_cadastro_pendente(aluno: Aluno, contexto: str) -> None:
+    """Avisa os gestores da organização que há um cadastro aguardando análise."""
+    from app.models.user import Gestor
+    from app.services.notificacao_service import NotificacaoService
+
+    gestores = db.session.query(Gestor).filter_by(organizacao_id=aluno.organizacao_id).all()
+    for gestor in gestores:
+        NotificacaoService._criar_notificacao_interna(
+            usuario_id=str(gestor.id),
+            titulo="Novo cadastro aguardando aprovação",
+            mensagem=f"{contexto} Acesse a tela Equipe para aprovar ou rejeitar.",
+        )
+
+
 def get_guardian_consent_info(token: str) -> Aluno:
     """Return public aluno info for the guardian consent screen (no auth)."""
     aluno = db.session.query(Aluno).filter_by(guardian_token=token).first()
@@ -108,26 +122,14 @@ def record_guardian_consent(token: str) -> Aluno:
             raise ValidationError("Este link expirou. Peça ao estudante que refaça o cadastro.")
 
     try:
-        from app.services.notificacao_service import NotificacaoService
-
         aluno.guardian_consented_at = db.func.now()
         aluno.guardian_token = None  # single-use
         aluno.status = UserStatus.PENDING_APPROVAL
         db.session.flush()
 
-        # Notify the gestor(s) of the organizacao
-        from app.models.user import Gestor
-
-        gestores = db.session.query(Gestor).filter_by(organizacao_id=aluno.organizacao_id).all()
-        for gestor in gestores:
-            NotificacaoService._criar_notificacao_interna(
-                usuario_id=str(gestor.id),
-                titulo="Novo cadastro aguardando aprovação",
-                mensagem=(
-                    f"O responsável do aluno {aluno.nome} autorizou o cadastro. "
-                    "Acesse a tela Equipe para aprovar."
-                ),
-            )
+        _notificar_gestores_cadastro_pendente(
+            aluno, f"O responsável do aluno {aluno.nome} autorizou o cadastro."
+        )
 
         db.session.commit()
         return aluno
@@ -146,12 +148,16 @@ def record_guardian_consent(token: str) -> Aluno:
 
 def auto_cadastro(data: dict[str, Any]) -> Aluno:
     """
-    Aluno se cadastra sozinho.
-    - If minor (age < 18), requires email_responsavel; sends guardian consent email.
+    Autocadastro vinculado a uma instituição atendida (RF-02).
+
     - A organizacao é inferida através da Instituição escolhida.
+    - Maior de idade: cadastro nasce em PENDING_APPROVAL e os gestores da
+      organização são notificados para análise.
+    - Menor de idade: exige e-mail do responsável e permanece em
+      PENDING_SIGNUP até o consentimento, que então leva a PENDING_APPROVAL.
 
     Returns: Aluno object
-    Raises: NotFoundError, ValidationError, AppError
+    Raises: NotFoundError, ConflictError, ValidationError, AppError
     """
     inst_id = data.get("instituicao_id")
     instituicao = db.session.get(Instituicao, inst_id)
@@ -171,45 +177,45 @@ def auto_cadastro(data: dict[str, Any]) -> Aluno:
         raise ConflictError("Este CPF já está cadastrado.", field="cpf")
 
     try:
-        end_data = data.get("endereco_casa")
-        if not end_data:
-            raise ValidationError(
-                "Endereço de casa é obrigatório", details={"field": "endereco_casa"}
-            )
-
         password = validate_password(data.get("password", ""))
 
-        ponto_casa = Ponto(
-            organizacao_id=organizacao_id,
-            latitude=end_data.get("latitude"),
-            longitude=end_data.get("longitude"),
-            apelido=f"Casa: {data.get('nome')}",
-        )
-        db.session.add(ponto_casa)
-        db.session.flush()
+        # Endereço de casa é herança do transporte escolar municipal: opcional
+        # no autocadastro corporativo, que só exige o vínculo institucional.
+        ponto_casa = None
+        end_data = data.get("endereco_casa")
+        if end_data:
+            ponto_casa = Ponto(
+                organizacao_id=organizacao_id,
+                latitude=end_data.get("latitude"),
+                longitude=end_data.get("longitude"),
+                apelido=f"Casa: {data.get('nome')}",
+            )
+            db.session.add(ponto_casa)
+            db.session.flush()
 
-        novo_end = Endereco(
-            logradouro=end_data.get("logradouro"),
-            numero=end_data.get("numero"),
-            bairro=end_data.get("bairro"),
-            cidade=end_data.get("cidade"),
-            cep=end_data.get("cep"),
-            ponto_id=ponto_casa.id,
-        )
-        db.session.add(novo_end)
+            db.session.add(
+                Endereco(
+                    logradouro=end_data.get("logradouro"),
+                    numero=end_data.get("numero"),
+                    bairro=end_data.get("bairro"),
+                    cidade=end_data.get("cidade"),
+                    cep=end_data.get("cep"),
+                    ponto_id=ponto_casa.id,
+                )
+            )
 
         novo_aluno = Aluno(
             organizacao_id=organizacao_id,
             nome=data.get("nome"),
-            email=data.get("email"),
+            email=email,
             senha_hash=generate_password_hash(password),
-            cpf=data.get("cpf"),
+            cpf=cpf_clean,
             telefone=data.get("telefone"),
             role=UserRole.ALUNO,
-            status=UserStatus.PENDING_SIGNUP,
+            status=UserStatus.PENDING_APPROVAL,
             matricula=data.get("matricula"),
             instituicao_id=instituicao.id,
-            ponto_casa_id=ponto_casa.id,
+            ponto_casa_id=ponto_casa.id if ponto_casa else None,
             nome_responsavel=data.get("nome_responsavel"),
             cpf_responsavel=data.get("cpf_responsavel"),
             data_nascimento=data.get("data_nascimento"),
@@ -227,7 +233,13 @@ def auto_cadastro(data: dict[str, Any]) -> Aluno:
                 )
             novo_aluno.email_responsavel = email_resp.strip().lower()
             novo_aluno.guardian_token = secrets.token_urlsafe(32)
-            # Status stays PENDING_SIGNUP until guardian consents
+            # Menor só chega a PENDING_APPROVAL após o responsável consentir
+            novo_aluno.status = UserStatus.PENDING_SIGNUP
+        else:
+            _notificar_gestores_cadastro_pendente(
+                novo_aluno,
+                f"{novo_aluno.nome} ({instituicao.nome}) solicitou cadastro.",
+            )
 
         db.session.commit()
 
@@ -465,3 +477,72 @@ def aprovar_aluno(gestor_id: str, aluno_id: str) -> Aluno:
         db.session.rollback()
         logger.error(f"Error approving student: {e}")
         raise AppError(f"Erro ao aprovar aluno: {str(e)}", 500)
+
+
+def rejeitar_aluno(gestor_id: str, aluno_id: str, motivo: str) -> Aluno:
+    """
+    Gestor rejeita um cadastro PENDING_APPROVAL, informando o motivo (RF-02).
+
+    O motivo fica em `usuario.motivo_rejeicao`, ao lado do estado, e também vai
+    por e-mail — a conta recusada não consegue logar para ler a central de
+    notificações.
+
+    Returns: Aluno object
+    Raises: ForbiddenError, NotFoundError, ValidationError
+    """
+    from app.core.exceptions import ForbiddenError
+    from app.services.notificacao_service import NotificacaoService
+
+    gestor = _get_gestor_or_403(gestor_id, "Apenas gestores podem rejeitar alunos")
+    aluno = db.session.get(Aluno, aluno_id)
+
+    if not aluno:
+        raise NotFoundError("Aluno não encontrado")
+    if str(aluno.organizacao_id) != str(gestor.organizacao_id):
+        raise ForbiddenError("Aluno não pertence à sua organização")
+    if aluno.status != UserStatus.PENDING_APPROVAL:
+        raise ValidationError("Aluno não está aguardando aprovação")
+
+    motivo = (motivo or "").strip()
+    if not motivo:
+        raise ValidationError("Motivo da rejeição é obrigatório", details={"field": "motivo"})
+
+    try:
+        aluno.status = UserStatus.REJECTED
+        aluno.motivo_rejeicao = motivo
+        db.session.flush()
+
+        mensagem = f"Seu cadastro foi rejeitado pelo gestor. Motivo: {motivo}"
+        NotificacaoService._criar_notificacao_interna(
+            usuario_id=str(aluno.id),
+            titulo="Cadastro rejeitado",
+            mensagem=mensagem,
+        )
+
+        db.session.commit()
+
+        try:
+            send_email(
+                to=aluno.email,
+                subject="Cadastro rejeitado — MeBusKá",
+                body_plain=f"Olá, {aluno.nome}.\n\n{mensagem}\n\nEquipe MeBusKá",
+                body_html=f"<p>Olá, {aluno.nome}.</p><p>{mensagem}</p><p>Equipe MeBusKá</p>",
+            )
+        except Exception:
+            logger.exception("Falha ao enviar e-mail de rejeição para o aluno %s", aluno.id)
+
+        audit_logger.log_user_action(
+            action="rejeitar_aluno",
+            user_id=gestor_id,
+            resource_type="aluno",
+            resource_id=aluno_id,
+        )
+        return aluno
+
+    except AppError:
+        db.session.rollback()
+        raise
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error rejecting student: {e}")
+        raise AppError(f"Erro ao rejeitar aluno: {str(e)}", 500)

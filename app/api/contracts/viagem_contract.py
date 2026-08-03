@@ -94,7 +94,68 @@ def register_models(api):
         },
     )
 
+    # ----- Rodada sob demanda (RF-10 a RF-13, RF-19) -----
+
+    declaracao_trajeto_request = api.model(
+        "DeclaracaoTrajetoRequest",
+        {
+            "ponto_origem_id": fields.String(
+                required=True, description="UUID do ponto de embarque"
+            ),
+            "ponto_destino_id": fields.String(
+                required=True, description="UUID do ponto de desembarque"
+            ),
+        },
+    )
+
+    rodada_response = api.model(
+        "RodadaResponse",
+        {
+            "viagem_id": fields.String(description="UUID da rodada"),
+            "status": fields.String(description="OCIOSA, SOLICITADA, BUFFER_ABERTO, EM_ROTA"),
+            "buffer_expira_em": fields.DateTime(description="Fim da contagem regressiva"),
+            "segundos_restantes": fields.Integer(description="Tempo restante do buffer"),
+            "minha_situacao": fields.String(description="INTERESSADO, CONFIRMADO, NEGADO"),
+            "motorista_notificado": fields.Boolean(
+                description="Esta solicitação chamou o motorista"
+            ),
+        },
+    )
+
+    rodada_ativa_response = api.model(
+        "RodadaAtivaResponse",
+        {
+            "em_operacao": fields.Boolean(description="Dentro da janela de disponibilidade"),
+            "rodada": fields.Nested(rodada_response, allow_null=True),
+        },
+    )
+
+    declaracao_response = api.model(
+        "DeclaracaoResponse",
+        {
+            "viagem_id": fields.String(description="UUID da rodada"),
+            "aluno_id": fields.String(description="UUID do aluno"),
+            "status": fields.String(description="CONFIRMADO ou NEGADO"),
+            "ponto_embarque_id": fields.String(description="UUID do ponto de embarque"),
+            "ponto_destino_id": fields.String(description="UUID do ponto de desembarque"),
+            "declarado_em": fields.DateTime(description="Momento da declaração"),
+        },
+    )
+
+    cancelamento_response = api.model(
+        "CancelamentoResponse",
+        {
+            "message": fields.String(description="Resultado do cancelamento"),
+            "vaga_liberada": fields.Boolean(description="A vaga voltou para a rodada"),
+        },
+    )
+
     return {
+        "declaracao_trajeto_request": declaracao_trajeto_request,
+        "declaracao_response": declaracao_response,
+        "rodada_response": rodada_response,
+        "rodada_ativa_response": rodada_ativa_response,
+        "cancelamento_response": cancelamento_response,
         "viagem_create_request": viagem_create_request,
         "viagem_confirmacao_request": viagem_confirmacao_request,
         "viagem_acao_request": viagem_acao_request,

@@ -9,6 +9,7 @@ from app.schemas.aluno_schema import (
     AlunoGuardianConsentPublicSchema,
     AlunoListResponseSchema,
     AlunoMeUpdateRequestSchema,
+    AlunoRejeitarRequestSchema,
     AlunoResponseSchema,
     AlunoSelfSignupRequestSchema,
 )
@@ -25,6 +26,7 @@ me_update_schema = AlunoMeUpdateRequestSchema()
 aluno_response_schema = AlunoResponseSchema()
 aluno_list_response_schema = AlunoListResponseSchema()
 guardian_public_schema = AlunoGuardianConsentPublicSchema()
+rejeitar_schema = AlunoRejeitarRequestSchema()
 
 
 @api.route("/signup")
@@ -107,9 +109,23 @@ class AlunoAprovarResource(Resource):
     @api.response(200, "Success")
     @jwt_required()
     def post(self, aluno_id: str) -> tuple[dict[str, Any], int]:
-        """(Gestor) Aprova cadastro de um aluno menor"""
+        """(Gestor) Aprova o cadastro de um aluno pendente"""
         gestor_id = get_jwt_identity()
         aluno = aluno_service.aprovar_aluno(gestor_id, aluno_id)
+        return aluno_response_schema.dump(aluno), 200
+
+
+@api.route("/<string:aluno_id>/rejeitar")
+class AlunoRejeitarResource(Resource):
+    @api.doc("rejeitar_aluno")
+    @api.expect(models["rejeitar_request"])
+    @api.response(200, "Success", models["aluno_response"])
+    @jwt_required()
+    def post(self, aluno_id: str) -> tuple[dict[str, Any], int]:
+        """(Gestor) Rejeita o cadastro de um aluno pendente, com motivo"""
+        gestor_id = get_jwt_identity()
+        payload = rejeitar_schema.load(request.get_json(silent=True) or {})
+        aluno = aluno_service.rejeitar_aluno(gestor_id, aluno_id, payload["motivo"])
         return aluno_response_schema.dump(aluno), 200
 
 

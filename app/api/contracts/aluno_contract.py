@@ -36,19 +36,29 @@ def register_models(api):
             "nome": fields.String(required=True, description="Nome completo"),
             "email": fields.String(required=True, description="Email"),
             "password": fields.String(required=True, description="Senha"),
+            "password_confirm": fields.String(required=True, description="Confirmação da senha"),
             "cpf": fields.String(required=True, description="CPF"),
             "telefone": fields.String(required=False, description="Telefone"),
-            "matricula": fields.String(required=True, description="Matrícula escolar"),
-            "instituicao_id": fields.String(required=True, description="UUID da instituição"),
+            "matricula": fields.String(required=False, description="Matrícula"),
+            "instituicao_id": fields.String(
+                required=True, description="UUID da instituição de vínculo"
+            ),
             "data_nascimento": fields.String(
-                required=True, description="Data de nascimento (YYYY-MM-DD)"
+                required=False, description="Data de nascimento (YYYY-MM-DD)"
             ),
             "nome_responsavel": fields.String(required=False, description="Nome do responsável"),
             "cpf_responsavel": fields.String(required=False, description="CPF do responsável"),
             "email_responsavel": fields.String(
                 required=False, description="E-mail do responsável (obrigatório para menores)"
             ),
-            "endereco_casa": fields.Nested(endereco_input, required=True),
+            "endereco_casa": fields.Nested(endereco_input, required=False),
+        },
+    )
+
+    rejeitar_request = api.model(
+        "AlunoRejeitarRequest",
+        {
+            "motivo": fields.String(required=True, description="Motivo da rejeição"),
         },
     )
 
@@ -111,6 +121,7 @@ def register_models(api):
     return {
         "aluno_provision_account_request": aluno_provision_account_request,
         "self_signup_request": self_signup_request,
+        "rejeitar_request": rejeitar_request,
         "me_update_request": me_update_request,
         "aluno_response": aluno_response,
         "aluno_list_response": aluno_list_response,

@@ -75,10 +75,20 @@ class UserRole(enum.Enum):
 
 
 class UserStatus(enum.Enum):
+    """Situação da conta.
+
+    REJECTED é distinto de DISABLED de propósito: sem ele, DISABLED acumularia
+    três significados sem relação entre si — conta anonimizada por exclusão
+    (RF-20), conta desativada pelo gestor, e candidato recusado no cadastro
+    (RF-02). O painel do gestor não conseguiria distingui-los, e o recusado
+    receberia no login uma mensagem sobre conta desativada em vez da recusa.
+    """
+
     PENDING_SIGNUP = "PENDING_SIGNUP"
     PENDING_APPROVAL = "PENDING_APPROVAL"
     ACTIVE = "ACTIVE"
     DISABLED = "DISABLED"
+    REJECTED = "REJECTED"
 
 
 class TipoOcorrencia(enum.Enum):

@@ -95,7 +95,38 @@ def login_user(data: dict[str, Any]) -> dict[str, Any]:
             success=False,
             details={"reason": "account_disabled"},
         )
-        raise ForbiddenError("Sua conta está desativada. Entre em contato com o gestor municipal.")
+        raise ForbiddenError("Sua conta está desativada. Entre em contato com o gestor.")
+
+    # RF-02 fluxo secundário 2 — cadastro recusado. Estado próprio, e não
+    # DISABLED, justamente para que a pessoa receba o motivo em vez de uma
+    # mensagem genérica de conta desativada.
+    if hasattr(user, "status") and user.status == UserStatus.REJECTED:
+        audit_logger.log_auth(
+            action="login_attempt",
+            user_id=str(user.id),
+            email=email,
+            success=False,
+            details={"reason": "account_rejected"},
+        )
+        motivo = getattr(user, "motivo_rejeicao", None)
+        raise ForbiddenError(
+            f"Seu cadastro foi recusado pelo gestor. Motivo: {motivo}"
+            if motivo
+            else "Seu cadastro foi recusado pelo gestor."
+        )
+
+    # RF-01 fluxo secundário 2 — cadastro ainda não analisado pelo gestor (RF-02)
+    if hasattr(user, "status") and user.status == UserStatus.PENDING_APPROVAL:
+        audit_logger.log_auth(
+            action="login_attempt",
+            user_id=str(user.id),
+            email=email,
+            success=False,
+            details={"reason": "pending_approval"},
+        )
+        raise ForbiddenError(
+            "Seu cadastro está pendente de aprovação pelo gestor da sua instituição."
+        )
 
     # Block minors whose guardian has not yet consented
     if (
@@ -287,8 +318,6 @@ def request_password_reset(email_raw: str, base_url: str) -> None:
         raise ValidationError("Formato de email inválido")
 
     user = User.query.filter_by(email=email).first()
-    print(user)
-    print(email)
     if not user:
         logger.info("Password reset requested for unknown email: %s", email)
         return

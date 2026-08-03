@@ -30,6 +30,11 @@ class User(db.Model):
         db.Enum(UserStatus, name="user_status"), nullable=False, default=UserStatus.PENDING_SIGNUP
     )
     signup_completed_at = db.Column(db.DateTime(timezone=True))
+    # RF-02, fluxo secundário 2: a recusa precisa ser justificada. O motivo mora
+    # ao lado do estado para que o painel do gestor consiga exibi-lo; a
+    # notificação interna sozinha não basta, porque a conta recusada não
+    # consegue logar para lê-la.
+    motivo_rejeicao = db.Column(db.Text, nullable=True)
 
     created_at = db.Column(db.DateTime(timezone=True), server_default=db.func.now())
     updated_at = db.Column(
