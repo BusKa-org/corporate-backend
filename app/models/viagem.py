@@ -5,7 +5,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
 from .base import db
-from .enum import StatusViagem
+from .enum import StatusSolicitacao, StatusViagem
 
 
 class Viagem(db.Model):
@@ -16,6 +16,20 @@ class Viagem(db.Model):
     horario_rota_id = db.Column(
         UUID(as_uuid=True), db.ForeignKey("horario_rota.id", ondelete="SET NULL"), nullable=True
     )
+
+    # Rodada sob demanda: não nasce de uma grade de horários, então aponta
+    # direto para o circuito. Viagens programadas herdadas continuam chegando
+    # pelo horario_rota_id acima, com rota_id nulo.
+    rota_id = db.Column(
+        UUID(as_uuid=True), db.ForeignKey("rota.id", ondelete="CASCADE"), nullable=True
+    )
+    janela_id = db.Column(
+        UUID(as_uuid=True),
+        db.ForeignKey("janela_disponibilidade.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    # RF-11: fim da contagem regressiva do buffer. Nulo fora de BUFFER_ABERTO.
+    buffer_expira_em = db.Column(db.DateTime(timezone=True), nullable=True)
 
     motorista_id = db.Column(
         UUID(as_uuid=True),
@@ -45,6 +59,8 @@ class Viagem(db.Model):
     )
 
     horario_rota = relationship("HorarioRota")
+    rota = relationship("Rota")
+    janela = relationship("JanelaDisponibilidade")
     motorista = relationship("Motorista")
     veiculo = relationship("Onibus")
 
@@ -87,6 +103,14 @@ class ViagemPonto(db.Model):
 
 
 class AlunosConfirmados(db.Model):
+    """Participação de um aluno numa viagem.
+
+    No fluxo sob demanda esta linha é a solicitação da rodada: nasce como
+    INTERESSADO em RF-10, ganha origem/destino em RF-13, e vira CONFIRMADO ou
+    NEGADO na validação de capacidade (RF-14). As linhas NEGADO são mantidas —
+    são elas que alimentam as negações por ponto do dashboard (RF-21).
+    """
+
     __tablename__ = "alunos_confirmados"
 
     viagem_id = db.Column(
@@ -117,6 +141,20 @@ class AlunosConfirmados(db.Model):
     aluno_lat = db.Column(db.Numeric(10, 8), nullable=True)
     aluno_lon = db.Column(db.Numeric(11, 8), nullable=True)
     aluno_gps_hora = db.Column(db.DateTime(timezone=True), nullable=True)
+
+    status = db.Column(
+        db.Enum(StatusSolicitacao, name="status_solicitacao"),
+        nullable=False,
+        server_default=StatusSolicitacao.INTERESSADO.value,
+        default=StatusSolicitacao.INTERESSADO,
+    )
+    solicitado_em = db.Column(db.DateTime(timezone=True), server_default=db.func.now())
+    declarado_em = db.Column(db.DateTime(timezone=True), nullable=True)
+
+    # RF-15: credencial de embarque, válida só para este par aluno/viagem.
+    # Gerada na consolidação do buffer, nunca reaproveitada entre rodadas.
+    qr_token = db.Column(db.String(64), unique=True, nullable=True, index=True)
+    embarcado_em = db.Column(db.DateTime(timezone=True), nullable=True)
 
 
 class TelemetriaViagem(db.Model):

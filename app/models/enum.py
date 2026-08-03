@@ -27,10 +27,41 @@ class SentidoViagem(enum.Enum):
 
 
 class StatusViagem(enum.Enum):
+    """Ciclo da rodada sob demanda (DRT), mais os estados herdados.
+
+    Fluxo corporativo (RF-10 a RF-16):
+        OCIOSA -> SOLICITADA -> BUFFER_ABERTO -> EM_ROTA -> FINALIZADA
+
+    AGENDADA/EM_ANDAMENTO pertencem ao fluxo de viagem programada herdado do
+    produto municipal, que continua em uso. Removê-los é decisão de negócio,
+    não limpeza — ver TODO.md.
+    """
+
+    OCIOSA = "OCIOSA"
+    SOLICITADA = "SOLICITADA"
+    BUFFER_ABERTO = "BUFFER_ABERTO"
+    EM_ROTA = "EM_ROTA"
+
     AGENDADA = "AGENDADA"
     EM_ANDAMENTO = "EM_ANDAMENTO"
     FINALIZADA = "FINALIZADA"
     CANCELADA = "CANCELADA"
+
+
+class StatusSolicitacao(enum.Enum):
+    """Situação de um aluno dentro de uma rodada.
+
+    INTERESSADO   solicitou o veículo (RF-10), ainda sem trajeto declarado
+    CONFIRMADO    declarou origem/destino e passou na validação de capacidade
+    NEGADO        trajeto recusado por pico de ocupação (RF-14) — conta como
+                  negação por ponto no dashboard (RF-21)
+    CANCELADO     desistiu durante o buffer, capacidade devolvida (RF-19)
+    """
+
+    INTERESSADO = "INTERESSADO"
+    CONFIRMADO = "CONFIRMADO"
+    NEGADO = "NEGADO"
+    CANCELADO = "CANCELADO"
 
 
 class UserRole(enum.Enum):

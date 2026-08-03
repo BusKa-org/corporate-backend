@@ -14,6 +14,7 @@ from app.core.config import Settings
 from app.models.base import db
 from app.models.enum import DiaDaSemana, StatusViagem, UserStatus
 from tests.factories.geo_factory import PontoFactory
+from tests.factories.janela_factory import JanelaDisponibilidadeFactory
 from tests.factories.onibus_factory import OnibusFactory
 from tests.factories.organizacao_factory import OrganizacaoFactory
 from tests.factories.rota_factory import (
@@ -355,6 +356,72 @@ def viagem_futura_iniciada_com_motorista(_db, horario_rota, motorista):
         status=StatusViagem.EM_ANDAMENTO,
         motorista_id=motorista.user.id,
         inicio_real=datetime.now(UTC),
+    )
+    _db.session.add(v)
+    _db.session.commit()
+    return v
+
+
+# ==========================================
+# Rodada sob demanda (DRT) — RF-05, RF-10 a RF-17
+# ==========================================
+#
+# Um circuito de quatro pontos ordenados dá três segmentos (P1→P2, P2→P3,
+# P3→P4), o mínimo para exercitar trajetos disjuntos reusando o mesmo assento
+# na validação de capacidade (RF-14).
+
+
+@pytest.fixture()
+def pontos_circuito(_db, organizacao):
+    pontos = [PontoFactory(organizacao_id=organizacao.id) for _ in range(4)]
+    _db.session.add_all(pontos)
+    _db.session.commit()
+    return pontos
+
+
+@pytest.fixture()
+def circuito(_db, organizacao, motorista, onibus, pontos_circuito):
+    """Rota com os quatro pontos em ordem — o circuito fixo do PaqTcPB."""
+    r = RotaFactory(
+        organizacao_id=organizacao.id,
+        motorista_padrao_id=motorista.user.id,
+        veiculo_padrao_id=onibus.id,
+    )
+    _db.session.add(r)
+    _db.session.flush()
+
+    for ordem, p in enumerate(pontos_circuito, start=1):
+        _db.session.add(RotaPontoFactory(rota_id=r.id, ponto_id=p.id, ordem=ordem))
+    _db.session.commit()
+    return r
+
+
+@pytest.fixture()
+def janela_hoje(_db, organizacao, circuito, motorista, onibus):
+    """Janela de disponibilidade ativa para o dia da semana corrente."""
+    dia = list(DiaDaSemana)[date.today().weekday()]
+    j = JanelaDisponibilidadeFactory(
+        organizacao_id=organizacao.id,
+        rota_id=circuito.id,
+        motorista_id=motorista.user.id,
+        veiculo_id=onibus.id,
+        dia=dia,
+    )
+    _db.session.add(j)
+    _db.session.commit()
+    return j
+
+
+@pytest.fixture()
+def viagem_ociosa(_db, circuito, janela_hoje, motorista, onibus):
+    """Rodada aguardando a primeira solicitação (RF-10)."""
+    v = ViagemFactory(
+        data=date.today(),
+        rota_id=circuito.id,
+        janela_id=janela_hoje.id,
+        motorista_id=motorista.user.id,
+        veiculo_id=onibus.id,
+        status=StatusViagem.OCIOSA,
     )
     _db.session.add(v)
     _db.session.commit()

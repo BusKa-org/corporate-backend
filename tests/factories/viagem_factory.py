@@ -2,7 +2,7 @@ import uuid
 
 import factory
 
-from app.models.enum import StatusViagem
+from app.models.enum import StatusSolicitacao, StatusViagem
 from app.models.viagem import AlunosConfirmados, Viagem, ViagemPonto
 
 
@@ -13,9 +13,14 @@ class ViagemFactory(factory.Factory):
     id = factory.LazyFunction(uuid.uuid4)
     data = factory.Faker("date", locale="pt_BR")
     horario_rota_id = None
+    rota_id = None
+    janela_id = None
     motorista_id = None
     veiculo_id = None
-    status = factory.Faker("random_element", elements=StatusViagem)
+    buffer_expira_em = None
+    # Fixo, não sorteado: com os estados da rodada dentro do enum, sortear faria
+    # o teste passar ou falhar conforme o estado que calhasse de sair.
+    status = StatusViagem.AGENDADA
 
 
 class ViagemPontoFactory(factory.Factory):
@@ -37,3 +42,5 @@ class AlunosConfirmadosFactory(factory.Factory):
     confirmacao = factory.Faker("boolean")
     ponto_embarque_id = None
     ponto_destino_id = None
+    status = StatusSolicitacao.INTERESSADO
+    qr_token = None
