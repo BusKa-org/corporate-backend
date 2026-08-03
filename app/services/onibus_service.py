@@ -101,7 +101,7 @@ def update_onibus(user_id: str, onibus_id: str, data: dict[str, Any]) -> Onibus:
         raise NotFoundError("Ônibus não encontrado")
 
     if onibus.organizacao_id != user.organizacao_id:
-        raise ForbiddenError("Proibido alterar dados de outra organizacao")
+        raise ForbiddenError("Proibido alterar dados de outra organização")
 
     if placa := data.get("placa"):
         placa = placa.upper().strip()
@@ -143,7 +143,7 @@ def delete_onibus(user_id: str, onibus_id: str) -> None:
         raise NotFoundError("Ônibus não encontrado")
 
     if onibus.organizacao_id != user.organizacao_id:
-        raise ForbiddenError("Proibido alterar dados de outra organizacao")
+        raise ForbiddenError("Proibido alterar dados de outra organização")
 
     try:
         db.session.delete(onibus)

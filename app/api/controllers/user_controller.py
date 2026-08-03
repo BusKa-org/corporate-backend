@@ -42,7 +42,7 @@ class UserList(Resource):
     @api.response(200, "Success", models["user_list_response"])
     @jwt_required()
     def get(self) -> tuple[dict[str, Any], int]:
-        """Lista todos os usuários da organizacao (Apenas Gestor)"""
+        """Lista todos os usuários da organização (Apenas Gestor)"""
         current_user_id = get_jwt_identity()
         users = user_service.get_all_users(current_user_id)
         return (
@@ -89,7 +89,7 @@ class UserResource(Resource):
     @api.response(200, "Success", models["user_response"])
     @jwt_required()
     def get(self, id: str) -> tuple[dict[str, Any], int]:
-        """Busca usuário por ID (próprio perfil ou mesma organizacao se Gestor)"""
+        """Busca usuário por ID (próprio perfil ou mesma organização se Gestor)"""
         current_user_id = get_jwt_identity()
         user = user_service.get_user_by_id(id, current_user_id)
         return user_response_schema.dump(user), 200

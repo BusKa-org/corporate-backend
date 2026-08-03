@@ -26,7 +26,7 @@ def obter_progresso_viagem(gestor_id: str, viagem_id: str) -> list[dict]:
     )
 
     if not viagem:
-        raise NotFoundError("Viagem não encontrada ou não pertence à sua organizacao")
+        raise NotFoundError("Viagem não encontrada ou não pertence à sua organização")
 
     pontos_visitados = (
         ViagemPonto.query.filter(
@@ -133,7 +133,7 @@ def obter_telemetria_viagem(gestor_id: str, viagem_id: str) -> list[dict]:
     )
 
     if not viagem:
-        raise NotFoundError("Viagem não encontrada ou não pertence à sua organizacao")
+        raise NotFoundError("Viagem não encontrada ou não pertence à sua organização")
 
     rastros = (
         TelemetriaViagem.query.filter_by(viagem_id=viagem_id)

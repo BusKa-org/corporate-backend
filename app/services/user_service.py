@@ -298,7 +298,7 @@ def delete_motorista(gestor_id: str, motorista_id: str) -> None:
         raise NotFoundError("Motorista não encontrado")
 
     if motorista.organizacao_id != gestor.organizacao_id:
-        raise ForbiddenError("Proibido remover motoristas de outra organizacao")
+        raise ForbiddenError("Proibido remover motoristas de outra organização")
 
     try:
         db.session.delete(motorista)

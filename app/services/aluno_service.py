@@ -392,14 +392,14 @@ def get_aluno_by_id(gestor_id: str, aluno_id: str) -> Aluno:
     if not aluno:
         raise NotFoundError("Aluno não encontrado")
     if str(aluno.organizacao_id) != str(gestor.organizacao_id):
-        raise ForbiddenError("Aluno não pertence à sua organizacao")
+        raise ForbiddenError("Aluno não pertence à sua organização")
 
     return aluno
 
 
 def list_alunos_gestor(gestor_id: str, status: str | None = None) -> list[Aluno]:
     """
-    Lista alunos da organizacao (apenas para gestores).
+    Lista alunos da organização (apenas para gestores).
     Optionally filter by status (e.g. 'PENDING_APPROVAL').
 
     Returns: List of Aluno objects
@@ -431,7 +431,7 @@ def aprovar_aluno(gestor_id: str, aluno_id: str) -> Aluno:
     if not aluno:
         raise NotFoundError("Aluno não encontrado")
     if str(aluno.organizacao_id) != str(gestor.organizacao_id):
-        raise ForbiddenError("Aluno não pertence à sua organizacao")
+        raise ForbiddenError("Aluno não pertence à sua organização")
     if aluno.status != UserStatus.PENDING_APPROVAL:
         raise ValidationError("Aluno não está aguardando aprovação")
 

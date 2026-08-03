@@ -96,7 +96,7 @@ class OcorrenciaService:
 
     @staticmethod
     def listar(gestor_id: str, status: str | None = None) -> list[Ocorrencia]:
-        """Gestor lista ocorrências da sua organizacao."""
+        """Gestor lista ocorrências da sua organização."""
         from app.services.user_service import _get_gestor_or_403
 
         gestor = _get_gestor_or_403(gestor_id, "Apenas gestores podem listar ocorrências.")

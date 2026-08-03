@@ -67,7 +67,7 @@ class OcorrenciaListResource(Resource):
     @api.response(200, "Success")
     @jwt_required()
     def get(self) -> tuple[list[dict[str, Any]], int]:
-        """(Gestor) Lista ocorrências da organizacao"""
+        """(Gestor) Lista ocorrências da organização"""
         gestor_id = get_jwt_identity()
         status_filter = request.args.get("status")
         ocorrencias = OcorrenciaService.listar(gestor_id, status=status_filter)

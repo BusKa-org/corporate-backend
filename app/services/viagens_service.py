@@ -423,7 +423,7 @@ def cancelar_viagem(user_id: str, viagem_id: str) -> dict[str, Any]:
             NotificacaoService._criar_notificacao_interna(
                 usuario_id=conf.aluno_id,
                 titulo="Viagem Cancelada",
-                mensagem=f"Atenção! A viagem da rota agendada para o dia {data_formatada} foi cancelada pela organizacao.",
+                mensagem=f"Atenção! A viagem da rota agendada para o dia {data_formatada} foi cancelada pela organização.",
             )
 
         db.session.commit()

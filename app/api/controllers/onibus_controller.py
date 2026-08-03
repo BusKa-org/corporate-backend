@@ -31,7 +31,7 @@ class OnibusListResource(Resource):
     @api.response(200, "Success", models["onibus_list_response"])
     @jwt_required()
     def get(self) -> tuple[dict[str, Any], int]:
-        """Lista a frota da organizacao"""
+        """Lista a frota da organização"""
         current_user_id = get_jwt_identity()
         onibus_list = onibus_service.list_all(current_user_id)
         return (
