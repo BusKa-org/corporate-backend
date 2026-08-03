@@ -15,7 +15,7 @@ from app.models.base import db
 from app.models.enum import DiaDaSemana, StatusViagem, UserStatus
 from tests.factories.geo_factory import PontoFactory
 from tests.factories.onibus_factory import OnibusFactory
-from tests.factories.prefeitura_factory import PrefeituraFactory
+from tests.factories.organizacao_factory import OrganizacaoFactory
 from tests.factories.rota_factory import (
     DiasOperacaoFactory,
     HorarioRotaFactory,
@@ -158,24 +158,24 @@ def client(app, _db):
 
 
 @pytest.fixture()
-def prefeitura(_db):
-    p = PrefeituraFactory()
+def organizacao(_db):
+    p = OrganizacaoFactory()
     _db.session.add(p)
     _db.session.commit()
     return p
 
 
 @pytest.fixture()
-def other_prefeitura(_db):
-    p = PrefeituraFactory()
+def other_organizacao(_db):
+    p = OrganizacaoFactory()
     _db.session.add(p)
     _db.session.commit()
     return p
 
 
 @pytest.fixture()
-def gestor(client, app, _db, prefeitura):
-    u = GestorFactory(prefeitura_id=prefeitura.id)
+def gestor(client, app, _db, organizacao):
+    u = GestorFactory(organizacao_id=organizacao.id)
     _db.session.add(u)
     _db.session.commit()
 
@@ -187,8 +187,8 @@ def gestor(client, app, _db, prefeitura):
 
 
 @pytest.fixture()
-def other_gestor(client, app, _db, other_prefeitura):
-    u = GestorFactory(prefeitura_id=other_prefeitura.id)
+def other_gestor(client, app, _db, other_organizacao):
+    u = GestorFactory(organizacao_id=other_organizacao.id)
     _db.session.add(u)
     _db.session.commit()
 
@@ -200,8 +200,8 @@ def other_gestor(client, app, _db, other_prefeitura):
 
 
 @pytest.fixture()
-def aluno(client, app, _db, prefeitura):
-    u = AlunoFactory(prefeitura_id=prefeitura.id)
+def aluno(client, app, _db, organizacao):
+    u = AlunoFactory(organizacao_id=organizacao.id)
     _db.session.add(u)
     _db.session.commit()
 
@@ -213,8 +213,8 @@ def aluno(client, app, _db, prefeitura):
 
 
 @pytest.fixture()
-def aluno_pending(client, app, _db, prefeitura):
-    u = AlunoFactory(prefeitura_id=prefeitura.id)
+def aluno_pending(client, app, _db, organizacao):
+    u = AlunoFactory(organizacao_id=organizacao.id)
     u.status = UserStatus.PENDING_SIGNUP
     u.signup_completed_at = None
     _db.session.add(u)
@@ -228,8 +228,8 @@ def aluno_pending(client, app, _db, prefeitura):
 
 
 @pytest.fixture()
-def other_aluno(client, app, _db, other_prefeitura):
-    u = AlunoFactory(prefeitura_id=other_prefeitura.id)
+def other_aluno(client, app, _db, other_organizacao):
+    u = AlunoFactory(organizacao_id=other_organizacao.id)
     _db.session.add(u)
     _db.session.commit()
 
@@ -241,16 +241,16 @@ def other_aluno(client, app, _db, other_prefeitura):
 
 
 @pytest.fixture()
-def ponto(_db, prefeitura):
-    p = PontoFactory(prefeitura_id=prefeitura.id)
+def ponto(_db, organizacao):
+    p = PontoFactory(organizacao_id=organizacao.id)
     _db.session.add(p)
     _db.session.commit()
     return p
 
 
 @pytest.fixture()
-def motorista(client, app, _db, prefeitura):
-    m = MotoristaFactory(prefeitura_id=prefeitura.id)
+def motorista(client, app, _db, organizacao):
+    m = MotoristaFactory(organizacao_id=organizacao.id)
     _db.session.add(m)
     _db.session.commit()
 
@@ -262,8 +262,8 @@ def motorista(client, app, _db, prefeitura):
 
 
 @pytest.fixture()
-def other_motorista(client, app, _db, other_prefeitura):
-    m = MotoristaFactory(prefeitura_id=other_prefeitura.id)
+def other_motorista(client, app, _db, other_organizacao):
+    m = MotoristaFactory(organizacao_id=other_organizacao.id)
     _db.session.add(m)
     _db.session.commit()
 
@@ -275,17 +275,17 @@ def other_motorista(client, app, _db, other_prefeitura):
 
 
 @pytest.fixture()
-def onibus(_db, prefeitura):
-    o = OnibusFactory(prefeitura_id=prefeitura.id)
+def onibus(_db, organizacao):
+    o = OnibusFactory(organizacao_id=organizacao.id)
     _db.session.add(o)
     _db.session.commit()
     return o
 
 
 @pytest.fixture()
-def rota(_db, prefeitura, motorista, onibus):
+def rota(_db, organizacao, motorista, onibus):
     r = RotaFactory(
-        prefeitura_id=prefeitura.id,
+        organizacao_id=organizacao.id,
         motorista_padrao_id=motorista.user.id,
         veiculo_padrao_id=onibus.id,
     )

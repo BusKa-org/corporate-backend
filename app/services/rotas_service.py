@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 def list_all_rotas(user_id: str) -> list[Rota]:
     """
-    List all routes for user's prefeitura.
+    List all routes for user's organizacao.
 
     Args:
         user_id: ID of the user requesting the list
@@ -38,8 +38,8 @@ def list_all_rotas(user_id: str) -> list[Rota]:
     if not user:
         raise NotFoundError("Usuário não encontrado")
 
-    logger.debug(f"User {user_id} listing routes for prefeitura {user.prefeitura_id}")
-    return Rota.query.filter_by(prefeitura_id=user.prefeitura_id).all()
+    logger.debug(f"User {user_id} listing routes for organizacao {user.organizacao_id}")
+    return Rota.query.filter_by(organizacao_id=user.organizacao_id).all()
 
 
 def list_my_rotas(user_id: str) -> list[Rota]:
@@ -56,7 +56,7 @@ def list_my_rotas(user_id: str) -> list[Rota]:
         case UserRole.MOTORISTA:
             return Rota.query.filter_by(motorista_padrao_id=user.id).all()
         case UserRole.GESTOR:
-            return Rota.query.filter_by(prefeitura_id=user.prefeitura_id).all()
+            return Rota.query.filter_by(organizacao_id=user.organizacao_id).all()
         case _:
             return []
 
@@ -74,7 +74,7 @@ def gerenciar_inscricao_aluno(user_id: str, rota_id: str, data: dict[str, Any]) 
         Success message dictionary
 
     Raises:
-        ForbiddenError: If user is not a student or route is from different prefeitura
+        ForbiddenError: If user is not a student or route is from different organizacao
         NotFoundError: If user or route not found
         ValidationError: If action is invalid
     """
@@ -90,13 +90,13 @@ def gerenciar_inscricao_aluno(user_id: str, rota_id: str, data: dict[str, Any]) 
     if not rota:
         raise NotFoundError("Rota não encontrada")
 
-    # Validate tenant isolation - student can only subscribe to routes in their prefeitura
-    if rota.prefeitura_id != aluno.prefeitura_id:
+    # Validate tenant isolation - student can only subscribe to routes in their organizacao
+    if rota.organizacao_id != aluno.organizacao_id:
         audit_logger.log_security_event(
             event_type="cross_tenant_subscription_attempt",
             severity="high",
             user_id=user_id,
-            details={"rota_id": rota_id, "rota_prefeitura": rota.prefeitura_id},
+            details={"rota_id": rota_id, "rota_organizacao": rota.organizacao_id},
         )
         raise ForbiddenError("Acesso negado a esta rota")
 
@@ -172,7 +172,7 @@ def create_rota(gestor_id: str, data: dict[str, Any]) -> Rota:
             nome=nome,
             motorista_padrao_id=motorista_id,
             veiculo_padrao_id=data.get("veiculo_padrao_id"),
-            prefeitura_id=user.prefeitura_id,
+            organizacao_id=user.organizacao_id,
         )
 
         db.session.add(rota)
@@ -194,7 +194,7 @@ def create_rota(gestor_id: str, data: dict[str, Any]) -> Rota:
                 elif "latitude" in p_data and "longitude" in p_data:
                     # Create a brand-new ponto from coordinates
                     novo_ponto = Ponto(
-                        prefeitura_id=user.prefeitura_id,
+                        organizacao_id=user.organizacao_id,
                         latitude=p_data["latitude"],
                         longitude=p_data["longitude"],
                         apelido=p_data.get("apelido", f"Ponto {ordem}"),
@@ -248,7 +248,7 @@ def add_ponto(gestor_id: str, rota_id: str, data: dict[str, Any]) -> None:
     if not rota:
         raise NotFoundError("Rota não encontrada")
 
-    if rota.prefeitura_id != user.prefeitura_id:
+    if rota.organizacao_id != user.organizacao_id:
         raise ForbiddenError("Acesso negado")
 
     pontos = data.get("pontos", [])
@@ -270,8 +270,8 @@ def add_ponto(gestor_id: str, rota_id: str, data: dict[str, Any]) -> None:
                 if not existing_ponto:
                     logger.warning(f"Point {ponto_id} not found, skipping")
                     continue
-                if existing_ponto.prefeitura_id != rota.prefeitura_id:
-                    logger.warning(f"Point {ponto_id} belongs to different prefeitura, skipping")
+                if existing_ponto.organizacao_id != rota.organizacao_id:
+                    logger.warning(f"Point {ponto_id} belongs to different organizacao, skipping")
                     continue
 
                 novo_rota_ponto = RotaPonto(rota_id=rota.id, ponto_id=ponto_id, ordem=ordem)
@@ -287,7 +287,7 @@ def add_ponto(gestor_id: str, rota_id: str, data: dict[str, Any]) -> None:
                     continue
 
                 ponto = Ponto(
-                    prefeitura_id=rota.prefeitura_id,
+                    organizacao_id=rota.organizacao_id,
                     apelido=nome_p,
                     latitude=lat,
                     longitude=lon,
@@ -320,7 +320,7 @@ def add_horario(gestor_id: str, rota_id: str, data: dict[str, Any]) -> HorarioRo
     if not rota:
         raise NotFoundError("Rota não encontrada")
 
-    if rota.prefeitura_id != user.prefeitura_id:
+    if rota.organizacao_id != user.organizacao_id:
         raise ForbiddenError("Acesso negado")
 
     dias_list = data.get("dias", [])
@@ -365,7 +365,7 @@ def get_horarios(user_id: str, rota_id: str) -> list:
 
     if (
         user.role in (UserRole.GESTOR, UserRole.MOTORISTA)
-        and rota.prefeitura_id != user.prefeitura_id
+        and rota.organizacao_id != user.organizacao_id
     ):
         raise ForbiddenError("Acesso negado")
 
@@ -388,7 +388,7 @@ def get_by_id(user_id: str, rota_id: str) -> Rota:
 
     if (
         user.role in (UserRole.GESTOR, UserRole.MOTORISTA)
-        and rota.prefeitura_id != user.prefeitura_id
+        and rota.organizacao_id != user.organizacao_id
     ):
         raise ForbiddenError("Acesso negado")
 
@@ -425,20 +425,20 @@ def update_rota(user_id: str, rota_id: str, data: dict[str, Any]) -> Rota:
         raise NotFoundError("Rota não encontrada")
 
     # Resource ownership validation
-    if rota.prefeitura_id != user.prefeitura_id:
+    if rota.organizacao_id != user.organizacao_id:
         audit_logger.log_security_event(
             event_type="unauthorized_route_update",
             severity="high",
             user_id=user_id,
             details={
                 "rota_id": rota_id,
-                "user_prefeitura": user.prefeitura_id,
-                "rota_prefeitura": rota.prefeitura_id,
+                "user_organizacao": user.organizacao_id,
+                "rota_organizacao": rota.organizacao_id,
             },
         )
         logger.warning(
             f"Cross-tenant route update attempt: user {user_id} tried to update "
-            f"route {rota_id} from different prefeitura"
+            f"route {rota_id} from different organizacao"
         )
         raise ForbiddenError("Acesso negado")
 
@@ -502,15 +502,15 @@ def delete_rota(user_id: str, rota_id: str) -> None:
         raise NotFoundError("Rota não encontrada")
 
     # Resource ownership validation
-    if rota.prefeitura_id != user.prefeitura_id:
+    if rota.organizacao_id != user.organizacao_id:
         audit_logger.log_security_event(
             event_type="unauthorized_route_deletion",
             severity="critical",
             user_id=user_id,
             details={
                 "rota_id": rota_id,
-                "user_prefeitura": user.prefeitura_id,
-                "rota_prefeitura": rota.prefeitura_id,
+                "user_organizacao": user.organizacao_id,
+                "rota_organizacao": rota.organizacao_id,
             },
         )
         logger.error(

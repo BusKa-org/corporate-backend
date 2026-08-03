@@ -10,13 +10,13 @@ from app.models.viagem import Viagem
 from app.tasks.notificacao_tasks import verificar_viagens_24h
 
 
-def test_integracao_job_24h_banco_real(app, _db, prefeitura):
+def test_integracao_job_24h_banco_real(app, _db, organizacao):
     """
     Verifica se a task roda sem erros no banco real e altera o status da viagem.
     """
     with app.app_context():
         motorista = Motorista(
-            prefeitura_id=prefeitura.id,
+            organizacao_id=organizacao.id,
             nome="Mot",
             email="m@m.com",
             senha_hash="1",
@@ -27,7 +27,7 @@ def test_integracao_job_24h_banco_real(app, _db, prefeitura):
         _db.session.add(motorista)
         _db.session.flush()
 
-        rota = Rota(prefeitura_id=prefeitura.id, nome="Rota Teste")
+        rota = Rota(organizacao_id=organizacao.id, nome="Rota Teste")
         _db.session.add(rota)
         _db.session.flush()
 

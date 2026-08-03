@@ -13,14 +13,16 @@ def job_gerar_viagens_semanais(app):
         logger.info("Job de geração de viagens iniciado.")
 
         try:
-            gestores = User.query.filter_by(role=UserRole.GESTOR).distinct(User.prefeitura_id).all()
+            gestores = (
+                User.query.filter_by(role=UserRole.GESTOR).distinct(User.organizacao_id).all()
+            )
         except Exception as e:
             logger.error(f"Erro ao buscar gestores no job de geração de viagens: {e}")
             return
 
         total = 0
         for gestor in gestores:
-            # Um gestor com problema não pode derrubar a agenda das outras prefeituras.
+            # Um gestor com problema não pode derrubar a agenda das outras organizacoes.
             try:
                 total += gerar_viagens_periodo(gestor_id=str(gestor.id), dias_futuros=14)
             except Exception as e:

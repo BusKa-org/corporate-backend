@@ -10,8 +10,8 @@ class Onibus(db.Model):
 
     id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
 
-    prefeitura_id = db.Column(
-        UUID(as_uuid=True), db.ForeignKey("prefeitura.id", ondelete="CASCADE"), nullable=False
+    organizacao_id = db.Column(
+        UUID(as_uuid=True), db.ForeignKey("organizacao.id", ondelete="CASCADE"), nullable=False
     )
 
     placa = db.Column(db.String(10), unique=True, nullable=False)

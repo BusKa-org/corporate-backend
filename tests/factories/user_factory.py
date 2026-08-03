@@ -12,7 +12,7 @@ class GestorFactory(factory.Factory):
         model = Gestor
 
     id = factory.LazyFunction(uuid.uuid4)
-    prefeitura_id = None
+    organizacao_id = None
     nome = factory.Faker("name", locale="pt_BR")
     email = factory.Sequence(lambda n: f"gestor{n}@buska.test")
     senha_hash = factory.LazyAttribute(
@@ -33,7 +33,7 @@ class AlunoFactory(factory.Factory):
         model = Aluno
 
     id = factory.LazyFunction(uuid.uuid4)
-    prefeitura_id = None
+    organizacao_id = None
     nome = factory.Faker("name", locale="pt_BR")
     email = factory.Sequence(lambda n: f"aluno{n}@buska.test")
     senha_hash = factory.LazyAttribute(
@@ -59,7 +59,7 @@ class MotoristaFactory(factory.Factory):
         model = Motorista
 
     id = factory.LazyFunction(uuid.uuid4)
-    prefeitura_id = None
+    organizacao_id = None
     nome = factory.Faker("name", locale="pt_BR")
     email = factory.Sequence(lambda n: f"motorista{n}@buska.test")
     senha_hash = factory.LazyAttribute(

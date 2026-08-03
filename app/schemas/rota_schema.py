@@ -69,7 +69,7 @@ class RotaResponseSchema(BaseSchema):
     nome = fields.String()
     motorista_id = fields.Method("get_motorista_id")
     veiculo_id = fields.Method("get_veiculo_id")
-    prefeitura_id = fields.String()
+    organizacao_id = fields.String()
     municipio_nome = fields.Method("get_municipio_nome")
     municipio_uf = fields.Method("get_municipio_uf")
 
@@ -80,13 +80,13 @@ class RotaResponseSchema(BaseSchema):
         return str(obj.veiculo_padrao_id) if obj.veiculo_padrao_id else None
 
     def get_municipio_nome(self, obj):
-        if obj.prefeitura:
-            return obj.prefeitura.nome
+        if obj.organizacao:
+            return obj.organizacao.nome
         return None
 
     def get_municipio_uf(self, obj):
-        if obj.prefeitura:
-            return obj.prefeitura.estado
+        if obj.organizacao:
+            return obj.organizacao.estado
         return None
 
 

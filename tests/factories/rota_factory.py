@@ -5,7 +5,7 @@ import factory
 from app.models.enum import DiaDaSemana, SentidoViagem
 from app.models.rota import DiasOperacao, HorarioRota, Rota, RotaAluno, RotaPonto
 from tests.factories.onibus_factory import OnibusFactory
-from tests.factories.prefeitura_factory import PrefeituraFactory
+from tests.factories.organizacao_factory import OrganizacaoFactory
 from tests.factories.user_factory import MotoristaFactory
 
 
@@ -14,7 +14,7 @@ class RotaFactory(factory.Factory):
         model = Rota
 
     id = factory.LazyFunction(uuid.uuid4)
-    prefeitura_id = factory.SubFactory(PrefeituraFactory)
+    organizacao_id = factory.SubFactory(OrganizacaoFactory)
     nome = factory.Faker("name", locale="pt_BR")
     motorista_padrao_id = factory.SubFactory(MotoristaFactory)
     veiculo_padrao_id = factory.SubFactory(OnibusFactory)

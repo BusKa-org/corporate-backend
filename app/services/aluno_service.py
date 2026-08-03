@@ -115,10 +115,10 @@ def record_guardian_consent(token: str) -> Aluno:
         aluno.status = UserStatus.PENDING_APPROVAL
         db.session.flush()
 
-        # Notify the gestor(s) of the prefeitura
+        # Notify the gestor(s) of the organizacao
         from app.models.user import Gestor
 
-        gestores = db.session.query(Gestor).filter_by(prefeitura_id=aluno.prefeitura_id).all()
+        gestores = db.session.query(Gestor).filter_by(organizacao_id=aluno.organizacao_id).all()
         for gestor in gestores:
             NotificacaoService._criar_notificacao_interna(
                 usuario_id=str(gestor.id),
@@ -148,7 +148,7 @@ def auto_cadastro(data: dict[str, Any]) -> Aluno:
     """
     Aluno se cadastra sozinho.
     - If minor (age < 18), requires email_responsavel; sends guardian consent email.
-    - A prefeitura é inferida através da Instituição escolhida.
+    - A organizacao é inferida através da Instituição escolhida.
 
     Returns: Aluno object
     Raises: NotFoundError, ValidationError, AppError
@@ -158,9 +158,9 @@ def auto_cadastro(data: dict[str, Any]) -> Aluno:
     if not instituicao:
         raise NotFoundError("Instituição não encontrada")
 
-    prefeitura_id = instituicao.prefeitura_id
-    if not prefeitura_id:
-        raise NotFoundError("Prefeitura não encontrada")
+    organizacao_id = instituicao.organizacao_id
+    if not organizacao_id:
+        raise NotFoundError("Organizacao não encontrada")
 
     email = validate_email(data.get("email", ""))
     cpf_clean = validate_cpf(data.get("cpf", ""))
@@ -180,7 +180,7 @@ def auto_cadastro(data: dict[str, Any]) -> Aluno:
         password = validate_password(data.get("password", ""))
 
         ponto_casa = Ponto(
-            prefeitura_id=prefeitura_id,
+            organizacao_id=organizacao_id,
             latitude=end_data.get("latitude"),
             longitude=end_data.get("longitude"),
             apelido=f"Casa: {data.get('nome')}",
@@ -199,7 +199,7 @@ def auto_cadastro(data: dict[str, Any]) -> Aluno:
         db.session.add(novo_end)
 
         novo_aluno = Aluno(
-            prefeitura_id=prefeitura_id,
+            organizacao_id=organizacao_id,
             nome=data.get("nome"),
             email=data.get("email"),
             senha_hash=generate_password_hash(password),
@@ -297,7 +297,7 @@ def update_me(user_id: str, data: dict[str, Any]) -> Aluno:
                     db.session.add(novo_end)
             else:
                 novo_ponto = Ponto(
-                    prefeitura_id=aluno.prefeitura_id,
+                    organizacao_id=aluno.organizacao_id,
                     latitude=end_data.get("latitude"),
                     longitude=end_data.get("longitude"),
                     apelido=f"Casa: {data.get('nome', aluno.nome)}",
@@ -391,22 +391,22 @@ def get_aluno_by_id(gestor_id: str, aluno_id: str) -> Aluno:
 
     if not aluno:
         raise NotFoundError("Aluno não encontrado")
-    if str(aluno.prefeitura_id) != str(gestor.prefeitura_id):
-        raise ForbiddenError("Aluno não pertence à sua prefeitura")
+    if str(aluno.organizacao_id) != str(gestor.organizacao_id):
+        raise ForbiddenError("Aluno não pertence à sua organizacao")
 
     return aluno
 
 
 def list_alunos_gestor(gestor_id: str, status: str | None = None) -> list[Aluno]:
     """
-    Lista alunos da prefeitura (apenas para gestores).
+    Lista alunos da organizacao (apenas para gestores).
     Optionally filter by status (e.g. 'PENDING_APPROVAL').
 
     Returns: List of Aluno objects
     Raises: ForbiddenError
     """
     gestor = _get_gestor_or_403(gestor_id, "Apenas gestores podem listar alunos")
-    q = db.session.query(Aluno).filter_by(prefeitura_id=gestor.prefeitura_id)
+    q = db.session.query(Aluno).filter_by(organizacao_id=gestor.organizacao_id)
     if status:
         try:
             q = q.filter(Aluno.status == UserStatus[status])
@@ -430,8 +430,8 @@ def aprovar_aluno(gestor_id: str, aluno_id: str) -> Aluno:
 
     if not aluno:
         raise NotFoundError("Aluno não encontrado")
-    if str(aluno.prefeitura_id) != str(gestor.prefeitura_id):
-        raise ForbiddenError("Aluno não pertence à sua prefeitura")
+    if str(aluno.organizacao_id) != str(gestor.organizacao_id):
+        raise ForbiddenError("Aluno não pertence à sua organizacao")
     if aluno.status != UserStatus.PENDING_APPROVAL:
         raise ValidationError("Aluno não está aguardando aprovação")
 

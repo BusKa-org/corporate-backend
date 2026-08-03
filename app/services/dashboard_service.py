@@ -21,12 +21,12 @@ def obter_progresso_viagem(gestor_id: str, viagem_id: str) -> list[dict]:
         db.session.query(Viagem)
         .join(HorarioRota)
         .join(Rota)
-        .filter(Viagem.id == viagem_id, Rota.prefeitura_id == gestor.prefeitura_id)
+        .filter(Viagem.id == viagem_id, Rota.organizacao_id == gestor.organizacao_id)
         .first()
     )
 
     if not viagem:
-        raise NotFoundError("Viagem não encontrada ou não pertence à sua prefeitura")
+        raise NotFoundError("Viagem não encontrada ou não pertence à sua organizacao")
 
     pontos_visitados = (
         ViagemPonto.query.filter(
@@ -61,7 +61,7 @@ def relatorio_periodo_gestor(gestor_id: str, data_inicio: str, data_fim: str) ->
             .join(HorarioRota, Viagem.horario_rota_id == HorarioRota.id)
             .join(Rota, HorarioRota.rota_id == Rota.id)
             .filter(
-                Rota.prefeitura_id == gestor.prefeitura_id,
+                Rota.organizacao_id == gestor.organizacao_id,
                 Viagem.data >= data_inicio,
                 Viagem.data <= data_fim,
                 Viagem.status == StatusViagem.FINALIZADA,
@@ -90,7 +90,7 @@ def relatorio_periodo_gestor(gestor_id: str, data_inicio: str, data_fim: str) ->
             .join(Rota, HorarioRota.rota_id == Rota.id)
             .join(AlunosConfirmados, Viagem.id == AlunosConfirmados.viagem_id)
             .filter(
-                Rota.prefeitura_id == gestor.prefeitura_id,
+                Rota.organizacao_id == gestor.organizacao_id,
                 Viagem.data >= data_inicio,
                 Viagem.data <= data_fim,
                 Viagem.status == StatusViagem.FINALIZADA,
@@ -128,12 +128,12 @@ def obter_telemetria_viagem(gestor_id: str, viagem_id: str) -> list[dict]:
         db.session.query(Viagem)
         .join(HorarioRota)
         .join(Rota)
-        .filter(Viagem.id == viagem_id, Rota.prefeitura_id == gestor.prefeitura_id)
+        .filter(Viagem.id == viagem_id, Rota.organizacao_id == gestor.organizacao_id)
         .first()
     )
 
     if not viagem:
-        raise NotFoundError("Viagem não encontrada ou não pertence à sua prefeitura")
+        raise NotFoundError("Viagem não encontrada ou não pertence à sua organizacao")
 
     rastros = (
         TelemetriaViagem.query.filter_by(viagem_id=viagem_id)

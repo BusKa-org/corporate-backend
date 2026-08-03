@@ -10,11 +10,11 @@ from .notificacao import Notificacao  # noqa: F401
 
 class User(db.Model):
     __tablename__ = "usuario"
-    __table_args__ = (db.Index("idx_usuario_prefeitura", "prefeitura_id"),)
+    __table_args__ = (db.Index("idx_usuario_organizacao", "organizacao_id"),)
 
     id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    prefeitura_id = db.Column(
-        UUID(as_uuid=True), db.ForeignKey("prefeitura.id", ondelete="CASCADE"), nullable=False
+    organizacao_id = db.Column(
+        UUID(as_uuid=True), db.ForeignKey("organizacao.id", ondelete="CASCADE"), nullable=False
     )
     nome = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)

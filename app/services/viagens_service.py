@@ -263,7 +263,7 @@ def gerar_viagem(user_id: str, data_input: dict) -> Viagem:
     if not rota:
         raise NotFoundError("Rota não encontrada")
 
-    if rota.prefeitura_id != user.prefeitura_id:
+    if rota.organizacao_id != user.organizacao_id:
         raise ForbiddenError("Acesso negado")
 
     dia_semana = _get_dia_semana_enum(data_viagem)
@@ -304,13 +304,13 @@ def gerar_viagem(user_id: str, data_input: dict) -> Viagem:
 
 
 def gerar_viagens_em_lote(user_id: str, data_viagem: date) -> dict[str, Any]:
-    """Batch create trips for all routes of a prefeitura on a specific date."""
+    """Batch create trips for all routes of a organizacao on a specific date."""
     user = db.session.get(User, user_id)
     if not user or user.role != UserRole.GESTOR:
         raise ForbiddenError("Permissão negada. Apenas gestores podem gerar lote.")
 
     dia_semana = _get_dia_semana_enum(data_viagem)
-    rotas = db.session.query(Rota).filter(Rota.prefeitura_id == user.prefeitura_id).all()
+    rotas = db.session.query(Rota).filter(Rota.organizacao_id == user.organizacao_id).all()
 
     relatorio: dict[str, Any] = {
         "total_rotas_analisadas": len(rotas),
@@ -432,7 +432,7 @@ def list_viagens_gestor(user_id: str, filters: dict[str, Any]) -> list[Viagem]:
         db.session.query(Viagem)
         .join(HorarioRota)
         .join(Rota)
-        .filter(Rota.prefeitura_id == user.prefeitura_id)
+        .filter(Rota.organizacao_id == user.organizacao_id)
     )
 
     if filters.get("data_inicio"):
@@ -476,7 +476,7 @@ def cancelar_viagem(user_id: str, viagem_id: str) -> dict[str, Any]:
             NotificacaoService._criar_notificacao_interna(
                 usuario_id=conf.aluno_id,
                 titulo="Viagem Cancelada",
-                mensagem=f"Atenção! A viagem da rota agendada para o dia {data_formatada} foi cancelada pela prefeitura.",
+                mensagem=f"Atenção! A viagem da rota agendada para o dia {data_formatada} foi cancelada pela organizacao.",
             )
 
         db.session.commit()

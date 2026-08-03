@@ -20,7 +20,7 @@ class OnibusResponseSchema(BaseSchema):
     placa = fields.String()
     modelo = fields.String()
     capacidade = fields.Integer()
-    prefeitura_id = fields.UUID()
+    organizacao_id = fields.UUID()
 
 
 class OnibusListResponseSchema(BaseSchema):

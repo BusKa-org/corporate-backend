@@ -9,7 +9,7 @@ from app.services.viagens_service import gerar_viagens_periodo
 
 @pytest.mark.integration
 def test_gerar_viagens_periodo_cria_viagens_corretamente(
-    gestor, prefeitura, rota, horario_rota, dia_operacao, dia_operacao_quarta
+    gestor, organizacao, rota, horario_rota, dia_operacao, dia_operacao_quarta
 ):
     """
     Garante que a função central gera as viagens apenas para os dias da semana

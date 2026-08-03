@@ -11,8 +11,8 @@ class Ponto(db.Model):
     __tablename__ = "ponto"
 
     id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    prefeitura_id = db.Column(
-        UUID(as_uuid=True), db.ForeignKey("prefeitura.id", ondelete="CASCADE"), nullable=False
+    organizacao_id = db.Column(
+        UUID(as_uuid=True), db.ForeignKey("organizacao.id", ondelete="CASCADE"), nullable=False
     )
     latitude = db.Column(db.Numeric(10, 8), nullable=False)
     longitude = db.Column(db.Numeric(11, 8), nullable=False)
@@ -78,14 +78,14 @@ class Instituicao(db.Model):
 
     uf = db.Column(db.String(2), nullable=False, index=True)
 
-    prefeitura_id = db.Column(
+    organizacao_id = db.Column(
         UUID(as_uuid=True),
-        db.ForeignKey("prefeitura.id"),
+        db.ForeignKey("organizacao.id"),
         nullable=False,
         index=True,
     )
 
-    prefeitura = db.relationship("Prefeitura", lazy="joined")
+    organizacao = db.relationship("Organizacao", lazy="joined")
 
     situacao = db.Column(db.String(80))
     categoria_administrativa = db.Column(db.String(80))

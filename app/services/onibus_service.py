@@ -19,12 +19,12 @@ logger = logging.getLogger(__name__)
 
 
 def list_all(user_id: str) -> list[Onibus]:
-    """List all buses for user's prefeitura."""
+    """List all buses for user's organizacao."""
     user = User.query.get(user_id)
     if not user:
         raise NotFoundError("Usuário não encontrado")
 
-    return Onibus.query.filter_by(prefeitura_id=user.prefeitura_id).all()
+    return Onibus.query.filter_by(organizacao_id=user.organizacao_id).all()
 
 
 def get_by_id(user_id: str, onibus_id: str) -> Onibus:
@@ -41,7 +41,7 @@ def get_by_id(user_id: str, onibus_id: str) -> Onibus:
     if not onibus:
         raise NotFoundError("Ônibus não encontrado")
 
-    if onibus.prefeitura_id != user.prefeitura_id:
+    if onibus.organizacao_id != user.organizacao_id:
         raise ForbiddenError("Acesso negado a este recurso")
 
     return onibus
@@ -73,7 +73,7 @@ def create_onibus(user_id: str, data: dict[str, Any]) -> Onibus:
             placa=placa,
             modelo=modelo,
             capacidade=capacidade,
-            prefeitura_id=user.prefeitura_id,
+            organizacao_id=user.organizacao_id,
         )
         db.session.add(novo_onibus)
         db.session.commit()
@@ -100,8 +100,8 @@ def update_onibus(user_id: str, onibus_id: str, data: dict[str, Any]) -> Onibus:
     if not onibus:
         raise NotFoundError("Ônibus não encontrado")
 
-    if onibus.prefeitura_id != user.prefeitura_id:
-        raise ForbiddenError("Proibido alterar dados de outra prefeitura")
+    if onibus.organizacao_id != user.organizacao_id:
+        raise ForbiddenError("Proibido alterar dados de outra organizacao")
 
     if placa := data.get("placa"):
         placa = placa.upper().strip()
@@ -142,8 +142,8 @@ def delete_onibus(user_id: str, onibus_id: str) -> None:
     if not onibus:
         raise NotFoundError("Ônibus não encontrado")
 
-    if onibus.prefeitura_id != user.prefeitura_id:
-        raise ForbiddenError("Proibido alterar dados de outra prefeitura")
+    if onibus.organizacao_id != user.organizacao_id:
+        raise ForbiddenError("Proibido alterar dados de outra organizacao")
 
     try:
         db.session.delete(onibus)

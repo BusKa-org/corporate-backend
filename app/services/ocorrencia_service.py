@@ -20,7 +20,7 @@ class OcorrenciaService:
     def criar(user_id: str, dados: dict[str, Any]) -> Ocorrencia:
         """
         Aluno ou Motorista reporta um problema.
-        Automatically notifies the gestor of the prefeitura.
+        Automatically notifies the gestor of the organizacao.
         """
         user = db.session.get(User, user_id)
         if not user or user.role not in (UserRole.ALUNO, UserRole.MOTORISTA):
@@ -53,7 +53,7 @@ class OcorrenciaService:
             db.session.add(ocorrencia)
             db.session.flush()
 
-            # Notify the gestor of this prefeitura
+            # Notify the gestor of this organizacao
             OcorrenciaService._notificar_gestores(user, ocorrencia)
 
             db.session.commit()
@@ -86,7 +86,7 @@ class OcorrenciaService:
             TipoOcorrencia.OUTRO: "Outro",
         }.get(ocorrencia.tipo, ocorrencia.tipo.value)
 
-        gestores = db.session.query(Gestor).filter_by(prefeitura_id=autor.prefeitura_id).all()
+        gestores = db.session.query(Gestor).filter_by(organizacao_id=autor.organizacao_id).all()
         for gestor in gestores:
             NotificacaoService._criar_notificacao_interna(
                 usuario_id=str(gestor.id),
@@ -96,7 +96,7 @@ class OcorrenciaService:
 
     @staticmethod
     def listar(gestor_id: str, status: str | None = None) -> list[Ocorrencia]:
-        """Gestor lista ocorrências da sua prefeitura."""
+        """Gestor lista ocorrências da sua organizacao."""
         from app.services.user_service import _get_gestor_or_403
 
         gestor = _get_gestor_or_403(gestor_id, "Apenas gestores podem listar ocorrências.")
@@ -104,7 +104,7 @@ class OcorrenciaService:
         q = (
             db.session.query(Ocorrencia)
             .join(User, Ocorrencia.autor_id == User.id)
-            .filter(User.prefeitura_id == gestor.prefeitura_id)
+            .filter(User.organizacao_id == gestor.organizacao_id)
             .order_by(Ocorrencia.created_at.desc())
         )
         if status:

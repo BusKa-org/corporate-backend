@@ -7,10 +7,10 @@ from app.models.viagem import AlunosConfirmados, Viagem
 from app.services import viagens_service
 
 
-def test_iniciar_viagem_notifica_apenas_confirmados(app, _db, prefeitura, aluno):
+def test_iniciar_viagem_notifica_apenas_confirmados(app, _db, organizacao, aluno):
     with app.app_context():
         motorista = Motorista(
-            prefeitura_id=prefeitura.id,
+            organizacao_id=organizacao.id,
             nome="Motorista Teste",
             email="moto@test.com",
             senha_hash="123",

@@ -56,7 +56,7 @@ class UserResponseSchema(BaseSchema):
     """Schema for user response."""
 
     id = fields.String()
-    prefeitura_id = fields.String()
+    organizacao_id = fields.String()
     nome = fields.String()
     email = fields.String()
     telefone = fields.String()
@@ -79,13 +79,13 @@ class UserResponseSchema(BaseSchema):
         return str(obj.role.value) if hasattr(obj.role, "value") else str(obj.role)
 
     def get_municipio_nome(self, obj):
-        if obj.prefeitura:
-            return obj.prefeitura.nome
+        if obj.organizacao:
+            return obj.organizacao.nome
         return None
 
     def get_municipio_uf(self, obj):
-        if obj.prefeitura:
-            return obj.prefeitura.estado
+        if obj.organizacao:
+            return obj.organizacao.estado
         return None
 
 

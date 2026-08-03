@@ -18,8 +18,8 @@ from app.core.exceptions import (
 )
 from app.models.base import db
 from app.models.enum import UserRole, UserStatus
+from app.models.organizacao import Organizacao
 from app.models.password_reset import PasswordResetToken
-from app.models.prefeitura import Prefeitura
 from app.models.user import Aluno, Gestor, Motorista, User
 from app.utils import audit_logger, validate_cpf, validate_email, validate_password
 from app.utils.email_sender import send_email
@@ -159,16 +159,16 @@ def register_user(data: dict[str, Any]) -> User:
         ConflictError: If email/CPF/CNH already registered
         AppError: If database operation fails
     """
-    prefeitura_id = data.get("prefeitura_id")
-    if not prefeitura_id:
-        raise ValidationError("Prefeitura ID is required")
+    organizacao_id = data.get("organizacao_id")
+    if not organizacao_id:
+        raise ValidationError("Organizacao ID is required")
 
     email = validate_email(data.get("email", ""))
     cpf_clean = validate_cpf(data.get("cpf", ""))
 
-    if not Prefeitura.query.get(prefeitura_id):
-        logger.warning(f"Registration attempt with invalid prefeitura_id: {prefeitura_id}")
-        raise NotFoundError("Prefeitura not found")
+    if not Organizacao.query.get(organizacao_id):
+        logger.warning(f"Registration attempt with invalid organizacao_id: {organizacao_id}")
+        raise NotFoundError("Organizacao not found")
 
     existing_user = User.query.filter((User.email == email) | (User.cpf == cpf_clean)).first()
     if existing_user:
@@ -201,7 +201,7 @@ def register_user(data: dict[str, Any]) -> User:
 
         if role_enum == UserRole.ALUNO:
             new_user = Aluno(
-                prefeitura_id=prefeitura_id,
+                organizacao_id=organizacao_id,
                 nome=data["nome"],
                 email=email,
                 senha_hash=hashed_pw,
@@ -214,7 +214,7 @@ def register_user(data: dict[str, Any]) -> User:
             )
         elif role_enum == UserRole.MOTORISTA:
             new_user = Motorista(
-                prefeitura_id=prefeitura_id,
+                organizacao_id=organizacao_id,
                 nome=data["nome"],
                 email=email,
                 senha_hash=hashed_pw,
@@ -225,7 +225,7 @@ def register_user(data: dict[str, Any]) -> User:
             )
         elif role_enum == UserRole.GESTOR:
             new_user = Gestor(
-                prefeitura_id=prefeitura_id,
+                organizacao_id=organizacao_id,
                 nome=data["nome"],
                 email=email,
                 senha_hash=hashed_pw,
@@ -237,7 +237,7 @@ def register_user(data: dict[str, Any]) -> User:
             )
         else:
             new_user = User(
-                prefeitura_id=prefeitura_id,
+                organizacao_id=organizacao_id,
                 nome=data["nome"],
                 email=email,
                 senha_hash=hashed_pw,
@@ -255,7 +255,7 @@ def register_user(data: dict[str, Any]) -> User:
             user_id=str(new_user.id),
             email=email,
             success=True,
-            details={"role": role_str, "prefeitura_id": prefeitura_id},
+            details={"role": role_str, "organizacao_id": organizacao_id},
         )
         logger.info(f"New user registered: {new_user.id} ({role_str})")
 

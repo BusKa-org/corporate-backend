@@ -46,15 +46,15 @@ def _get_gestor_or_403(
 
 
 def get_all_users(current_user_id: str) -> list[User]:
-    """List all users in the same prefeitura (gestor only)."""
+    """List all users in the same organizacao (gestor only)."""
     gestor = _get_gestor_or_403(current_user_id, "Apenas gestores podem listar usuários")
-    return db.session.query(User).filter_by(prefeitura_id=gestor.prefeitura_id).all()
+    return db.session.query(User).filter_by(organizacao_id=gestor.organizacao_id).all()
 
 
 def get_user_by_id(user_id: str, current_user_id: str | None = None) -> User:
     """
     Get user by ID with tenant isolation.
-    Users can view themselves, gestores can view users in their prefeitura.
+    Users can view themselves, gestores can view users in their organizacao.
     """
     user = _get_user_or_404(user_id)
 
@@ -68,8 +68,8 @@ def get_user_by_id(user_id: str, current_user_id: str | None = None) -> User:
     if str(user_id) == str(current_user_id):
         return user
 
-    # Allow gestor access within same prefeitura
-    if current_user.role == UserRole.GESTOR and user.prefeitura_id == current_user.prefeitura_id:
+    # Allow gestor access within same organizacao
+    if current_user.role == UserRole.GESTOR and user.organizacao_id == current_user.organizacao_id:
         return user
 
     # Log unauthorized access attempt
@@ -127,7 +127,7 @@ def create_aluno_account(gestor_id: str, data: dict[str, Any]) -> Aluno:
     password = validate_password(data.get("password", ""))
     try:
         new_aluno = Aluno(
-            prefeitura_id=gestor.prefeitura_id,
+            organizacao_id=gestor.organizacao_id,
             nome=data["nome"],
             email=email,
             senha_hash=generate_password_hash(password),
@@ -168,7 +168,7 @@ def create_motorista(gestor_id: str, data: dict[str, Any]) -> Motorista:
 
     try:
         new_motorista = Motorista(
-            prefeitura_id=gestor.prefeitura_id,
+            organizacao_id=gestor.organizacao_id,
             nome=data["nome"],
             email=email,
             senha_hash=generate_password_hash(password),
@@ -239,7 +239,7 @@ def get_motoristas_by_municipio(gestor_id: str):
     gestor = _get_user_or_404(gestor_id)
 
     motoristas = User.query.filter(
-        User.prefeitura_id == gestor.prefeitura_id, User.role == UserRole.MOTORISTA
+        User.organizacao_id == gestor.organizacao_id, User.role == UserRole.MOTORISTA
     ).all()
 
     return motoristas
@@ -287,7 +287,7 @@ def update_profile(user_id: str, data: dict[str, Any]) -> User:
 
 def delete_motorista(gestor_id: str, motorista_id: str) -> None:
     """
-    Remove a motorista account (gestor only, same prefeitura).
+    Remove a motorista account (gestor only, same organizacao).
 
     Raises: ForbiddenError, NotFoundError, AppError
     """
@@ -297,8 +297,8 @@ def delete_motorista(gestor_id: str, motorista_id: str) -> None:
     if not motorista or motorista.role != UserRole.MOTORISTA:
         raise NotFoundError("Motorista não encontrado")
 
-    if motorista.prefeitura_id != gestor.prefeitura_id:
-        raise ForbiddenError("Proibido remover motoristas de outra prefeitura")
+    if motorista.organizacao_id != gestor.organizacao_id:
+        raise ForbiddenError("Proibido remover motoristas de outra organizacao")
 
     try:
         db.session.delete(motorista)

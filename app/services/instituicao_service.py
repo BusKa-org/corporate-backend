@@ -9,7 +9,7 @@ from app.core.exceptions import AppError, ForbiddenError, NotFoundError, Validat
 from app.models.base import db
 from app.models.enum import TipoInstituicao, UserRole
 from app.models.geo import Endereco, Instituicao, Ponto
-from app.models.prefeitura import Prefeitura
+from app.models.organizacao import Organizacao
 from app.models.user import User
 
 logger = logging.getLogger(__name__)
@@ -35,7 +35,7 @@ def create_instituicao(gestor_id: str, data: dict[str, Any]) -> Instituicao:
 
     try:
         novo_ponto = Ponto(
-            prefeitura_id=user.prefeitura_id,
+            organizacao_id=user.organizacao_id,
             latitude=end_data.get("latitude"),
             longitude=end_data.get("longitude"),
             apelido=f"Inst: {nome}",
@@ -70,17 +70,17 @@ def create_instituicao(gestor_id: str, data: dict[str, Any]) -> Instituicao:
 
 
 def list_all(gestor_id: str) -> list[Instituicao]:
-    """List all institutions for user's prefeitura."""
+    """List all institutions for user's organizacao."""
     user = User.query.get(gestor_id)
     if not user:
         raise NotFoundError("Usuário não encontrado")
 
-    return Instituicao.query.filter(Instituicao.prefeitura_id == user.prefeitura_id).all()
+    return Instituicao.query.filter(Instituicao.organizacao_id == user.organizacao_id).all()
 
 
 def list_all_public(filters: dict[str, Any]) -> list[Instituicao]:
     """List all institutions (public - for student registration)."""
-    query = Instituicao.query.join(Prefeitura)
+    query = Instituicao.query.join(Organizacao)
 
     search = filters.get("search")
     limit = filters.get("limit", 10)
@@ -92,7 +92,7 @@ def list_all_public(filters: dict[str, Any]) -> list[Instituicao]:
                 Instituicao.nome.ilike(search_term),
                 Instituicao.sigla.ilike(search_term),
                 Instituicao.uf.ilike(search_term),
-                Prefeitura.nome.ilike(search_term),
+                Organizacao.nome.ilike(search_term),
             )
         )
 
@@ -115,7 +115,7 @@ def get_by_id(gestor_id: str, inst_id: str) -> Instituicao:
     if not inst:
         raise NotFoundError("Instituição não encontrada")
 
-    if inst.ponto.prefeitura_id != user.prefeitura_id:
+    if inst.ponto.organizacao_id != user.organizacao_id:
         raise ForbiddenError("Acesso negado")
 
     return inst
@@ -135,7 +135,7 @@ def delete_instituicao(gestor_id: str, inst_id: str) -> None:
     if not inst:
         raise NotFoundError("Instituição não encontrada")
 
-    if inst.ponto.prefeitura_id != user.prefeitura_id:
+    if inst.ponto.organizacao_id != user.organizacao_id:
         raise ForbiddenError("Acesso negado")
 
     try:

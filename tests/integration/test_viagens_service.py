@@ -9,14 +9,14 @@ from app.models.viagem import TelemetriaViagem, Viagem
 from app.services.viagens_service import controlar_viagem
 
 
-def test_finalizar_viagem_calcula_km_real_pela_telemetria(app, _db, prefeitura):
+def test_finalizar_viagem_calcula_km_real_pela_telemetria(app, _db, organizacao):
     """
     Simula uma viagem com pontos de telemetria reais e verifica se a
     ação FINALIZAR calcula corretamente a distância total em km.
     """
     with app.app_context():
         motorista = Motorista(
-            prefeitura_id=prefeitura.id,
+            organizacao_id=organizacao.id,
             nome="Mot KM",
             email="mot.km@teste.com",
             senha_hash="123",
@@ -27,7 +27,7 @@ def test_finalizar_viagem_calcula_km_real_pela_telemetria(app, _db, prefeitura):
         _db.session.add(motorista)
         _db.session.flush()
 
-        rota = Rota(prefeitura_id=prefeitura.id, nome="Rota do Cálculo de KM")
+        rota = Rota(organizacao_id=organizacao.id, nome="Rota do Cálculo de KM")
         _db.session.add(rota)
         _db.session.flush()
 
@@ -78,7 +78,7 @@ def test_finalizar_viagem_calcula_km_real_pela_telemetria(app, _db, prefeitura):
         ), f"O km_real calculado foi {viagem_atualizada.km_real}, esperado ~2.22"
 
 
-def test_finalizar_viagem_sem_telemetria_retorna_zero(app, _db, prefeitura):
+def test_finalizar_viagem_sem_telemetria_retorna_zero(app, _db, organizacao):
     """
     Garante que se a viagem for finalizada, mas o telemóvel do motorista
     não enviou nenhum ponto (ou enviou apenas 1), o sistema não quebra e o KM fica zero.
@@ -86,7 +86,7 @@ def test_finalizar_viagem_sem_telemetria_retorna_zero(app, _db, prefeitura):
     with app.app_context():
         # Setup simplificado
         motorista = Motorista(
-            prefeitura_id=prefeitura.id,
+            organizacao_id=organizacao.id,
             nome="Mot Sem GPS",
             email="mot.nogps@teste.com",
             senha_hash="1",
@@ -94,7 +94,7 @@ def test_finalizar_viagem_sem_telemetria_retorna_zero(app, _db, prefeitura):
             cnh="1",
             role=UserRole.MOTORISTA,
         )
-        rota = Rota(prefeitura_id=prefeitura.id, nome="Rota Sem GPS")
+        rota = Rota(organizacao_id=organizacao.id, nome="Rota Sem GPS")
         _db.session.add_all([motorista, rota])
         _db.session.flush()
 

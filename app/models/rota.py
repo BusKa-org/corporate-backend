@@ -11,8 +11,8 @@ class Rota(db.Model):
     __tablename__ = "rota"
 
     id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    prefeitura_id = db.Column(
-        UUID(as_uuid=True), db.ForeignKey("prefeitura.id", ondelete="CASCADE"), nullable=False
+    organizacao_id = db.Column(
+        UUID(as_uuid=True), db.ForeignKey("organizacao.id", ondelete="CASCADE"), nullable=False
     )
     nome = db.Column(db.String(100), nullable=False)
 
@@ -29,7 +29,7 @@ class Rota(db.Model):
         db.DateTime(timezone=True), server_default=db.func.now(), onupdate=db.func.now()
     )
 
-    prefeitura = relationship("Prefeitura")
+    organizacao = relationship("Organizacao")
     motorista_padrao = relationship("Motorista")
     veiculo_padrao = relationship("Onibus")
 

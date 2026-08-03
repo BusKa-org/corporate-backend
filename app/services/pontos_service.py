@@ -13,12 +13,12 @@ logger = logging.getLogger(__name__)
 
 
 def list_all(user_id: str) -> list[Ponto]:
-    """List all points for user's prefeitura."""
+    """List all points for user's organizacao."""
     user = User.query.get(user_id)
     if not user:
         raise NotFoundError("Usuário não encontrado")
 
-    return Ponto.query.filter_by(prefeitura_id=user.prefeitura_id).all()
+    return Ponto.query.filter_by(organizacao_id=user.organizacao_id).all()
 
 
 def get_by_id(user_id: str, ponto_id: str) -> Ponto:
@@ -35,7 +35,7 @@ def get_by_id(user_id: str, ponto_id: str) -> Ponto:
     if not ponto:
         raise NotFoundError("Ponto não encontrado")
 
-    if user.prefeitura_id != ponto.prefeitura_id:
+    if user.organizacao_id != ponto.organizacao_id:
         raise ForbiddenError("Acesso negado")
 
     return ponto
@@ -56,7 +56,7 @@ def create_ponto(user_id: str, data: dict[str, Any]) -> Ponto:
 
     try:
         novo_ponto = Ponto(
-            prefeitura_id=user.prefeitura_id,
+            organizacao_id=user.organizacao_id,
             apelido=data.get("apelido", "Sem Nome"),
             latitude=data.get("latitude"),
             longitude=data.get("longitude"),
@@ -86,7 +86,7 @@ def update_ponto(user_id: str, ponto_id: str, data: dict[str, Any]) -> Ponto:
     if not ponto:
         raise NotFoundError("Ponto não encontrado")
 
-    if ponto.prefeitura_id != user.prefeitura_id:
+    if ponto.organizacao_id != user.organizacao_id:
         raise ForbiddenError("Acesso negado")
 
     try:
@@ -118,7 +118,7 @@ def delete_ponto(user_id: str, ponto_id: str) -> None:
     if not ponto:
         raise NotFoundError("Ponto não encontrado")
 
-    if ponto.prefeitura_id != user.prefeitura_id:
+    if ponto.organizacao_id != user.organizacao_id:
         raise ForbiddenError("Acesso negado")
 
     try:

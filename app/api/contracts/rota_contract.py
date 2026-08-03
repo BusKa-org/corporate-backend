@@ -76,7 +76,7 @@ def register_models(api):
             "nome": fields.String(description="Nome"),
             "motorista_id": fields.String(description="UUID do motorista padrão"),
             "veiculo_id": fields.String(description="UUID do veículo padrão"),
-            "prefeitura_id": fields.String(description="UUID da prefeitura"),
+            "organizacao_id": fields.String(description="UUID da organizacao"),
             "municipio_nome": fields.String(description="Nome do município"),
             "municipio_uf": fields.String(description="UF do município"),
         },

@@ -17,7 +17,7 @@ from app.services.dashboard_service import (
 )
 
 
-def test_dashboard_relatorio_e_progresso_viagem(app, _db, prefeitura):
+def test_dashboard_relatorio_e_progresso_viagem(app, _db, organizacao):
     """
     Simula uma viagem completa com embarques e faltas para validar
     os cálculos matemáticos e a ordenação de progresso do dashboard.
@@ -26,7 +26,7 @@ def test_dashboard_relatorio_e_progresso_viagem(app, _db, prefeitura):
         hoje = date.today()
 
         gestor = Gestor(
-            prefeitura_id=prefeitura.id,
+            organizacao_id=organizacao.id,
             nome="Gestor Teste",
             email="gestor.dash@teste.com",
             senha_hash="123",
@@ -34,7 +34,7 @@ def test_dashboard_relatorio_e_progresso_viagem(app, _db, prefeitura):
             role=UserRole.GESTOR,
         )
         motorista = Motorista(
-            prefeitura_id=prefeitura.id,
+            organizacao_id=organizacao.id,
             nome="Mot Teste",
             email="mot.dash@teste.com",
             senha_hash="123",
@@ -45,7 +45,7 @@ def test_dashboard_relatorio_e_progresso_viagem(app, _db, prefeitura):
         _db.session.add_all([gestor, motorista])
         _db.session.flush()
 
-        rota = Rota(prefeitura_id=prefeitura.id, nome="Rota do Dashboard")
+        rota = Rota(organizacao_id=organizacao.id, nome="Rota do Dashboard")
         _db.session.add(rota)
         _db.session.flush()
 
@@ -64,10 +64,10 @@ def test_dashboard_relatorio_e_progresso_viagem(app, _db, prefeitura):
         _db.session.flush()
 
         ponto_a = Ponto(
-            prefeitura_id=prefeitura.id, latitude=-23.1, longitude=-46.1, apelido="Ponto A"
+            organizacao_id=organizacao.id, latitude=-23.1, longitude=-46.1, apelido="Ponto A"
         )
         ponto_b = Ponto(
-            prefeitura_id=prefeitura.id, latitude=-23.2, longitude=-46.2, apelido="Ponto B"
+            organizacao_id=organizacao.id, latitude=-23.2, longitude=-46.2, apelido="Ponto B"
         )
         _db.session.add_all([ponto_a, ponto_b])
         _db.session.flush()
@@ -87,7 +87,7 @@ def test_dashboard_relatorio_e_progresso_viagem(app, _db, prefeitura):
         _db.session.add_all([vp1, vp2])
 
         aluno1 = Aluno(
-            prefeitura_id=prefeitura.id,
+            organizacao_id=organizacao.id,
             nome="A1",
             email="a1@t.com",
             senha_hash="1",
@@ -95,7 +95,7 @@ def test_dashboard_relatorio_e_progresso_viagem(app, _db, prefeitura):
             role=UserRole.ALUNO,
         )
         aluno2 = Aluno(
-            prefeitura_id=prefeitura.id,
+            organizacao_id=organizacao.id,
             nome="A2",
             email="a2@t.com",
             senha_hash="1",
@@ -103,7 +103,7 @@ def test_dashboard_relatorio_e_progresso_viagem(app, _db, prefeitura):
             role=UserRole.ALUNO,
         )
         aluno_falta = Aluno(
-            prefeitura_id=prefeitura.id,
+            organizacao_id=organizacao.id,
             nome="A3",
             email="a3@t.com",
             senha_hash="1",
@@ -145,11 +145,11 @@ def test_dashboard_relatorio_e_progresso_viagem(app, _db, prefeitura):
         assert relatorio["media_alunos_por_km"] == round(2 / 15.5, 2)
 
 
-def test_dashboard_protecao_seguranca_gestor(app, _db, prefeitura):
+def test_dashboard_protecao_seguranca_gestor(app, _db, organizacao):
     """Garante que apenas Gestores podem acessar os dados do dashboard."""
     with app.app_context():
         motorista = Motorista(
-            prefeitura_id=prefeitura.id,
+            organizacao_id=organizacao.id,
             nome="Mot Intrometido",
             email="intrometido@teste.com",
             senha_hash="123",
@@ -168,14 +168,14 @@ def test_dashboard_protecao_seguranca_gestor(app, _db, prefeitura):
         assert "Apenas gestores" in str(exc_info.value)
 
 
-def test_dashboard_trajeto_real_telemetria(app, _db, prefeitura):
+def test_dashboard_trajeto_real_telemetria(app, _db, organizacao):
     """
     Simula o envio de coordenadas GPS pelo motorista e valida se o gestor
     recebe o trajeto ordenado cronologicamente para plotar no mapa.
     """
     with app.app_context():
         gestor = Gestor(
-            prefeitura_id=prefeitura.id,
+            organizacao_id=organizacao.id,
             nome="Gestor Mapa",
             email="gestor.mapa@teste.com",
             senha_hash="123",
@@ -183,7 +183,7 @@ def test_dashboard_trajeto_real_telemetria(app, _db, prefeitura):
             role=UserRole.GESTOR,
         )
         motorista = Motorista(
-            prefeitura_id=prefeitura.id,
+            organizacao_id=organizacao.id,
             nome="Mot Mapa",
             email="mot.mapa@teste.com",
             senha_hash="123",
@@ -194,7 +194,7 @@ def test_dashboard_trajeto_real_telemetria(app, _db, prefeitura):
         _db.session.add_all([gestor, motorista])
         _db.session.flush()
 
-        rota = Rota(prefeitura_id=prefeitura.id, nome="Rota do Mapa")
+        rota = Rota(organizacao_id=organizacao.id, nome="Rota do Mapa")
         _db.session.add(rota)
         _db.session.flush()
 
