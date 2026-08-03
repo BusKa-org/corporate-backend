@@ -1,7 +1,9 @@
 import json
 import logging
 import os
+from collections.abc import Callable
 from datetime import timedelta
+from importlib.metadata import entry_points
 from typing import Any
 
 import firebase_admin
@@ -42,7 +44,24 @@ jwt = JWTManager()
 logger = logging.getLogger(__name__)
 
 
-def create_app(*, config_overrides: dict[str, Any] | None = None) -> Flask:
+def _discover_plugins() -> list[Callable[[Flask, Api], None]]:
+    """Load registration callables published under the 'mebuska.plugins' group.
+
+    Deployment repos (e.g. mebuska-deploy) declare their plugins in
+    pyproject.toml so the product never imports client code by name.
+    """
+    eps = sorted(entry_points(group="mebuska.plugins"), key=lambda ep: ep.name)
+    logger.info("Plugins discovered", extra={"plugins": [ep.name for ep in eps]})
+    return [ep.load() for ep in eps]
+
+
+def create_app(
+    *,
+    config_overrides: dict[str, Any] | None = None,
+    # `plugins=None` (default) discovers via entry points; `plugins=[]` disables
+    # discovery entirely — see the registration loop below for the contract.
+    plugins: list[Callable[[Flask, Api], None]] | None = None,
+) -> Flask:
     load_dotenv()
     settings = Settings()
     app = Flask(__name__)
@@ -191,6 +210,10 @@ Inclua o header: `Authorization: Bearer <seu_token>`
     api.add_namespace(alunos_ns, path="/v1/alunos")
     api.add_namespace(ocorrencias_ns, path="/v1/ocorrencias")
     api.add_namespace(dashboard_ns, path="/v1/dashboard")
+
+    # Client-specific extensions — see `plugins` param contract on the signature.
+    for register in (_discover_plugins() if plugins is None else plugins):
+        register(app, api)
 
     # ==========================================
     # Error Handlers
