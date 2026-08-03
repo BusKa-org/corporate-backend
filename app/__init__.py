@@ -42,7 +42,7 @@ jwt = JWTManager()
 logger = logging.getLogger(__name__)
 
 
-def create_app() -> Flask:
+def create_app(config_overrides: dict[str, Any] | None = None) -> Flask:
     load_dotenv()
     settings = Settings()
     app = Flask(__name__)
@@ -109,6 +109,12 @@ def create_app() -> Flask:
         methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         max_age=86400,  # Cache preflight for 24 hours
     )
+
+    # Test harness and embedding hosts inject config here. Must run before
+    # db.init_app(): Flask-SQLAlchemy 3.1 binds engines during init_app, so a
+    # later app.config.update() would be silently ignored.
+    if config_overrides:
+        app.config.update(config_overrides)
 
     db.init_app(app)
     jwt.init_app(app)

@@ -5,7 +5,6 @@ from typing import Any
 
 import pytest
 from flask_jwt_extended import create_access_token
-from sqlalchemy.pool import StaticPool
 
 from app import create_app
 from app.models.base import db
@@ -64,17 +63,13 @@ os.environ.pop("RUN_SCHEDULER", None)
 
 @pytest.fixture(scope="session")
 def app():
-    app = create_app()
-    app.config.update(
-        TESTING=True,
-        DEBUG=True,
-        JWT_SECRET_KEY="change_this_secret_key_use_long_random_string",
-        SQLALCHEMY_DATABASE_URI="sqlite://",
-        SQLALCHEMY_TRACK_MODIFICATIONS=False,
-        SQLALCHEMY_ENGINE_OPTIONS={
-            "connect_args": {"check_same_thread": False},
-            "poolclass": StaticPool,
-        },
+    app = create_app(
+        config_overrides={
+            "TESTING": True,
+            "DEBUG": True,
+            "JWT_SECRET_KEY": "change_this_secret_key_use_long_random_string",
+            "SQLALCHEMY_TRACK_MODIFICATIONS": False,
+        }
     )
     return app
 
