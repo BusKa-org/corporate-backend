@@ -83,12 +83,6 @@ class ViagemCreateRequestSchema(BaseSchema):
     data = fields.Date(required=True)
 
 
-class ViagemLoteRequestSchema(BaseSchema):
-    """POST /viagens/gerar-lote"""
-
-    data = DateISOField(required=True)
-
-
 class ViagemConfirmacaoRequestSchema(BaseSchema):
     """Schema for student trip confirmation."""
 
@@ -139,12 +133,6 @@ class ViagemListQuerySchema(BaseSchema):
 
 class MessageResponseSchema(BaseSchema):
     message = fields.String(required=True)
-
-
-class ViagemLoteResponseSchema(BaseSchema):
-    total_rotas_analisadas = fields.Integer(required=True)
-    viagens_criadas = fields.Integer(required=True)
-    detalhes = fields.List(fields.String(), required=True)
 
 
 class ViagemAlunoConfirmacaoResponseSchema(BaseSchema):

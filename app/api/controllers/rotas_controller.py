@@ -16,7 +16,6 @@ from app.schemas.ponto_schema import (
 from app.schemas.rota_schema import (
     RotaCreateRequestSchema,
     RotaDetailResponseSchema,
-    RotaInscricaoRequestSchema,
     RotaListResponseSchema,
     RotaPontosAddRequestSchema,
     RotaResponseSchema,
@@ -37,7 +36,6 @@ rota_detail_response_schema = RotaDetailResponseSchema()
 
 rota_create_request_schema = RotaCreateRequestSchema()
 rota_update_request_schema = RotaUpdateRequestSchema()
-inscricao_request_schema = RotaInscricaoRequestSchema()
 pontos_add_request_schema = RotaPontosAddRequestSchema()
 
 horario_create_request_schema = HorarioCreateRequestSchema()
@@ -95,22 +93,6 @@ class MyRotasResource(Resource):
             ),
             200,
         )
-
-
-@api.route("/<string:id>/inscricao")
-@api.param("id", "UUID da Rota")
-class RotaInscricaoResource(Resource):
-    @api.doc("inscrever_aluno")
-    @api.expect(models["rota_inscricao_request"])
-    @api.response(200, "Success")
-    @jwt_required()
-    def post(self, id: str) -> tuple[dict[str, Any], int]:
-        current_user_id = get_jwt_identity()
-        data = request.get_json(silent=True) or {}
-        payload = inscricao_request_schema.load(data)
-
-        result = rotas_service.gerenciar_inscricao_aluno(current_user_id, id, payload)
-        return result, 200
 
 
 @api.route("/<string:id>/pontos")

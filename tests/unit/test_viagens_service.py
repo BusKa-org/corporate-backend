@@ -1,7 +1,7 @@
 from unittest.mock import MagicMock, patch
 
 from app.models.enum import StatusViagem, UserRole
-from app.services.viagens_service import atualizar_localizacao, gerar_viagens_periodo
+from app.services.viagens_service import atualizar_localizacao
 
 
 def test_atualizar_localizacao_dispara_notificacao(app):
@@ -60,19 +60,3 @@ def test_atualizar_localizacao_dispara_notificacao(app):
             assert (
                 mock_notif.notificar_aproximacao_ponto.called or mock_notif.mock_calls
             ), "O serviço de notificações deveria ter sido acionado para o aluno no ponto"
-
-
-def test_gerar_viagens_periodo_sobrevive_a_um_dia_com_falha():
-    """Uma falha no dia 3 não pode abortar os 11 dias restantes em silêncio."""
-    with patch("app.services.viagens_service.gerar_viagens_em_lote") as mock_lote:
-        mock_lote.side_effect = [
-            {"viagens_criadas": 1},
-            {"viagens_criadas": 1},
-            RuntimeError("falha simulada no dia 3"),
-            *[{"viagens_criadas": 1}] * 11,
-        ]
-
-        total = gerar_viagens_periodo(gestor_id="gestor-1", dias_futuros=14)
-
-    assert mock_lote.call_count == 14, "todos os dias devem ser tentados"
-    assert total == 13, "o total deve contar apenas os dias que deram certo"

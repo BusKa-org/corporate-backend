@@ -303,59 +303,6 @@ def gerar_viagem(user_id: str, data_input: dict) -> Viagem:
         return nova_viagem
 
 
-def gerar_viagens_em_lote(user_id: str, data_viagem: date) -> dict[str, Any]:
-    """Batch create trips for all routes of a organizacao on a specific date."""
-    user = db.session.get(User, user_id)
-    if not user or user.role != UserRole.GESTOR:
-        raise ForbiddenError("Permissão negada. Apenas gestores podem gerar lote.")
-
-    dia_semana = _get_dia_semana_enum(data_viagem)
-    rotas = db.session.query(Rota).filter(Rota.organizacao_id == user.organizacao_id).all()
-
-    relatorio: dict[str, Any] = {
-        "total_rotas_analisadas": len(rotas),
-        "viagens_criadas": 0,
-        "detalhes": [],
-    }
-
-    with transactional():
-        for rota in rotas:
-            horarios_validos = (
-                db.session.query(HorarioRota)
-                .join(DiasOperacao)
-                .filter(HorarioRota.rota_id == rota.id, DiasOperacao.dia == dia_semana)
-                .all()
-            )
-
-            for horario in horarios_validos:
-                existe = (
-                    db.session.query(Viagem.id)
-                    .filter_by(data=data_viagem, horario_rota_id=horario.id)
-                    .first()
-                )
-                if existe:
-                    continue
-
-                nova_viagem = Viagem(
-                    data=data_viagem,
-                    horario_rota_id=horario.id,
-                    motorista_id=rota.motorista_padrao_id,
-                    veiculo_id=rota.veiculo_padrao_id,
-                    status=StatusViagem.AGENDADA,
-                )
-                db.session.add(nova_viagem)
-                db.session.flush()
-
-                _popular_dados_da_viagem(nova_viagem, rota)
-
-                relatorio["viagens_criadas"] += 1
-                relatorio["detalhes"].append(
-                    f"Viagem criada: {rota.nome} - {horario.horario_saida}"
-                )
-
-        return relatorio
-
-
 def list_viagens_motorista(user_id: str) -> list[Viagem]:
     """List trips assigned to the driver."""
     return (
@@ -677,27 +624,3 @@ def obter_progresso_viagem(gestor_id: str, viagem_id: str):
         }
         for vp in pontos_visitados
     ]
-
-
-def gerar_viagens_periodo(gestor_id: str, dias_futuros: int = 14) -> int:
-    """
-    Função centralizada para gerar viagens em lote para os próximos N dias.
-    Pode ser chamada tanto por Jobs em background quanto por ações de usuário.
-
-    Retorna o total de viagens criadas. Cada dia é isolado: uma falha em um dia
-    não impede os seguintes, já que antes um erro no dia 3 abortava os outros
-    11 em silêncio e o job ainda registrava sucesso.
-    """
-    hoje = date.today()
-    total = 0
-
-    for i in range(dias_futuros):
-        data_alvo = hoje + timedelta(days=i)
-        try:
-            relatorio = gerar_viagens_em_lote(user_id=gestor_id, data_viagem=data_alvo)
-            total += relatorio["viagens_criadas"]
-        except Exception as e:
-            logger.error(f"Falha ao gerar viagens de {data_alvo} para o gestor {gestor_id}: {e}")
-
-    logger.info(f"Gestor {gestor_id}: {total} viagens criadas em {dias_futuros} dias")
-    return total

@@ -17,11 +17,6 @@ def register_models(api):
         },
     )
 
-    viagem_lote_request = api.model(
-        "ViagemLoteRequest",
-        {"data": fields.String(required=True, description="Data para gerar viagens (YYYY-MM-DD)")},
-    )
-
     viagem_confirmacao_request = api.model(
         "ViagemConfirmacaoRequest",
         {
@@ -91,15 +86,6 @@ def register_models(api):
         },
     )
 
-    viagem_lote_response = api.model(
-        "ViagemLoteResponse",
-        {
-            "total_rotas_analisadas": fields.Integer(description="Total de rotas analisadas"),
-            "viagens_criadas": fields.Integer(description="Total de viagens criadas"),
-            "detalhes": fields.List(fields.String(description="Detalhes da viagem")),
-        },
-    )
-
     viagem_list_response = api.model(
         "ViagemListResponse",
         {
@@ -110,13 +96,11 @@ def register_models(api):
 
     return {
         "viagem_create_request": viagem_create_request,
-        "viagem_lote_request": viagem_lote_request,
         "viagem_confirmacao_request": viagem_confirmacao_request,
         "viagem_acao_request": viagem_acao_request,
         "viagem_response": viagem_response,
         "viagem_list_response": viagem_list_response,
         "viagem_aluno_confirmacao_response": viagem_aluno_confirmacao_response,
-        "viagem_lote_response": viagem_lote_response,
         "viagem_agenda_aluno_list_response": viagem_agenda_aluno_list_response,
         "viagem_agenda_aluno_response": viagem_agenda_aluno_response,
         "localizacao_request": localizacao_request,

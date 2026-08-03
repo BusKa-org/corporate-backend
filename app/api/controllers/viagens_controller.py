@@ -19,8 +19,6 @@ from app.schemas.viagem_schema import (
     ViagemCreateRequestSchema,
     ViagemListQuerySchema,
     ViagemListResponseSchema,
-    ViagemLoteRequestSchema,
-    ViagemLoteResponseSchema,
     ViagemResponseSchema,
 )
 from app.services import viagens_service
@@ -37,14 +35,12 @@ viagem_response_schema = ViagemResponseSchema()
 viagem_list_response_schema = ViagemListResponseSchema()
 
 viagem_create_request_schema = ViagemCreateRequestSchema()
-viagem_lote_request_schema = ViagemLoteRequestSchema()
 viagem_confirmacao_request_schema = ViagemConfirmacaoRequestSchema()
 viagem_acao_request_schema = ViagemAcaoRequestSchema()
 
 viagem_list_query_schema = ViagemListQuerySchema()
 
 message_response_schema = MessageResponseSchema()
-viagem_lote_response_schema = ViagemLoteResponseSchema()
 viagem_aluno_confirmacao_response_schema = ViagemAlunoConfirmacaoResponseSchema()
 viagem_agenda_aluno_list_response_schema = ViagemAgendaAlunoListResponseSchema()
 
@@ -138,20 +134,6 @@ class ViagemListResource(Resource):
         # gerar_viagem returns {message,id,dia}. If you want to return ViagemResponseSchema instead,
         # change service to return the Viagem ORM instance. For now, keep it consistent with existing behavior.
         return result, 201
-
-
-@api.route("/gerar-lote")
-class ViagemLoteResource(Resource):
-    @api.doc("gerar_viagens_lote")
-    @api.expect(models["viagem_lote_request"])
-    @api.response(201, "Created", models["viagem_lote_response"])
-    @jwt_required()
-    def post(self) -> tuple[dict[str, Any], int]:
-        user_id = get_jwt_identity()
-        data = request.get_json(silent=True) or {}
-        payload = viagem_lote_request_schema.load(data)
-        result = viagens_service.gerar_viagens_em_lote(user_id, payload["data"])
-        return viagem_lote_response_schema.dump(result), 201
 
 
 @api.route("/minhas")

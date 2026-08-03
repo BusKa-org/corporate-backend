@@ -1,4 +1,4 @@
-"""Routes (Rota) service - route management, subscriptions, schedules."""
+"""Routes (Rota) service - route management, schedules."""
 
 import logging
 from typing import Any
@@ -14,7 +14,6 @@ from app.models.enum import DiaDaSemana, SentidoViagem, UserRole
 from app.models.geo import Ponto
 from app.models.rota import DiasOperacao, HorarioRota, Rota, RotaAluno, RotaPonto
 from app.models.user import User
-from app.services.viagens_service import gerar_viagens_periodo
 from app.utils import audit_logger, validate_uuid
 
 logger = logging.getLogger(__name__)
@@ -59,93 +58,6 @@ def list_my_rotas(user_id: str) -> list[Rota]:
             return Rota.query.filter_by(organizacao_id=user.organizacao_id).all()
         case _:
             return []
-
-
-def gerenciar_inscricao_aluno(user_id: str, rota_id: str, data: dict[str, Any]) -> dict[str, Any]:
-    """
-    Manage student subscription to a route.
-
-    Args:
-        user_id: ID of the student
-        rota_id: ID of the route
-        data: Dictionary with 'acao' field ('inscrever' or 'desinscrever')
-
-    Returns:
-        Success message dictionary
-
-    Raises:
-        ForbiddenError: If user is not a student or route is from different organizacao
-        NotFoundError: If user or route not found
-        ValidationError: If action is invalid
-    """
-    validate_uuid(user_id, "User ID")
-    validate_uuid(rota_id, "Rota ID")
-
-    aluno = db.session.get(User, user_id)
-    if not aluno or str(getattr(aluno, "role", "")) != "ALUNO":
-        logger.warning(f"Non-student {user_id} attempted route subscription")
-        raise ForbiddenError("Apenas alunos podem se inscrever")
-
-    rota = db.session.get(Rota, rota_id)
-    if not rota:
-        raise NotFoundError("Rota não encontrada")
-
-    # Validate tenant isolation - student can only subscribe to routes in their organizacao
-    if rota.organizacao_id != aluno.organizacao_id:
-        audit_logger.log_security_event(
-            event_type="cross_tenant_subscription_attempt",
-            severity="high",
-            user_id=user_id,
-            details={"rota_id": rota_id, "rota_organizacao": rota.organizacao_id},
-        )
-        raise ForbiddenError("Acesso negado a esta rota")
-
-    acao = data.get("acao")
-    if not acao or acao not in ["inscrever", "desinscrever"]:
-        raise ValidationError("Ação inválida. Use 'inscrever' ou 'desinscrever'.")
-
-    inscricao_existente = RotaAluno.query.filter_by(rota_id=rota.id, aluno_id=aluno.id).first()
-
-    try:
-        if acao == "inscrever":
-            if inscricao_existente:
-                return {"message": "Aluno já inscrito nesta rota"}
-
-            nova_inscricao = RotaAluno(rota_id=rota.id, aluno_id=aluno.id)
-            db.session.add(nova_inscricao)
-            db.session.commit()
-
-            audit_logger.log_user_action(
-                action="subscribe_route",
-                user_id=user_id,
-                resource_type="rota",
-                resource_id=rota_id,
-            )
-            logger.info(f"Student {user_id} subscribed to route {rota_id}")
-            return {"message": "Inscrição realizada com sucesso"}
-
-        else:  # unsubscribe
-            if not inscricao_existente:
-                raise NotFoundError("Aluno não está inscrito nesta rota")
-
-            db.session.delete(inscricao_existente)
-            db.session.commit()
-
-            audit_logger.log_user_action(
-                action="unsubscribe_route",
-                user_id=user_id,
-                resource_type="rota",
-                resource_id=rota_id,
-            )
-            logger.info(f"Student {user_id} unsubscribed from route {rota_id}")
-            return {"message": "Inscrição removida com sucesso"}
-
-    except (NotFoundError, ValidationError, ForbiddenError):
-        raise
-    except Exception as e:
-        db.session.rollback()
-        logger.error(f"Error managing subscription for {user_id}: {e}", exc_info=True)
-        raise AppError(f"Erro ao gerenciar inscrição: {str(e)}", 500)
 
 
 def create_rota(gestor_id: str, data: dict[str, Any]) -> Rota:
@@ -222,8 +134,6 @@ def create_rota(gestor_id: str, data: dict[str, Any]) -> Rota:
                         db.session.add(novo_dia)
 
         db.session.commit()
-
-        gerar_viagens_periodo(gestor_id=gestor_id, dias_futuros=14)
 
         return rota
 

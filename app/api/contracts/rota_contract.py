@@ -90,11 +90,6 @@ def register_models(api):
         },
     )
 
-    rota_inscricao_request = api.model(
-        "RotaInscricaoRequest",
-        {"acao": fields.String(required=True, description="inscrever ou desinscrever")},
-    )
-
     rota_horario_response = api.model(
         "RotaHorarioResponse",
         {
@@ -134,7 +129,6 @@ def register_models(api):
         "rota_create_request": rota_create_request,
         "rota_response": rota_response,
         "rota_update_request": rota_update_request,
-        "rota_inscricao_request": rota_inscricao_request,
         "rota_horario_create_request": rota_horario_create_request,
         "rota_horario_response": rota_horario_response,
         "rota_horario_list_response": rota_horario_list_response,

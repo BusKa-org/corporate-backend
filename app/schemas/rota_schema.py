@@ -53,12 +53,6 @@ class RotaUpdateRequestSchema(BaseSchema):
     veiculo_padrao_id = fields.String(allow_none=True)
 
 
-class RotaInscricaoRequestSchema(BaseSchema):
-    """Schema for route subscription action."""
-
-    acao = fields.String(required=True, validate=validate.OneOf(["inscrever", "desinscrever"]))
-
-
 # ==========================================
 # Response Schemas (Serialization)
 # ==========================================

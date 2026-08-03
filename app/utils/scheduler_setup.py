@@ -1,11 +1,9 @@
 import atexit
 import os
 
-from apscheduler.triggers.cron import CronTrigger
 from flask import Flask
 from flask_apscheduler import APScheduler
 
-from app.tasks.agendamento_tasks import job_gerar_viagens_semanais
 from app.tasks.notificacao_tasks import verificar_viagens_10min, verificar_viagens_24h
 
 
@@ -38,17 +36,6 @@ def init_scheduler(app: Flask, scheduler: APScheduler):
         args=[app],
         trigger="interval",
         minutes=10,
-        replace_existing=True,
-    )
-
-    # Diário, e não semanal: a geração é idempotente e cobre 14 dias à frente,
-    # então rodar todo dia faz uma execução perdida se corrigir sozinha. O
-    # jobstore é em memória e não tem recuperação de misfire.
-    scheduler.add_job(
-        id="job_viagens_semanais",
-        func=job_gerar_viagens_semanais,
-        args=[app],
-        trigger=CronTrigger(hour=2, minute=0, timezone="America/Sao_Paulo"),
         replace_existing=True,
     )
 

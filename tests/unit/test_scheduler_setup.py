@@ -20,7 +20,7 @@ ENV_OBRIGATORIAS = [
     "MAIL_SERVER",
 ]
 
-JOBS_ESPERADOS = {"job_24h", "job_10min", "job_viagens_semanais"}
+JOBS_ESPERADOS = {"job_24h", "job_10min"}
 
 
 @pytest.fixture()
@@ -55,20 +55,6 @@ def test_init_scheduler_nao_registra_nada_sem_run_scheduler(scheduler_app, sched
     init_scheduler(scheduler_app, sched)
 
     assert sched.get_jobs() == []
-
-
-def test_geracao_de_viagens_roda_todo_dia(scheduler_app, sched, monkeypatch):
-    """Job idempotente com janela de 14 dias: diário se recupera de execução perdida."""
-    monkeypatch.setenv("RUN_SCHEDULER", "true")
-
-    init_scheduler(scheduler_app, sched)
-
-    trigger = sched.get_job("job_viagens_semanais").trigger
-    campos = {campo.name: str(campo) for campo in trigger.fields}
-    assert campos["day_of_week"] == "*"
-    assert campos["hour"] == "2"
-    assert campos["minute"] == "0"
-    assert str(trigger.timezone) == "America/Sao_Paulo"
 
 
 def test_compose_de_producao_repassa_env_obrigatorias():
