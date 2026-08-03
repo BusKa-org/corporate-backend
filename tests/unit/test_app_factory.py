@@ -5,7 +5,9 @@ from app import create_app
 
 def test_create_app_applies_config_overrides_before_engine_binding():
     """Overrides must reach db.init_app, not arrive after it."""
-    app = create_app(config_overrides={"SQLALCHEMY_DATABASE_URI": "postgresql+psycopg2://x:y@nowhere/z"})
+    app = create_app(
+        config_overrides={"SQLALCHEMY_DATABASE_URI": "postgresql+psycopg2://x:y@nowhere/z"}
+    )
     assert app.config["SQLALCHEMY_DATABASE_URI"] == "postgresql+psycopg2://x:y@nowhere/z"
 
 
