@@ -24,9 +24,20 @@ Needed in writing, standard R&D split:
 - **Foreground IP** — the DRT algorithm, buffer window, capacity vector, QR
   boarding, offline sync. Titularity assigned by agreement.
 
-Proposed settlement: BusKa owns Foreground IP; PaqTcPB gets a perpetual,
-irrevocable, royalty-free licence for its own operations, the right to publicise
-the case, and a revenue share on future municipal/state sales.
+Proposed settlement (revised — see `ARQUITETURA_REPOSITORIOS.md` §2 for the
+architectural reasoning): PaqTcPB owns Foreground IP, since it was built
+specifically for and funded by this engagement. BusKa owns Background IP —
+`municipal-backend` and anything generalized from it into `buska-core` —
+regardless of how §2 lands, since that predates this contract. Reusing
+PaqTcPB's Foreground IP (the DRT engine) for a future corporate client is a
+licensing conversation with PaqTcPB, not something BusKa can do unilaterally
+by merging it into a resellable core.
+
+*(This reverses an earlier draft of this paragraph, which had BusKa keeping
+Foreground IP with a license grant back to PaqTcPB plus a revenue share on
+future sales. That version is still what's on record until a written
+amendment says otherwise — flagging the discrepancy here so it doesn't get
+missed.)*
 
 Also review the existing incubation agreement — it may already carry standing IP
 terms.
