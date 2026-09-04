@@ -3,9 +3,7 @@
 import logging
 from typing import Any, cast
 
-from werkzeug.security import check_password_hash, generate_password_hash
-
-from app.core.exceptions import (
+from buska_core.exceptions import (
     AppError,
     ConflictError,
     ForbiddenError,
@@ -13,6 +11,8 @@ from app.core.exceptions import (
     UnauthorizedError,
     ValidationError,
 )
+from werkzeug.security import check_password_hash, generate_password_hash
+
 from app.models.base import db
 from app.models.enum import UserRole, UserStatus
 from app.models.user import Aluno, Gestor, Motorista, User

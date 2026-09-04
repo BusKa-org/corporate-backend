@@ -3,9 +3,9 @@
 import logging
 from typing import Any
 
+from buska_core.exceptions import AppError, ForbiddenError, NotFoundError, ValidationError
 from sqlalchemy import or_
 
-from app.core.exceptions import AppError, ForbiddenError, NotFoundError, ValidationError
 from app.models.base import db
 from app.models.enum import TipoInstituicao, UserRole
 from app.models.geo import Endereco, Instituicao, Ponto

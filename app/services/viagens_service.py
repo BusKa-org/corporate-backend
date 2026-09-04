@@ -4,14 +4,15 @@ import logging
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
-from app.core.exceptions import (
+from buska_core.exceptions import (
     AppError,
     ConflictError,
     ForbiddenError,
     NotFoundError,
     ValidationError,
 )
-from app.core.transaction import transactional
+from buska_core.transaction import transactional
+
 from app.extensions import scheduler
 from app.models.base import db
 from app.models.enum import DiaDaSemana, SentidoViagem, StatusViagem, UserRole
@@ -136,7 +137,7 @@ def confirmar_presenca_aluno(
     confirmacao: bool = data["confirmacao"]
     ponto_embarque_id = data.get("ponto_embarque_id")
 
-    with transactional():
+    with transactional(db.session):
         viagem = db.session.get(Viagem, viagem_id)
         if not viagem:
             raise NotFoundError("Viagem não encontrada")
@@ -287,7 +288,7 @@ def gerar_viagem(user_id: str, data_input: dict) -> Viagem:
             f"Viagem já gerada para este dia/horário: {data_viagem} {horario_selecionado.horario_saida.strftime('%H:%M')}"
         )
 
-    with transactional():
+    with transactional(db.session):
         nova_viagem = Viagem(
             data=data_viagem,
             horario_rota_id=horario_selecionado.id,
@@ -326,7 +327,7 @@ def controlar_viagem(user_id: str, viagem_id: str, data: dict[str, Any]) -> Viag
 
     acao = data.get("acao")
 
-    with transactional():
+    with transactional(db.session):
         if acao == "INICIAR":
             if viagem.status != StatusViagem.AGENDADA:
                 raise ValidationError(

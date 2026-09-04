@@ -3,8 +3,8 @@
 from datetime import date, datetime, time, timedelta
 
 import pytest
+from buska_core.exceptions import ForbiddenError
 
-from app.core.exceptions import ForbiddenError
 from app.models.enum import SentidoViagem, StatusViagem, UserRole
 from app.models.geo import Ponto
 from app.models.rota import HorarioRota, Rota

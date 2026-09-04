@@ -130,85 +130,29 @@ wheels = [
 ]
 
 [[package]]
-name = "mebuska-corporate"
+name = "buska-core"
 version = "0.1.0"
-source = { editable = "." }
+source = { directory = "../buska-core" }
 dependencies = [
-    { name = "alembic" },
-    { name = "firebase-admin" },
-    { name = "flasgger" },
     { name = "flask" },
-    { name = "flask-apscheduler" },
-    { name = "flask-cors" },
     { name = "flask-jwt-extended" },
-    { name = "flask-restx" },
-    { name = "flask-sqlalchemy" },
-    { name = "geoalchemy2" },
-    { name = "gunicorn" },
     { name = "marshmallow" },
-    { name = "psycopg2-binary" },
-    { name = "python-dotenv" },
-    { name = "python-json-logger" },
-    { name = "requests" },
     { name = "sqlalchemy" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "bandit" },
-    { name = "black" },
-    { name = "factory-boy" },
-    { name = "faker" },
-    { name = "mypy" },
-    { name = "pip-audit" },
-    { name = "pre-commit" },
-    { name = "pytest" },
-    { name = "pytest-cov" },
-    { name = "pytest-mock" },
-    { name = "pytest-xdist" },
-    { name = "requests" },
-    { name = "ruff" },
-    { name = "types-requests" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "alembic", specifier = ">=1.13.0" },
-    { name = "firebase-admin", specifier = ">=7.2.0" },
-    { name = "flasgger", specifier = ">=0.9.7.1" },
+    { name = "black", marker = "extra == 'dev'", specifier = ">=24.0.0" },
     { name = "flask", specifier = ">=3.1.2" },
-    { name = "flask-apscheduler", specifier = ">=1.13.1" },
-    { name = "flask-cors", specifier = ">=6.0.1" },
     { name = "flask-jwt-extended", specifier = ">=4.7.1" },
-    { name = "flask-restx", specifier = ">=1.3.0" },
-    { name = "flask-sqlalchemy", specifier = ">=3.1.1" },
-    { name = "geoalchemy2", specifier = ">=0.18.0" },
-    { name = "gunicorn", specifier = ">=23.0.0" },
     { name = "marshmallow", specifier = ">=3.20.1" },
-    { name = "psycopg2-binary", specifier = ">=2.9.11" },
-    { name = "python-dotenv", specifier = ">=1.2.1" },
-    { name = "python-json-logger", specifier = ">=2.0.7" },
-    { name = "requests", specifier = ">=2.32.0" },
+    { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.19.0" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
+    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=5.0.0" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.15.0" },
     { name = "sqlalchemy", specifier = ">=2.0.44" },
 ]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "bandit", specifier = ">=1.9.4" },
-    { name = "black", specifier = ">=24.0.0" },
-    { name = "factory-boy", specifier = ">=3.3.0" },
-    { name = "faker", specifier = ">=26.0.0" },
-    { name = "mypy", specifier = ">=1.8.0" },
-    { name = "pip-audit", specifier = ">=2.7.0" },
-    { name = "pre-commit", specifier = ">=3.6.0" },
-    { name = "pytest", specifier = ">=9.0.2" },
-    { name = "pytest-cov", specifier = ">=7.0.0" },
-    { name = "pytest-mock", specifier = ">=3.14.0" },
-    { name = "pytest-xdist", specifier = ">=3.6.0" },
-    { name = "requests", specifier = ">=2.32.0" },
-    { name = "ruff", specifier = ">=0.2.0" },
-    { name = "types-requests", specifier = ">=2.33.0.20260408" },
-]
+provides-extras = ["dev"]
 
 [[package]]
 name = "cachecontrol"
@@ -1291,6 +1235,89 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/d6/54/cfe61301667036ec958cb99bd3efefba235e65cdeb9c84d24a8293ba1d90/mdurl-0.1.2.tar.gz", hash = "sha256:bb413d29f5eea38f31dd4754dd7377d4465116fb207585f97bf925588687c1ba", size = 8729, upload-time = "2022-08-14T12:40:10.846Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b3/38/89ba8ad64ae25be8de66a6d463314cf1eb366222074cfda9ee839c56a4b4/mdurl-0.1.2-py3-none-any.whl", hash = "sha256:84008a41e51615a49fc9966191ff91509e3c40b939176e643fd50a5c2196b8f8", size = 9979, upload-time = "2022-08-14T12:40:09.779Z" },
+]
+
+[[package]]
+name = "mebuska-corporate"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "alembic" },
+    { name = "buska-core" },
+    { name = "firebase-admin" },
+    { name = "flasgger" },
+    { name = "flask" },
+    { name = "flask-apscheduler" },
+    { name = "flask-cors" },
+    { name = "flask-jwt-extended" },
+    { name = "flask-restx" },
+    { name = "flask-sqlalchemy" },
+    { name = "geoalchemy2" },
+    { name = "gunicorn" },
+    { name = "marshmallow" },
+    { name = "psycopg2-binary" },
+    { name = "python-dotenv" },
+    { name = "python-json-logger" },
+    { name = "requests" },
+    { name = "sqlalchemy" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "bandit" },
+    { name = "black" },
+    { name = "factory-boy" },
+    { name = "faker" },
+    { name = "mypy" },
+    { name = "pip-audit" },
+    { name = "pre-commit" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "pytest-mock" },
+    { name = "pytest-xdist" },
+    { name = "requests" },
+    { name = "ruff" },
+    { name = "types-requests" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "alembic", specifier = ">=1.13.0" },
+    { name = "buska-core", directory = "../buska-core" },
+    { name = "firebase-admin", specifier = ">=7.2.0" },
+    { name = "flasgger", specifier = ">=0.9.7.1" },
+    { name = "flask", specifier = ">=3.1.2" },
+    { name = "flask-apscheduler", specifier = ">=1.13.1" },
+    { name = "flask-cors", specifier = ">=6.0.1" },
+    { name = "flask-jwt-extended", specifier = ">=4.7.1" },
+    { name = "flask-restx", specifier = ">=1.3.0" },
+    { name = "flask-sqlalchemy", specifier = ">=3.1.1" },
+    { name = "geoalchemy2", specifier = ">=0.18.0" },
+    { name = "gunicorn", specifier = ">=23.0.0" },
+    { name = "marshmallow", specifier = ">=3.20.1" },
+    { name = "psycopg2-binary", specifier = ">=2.9.11" },
+    { name = "python-dotenv", specifier = ">=1.2.1" },
+    { name = "python-json-logger", specifier = ">=2.0.7" },
+    { name = "requests", specifier = ">=2.32.0" },
+    { name = "sqlalchemy", specifier = ">=2.0.44" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "bandit", specifier = ">=1.9.4" },
+    { name = "black", specifier = ">=24.0.0" },
+    { name = "factory-boy", specifier = ">=3.3.0" },
+    { name = "faker", specifier = ">=26.0.0" },
+    { name = "mypy", specifier = ">=1.8.0" },
+    { name = "pip-audit", specifier = ">=2.7.0" },
+    { name = "pre-commit", specifier = ">=3.6.0" },
+    { name = "pytest", specifier = ">=9.0.2" },
+    { name = "pytest-cov", specifier = ">=7.0.0" },
+    { name = "pytest-mock", specifier = ">=3.14.0" },
+    { name = "pytest-xdist", specifier = ">=3.6.0" },
+    { name = "requests", specifier = ">=2.32.0" },
+    { name = "ruff", specifier = ">=0.2.0" },
+    { name = "types-requests", specifier = ">=2.33.0.20260408" },
 ]
 
 [[package]]

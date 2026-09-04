@@ -4,9 +4,9 @@ import logging
 from datetime import UTC, datetime
 from typing import Any
 
+from buska_core.exceptions import AppError, ForbiddenError, NotFoundError, ValidationError
 from firebase_admin import messaging
 
-from app.core.exceptions import AppError, ForbiddenError, NotFoundError, ValidationError
 from app.models.base import db
 from app.models.enum import UserRole
 from app.models.notificacao import Notificacao

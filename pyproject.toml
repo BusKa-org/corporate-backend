@@ -5,6 +5,7 @@ description = "Backend API for MeBusKá - On-demand Corporate Transport"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "buska-core>=0.1.0",
     "flasgger>=0.9.7.1",
     "flask>=3.1.2",
     "flask-cors>=6.0.1",
@@ -23,6 +24,12 @@ dependencies = [
     "firebase-admin>=7.2.0",
     "requests>=2.32.0",
 ]
+
+# Sibling-checkout path source for local dev. NOT valid for CI/Docker, where
+# buska-core won't exist on disk — swap for a pinned git or registry source
+# (see ARQUITETURA_REPOSITORIOS.md §6) before merging.
+[tool.uv.sources]
+buska-core = { path = "../buska-core" }
 
 # ==========================================
 # Tool Configurations

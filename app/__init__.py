@@ -7,6 +7,7 @@ from importlib.metadata import entry_points
 from typing import Any
 
 import firebase_admin
+from buska_core.error_handlers import register_error_handlers, register_jwt_handlers
 from dotenv import load_dotenv
 from firebase_admin import credentials
 from flask import Flask, Response, jsonify
@@ -14,7 +15,6 @@ from flask_cors import CORS
 from flask_jwt_extended import JWTManager
 from flask_restx import Api
 
-from app.core.error_handlers import register_error_handlers, register_jwt_handlers
 from app.extensions import scheduler
 from app.utils.scheduler_setup import init_scheduler
 
