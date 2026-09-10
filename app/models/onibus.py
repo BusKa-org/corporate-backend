@@ -1,24 +1,7 @@
-import uuid
+"""Onibus (veículo) e telemetria de bateria.
 
-from sqlalchemy.dialects.postgresql import UUID
-
-from .base import db
-
-
-class Onibus(db.Model):
-    __tablename__ = "onibus"
-
-    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-
-    organizacao_id = db.Column(
-        UUID(as_uuid=True), db.ForeignKey("organizacao.id", ondelete="CASCADE"), nullable=False
-    )
-
-    placa = db.Column(db.String(10), unique=True, nullable=False)
-    modelo = db.Column(db.String(50))
-    capacidade = db.Column(db.Integer, nullable=False)
-
-    created_at = db.Column(db.DateTime(timezone=True), server_default=db.func.now())
-
-    def __repr__(self):
-        return f"<Onibus {self.placa}>"
+A van é elétrica: além de posição, precisa de SoC, autonomia e consumo por
+km. TODO.md plan 8 (RF-22). `TelemetrySource` fica como interface aqui; o
+adaptador do veículo específico é infraestrutura de deploy, não deste
+módulo.
+"""

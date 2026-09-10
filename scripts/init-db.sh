@@ -2,7 +2,7 @@
 # Inicializa o banco de produção de forma idempotente:
 # - Cria extensão uuid-ossp se não existir
 # - Aplica migrações Alembic (no-op se já estiver em dia)
-# - Roda seed (pula se já houver dados)
+# - Roda seed, quando existir (esqueleto ainda não tem um)
 # NÃO apaga nem altera dados existentes.
 set -e
 
@@ -25,7 +25,6 @@ docker exec "$CONTAINER_DB" psql -U "$DB_USER" -d "$DB_NAME" -c 'CREATE EXTENSIO
 echo "[init-db] Aplicando migrações (Alembic)..."
 python -m alembic upgrade head
 
-echo "[init-db] Rodando seed (será ignorado se já houver dados)..."
-python seed.py
+echo "[init-db] Sem seed.py ainda (esqueleto sem domínio) — pulando."
 
 echo "[init-db] Concluído."

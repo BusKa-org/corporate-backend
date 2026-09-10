@@ -1,7 +1,7 @@
 [project]
 name = "mebuska-corporate"
 version = "0.1.0"
-description = "Backend API for MeBusKá - On-demand Corporate Transport"
+description = "Backend API for PaqTcPB - On-demand Corporate Transport (DRT)"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [

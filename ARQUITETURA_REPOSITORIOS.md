@@ -9,6 +9,14 @@ formalizes decisions that were previously only implicit in `TODO.md` and in
 the shape of `mebuska-deploy`. Needs review from whoever owns the PaqTcPB
 relationship before being treated as settled, particularly §2.
 
+**Atualização de 2026-09-09**: a branch `WendellTMO/parque-tecnologico-backend`
+deste repositório passou a ser escrita do zero, em vez de continuar o fork
+descrito na seção 3. Ver `docs/adr/0001-produto-do-zero-em-vez-de-fork.md`. A
+seção 6 (plano de migração) partia do pressuposto de extrair o núcleo do
+`municipal-backend` e aposentar este repositório depois. Essa branch inverte
+a direção: o domínio nasce aqui, e uma futura extração de núcleo compartilhado
+parte deste repositório, não do `municipal-backend`.
+
 ---
 
 ## 1. Why this document exists

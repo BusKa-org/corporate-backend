@@ -1,9 +1,7 @@
 import json
 import logging
 import os
-from collections.abc import Callable
 from datetime import timedelta
-from importlib.metadata import entry_points
 from typing import Any
 
 import firebase_admin
@@ -18,20 +16,7 @@ from app.core.error_handlers import register_error_handlers, register_jwt_handle
 from app.extensions import scheduler
 from app.utils.scheduler_setup import init_scheduler
 
-from .api.controllers.aluno_controller import api as alunos_ns
-from .api.controllers.auth_controller import api as auth_ns
-from .api.controllers.dashboard_controller import api as dashboard_ns
-from .api.controllers.instituicao_controller import api as inst_ns
-from .api.controllers.notificacao_controller import api as notificacoes_ns
-from .api.controllers.ocorrencia_controller import api as ocorrencias_ns
-from .api.controllers.onibus_controller import api as onibus_ns
-from .api.controllers.pontos_controller import api as pontos_ns
-from .api.controllers.rotas_controller import api as rotas_ns
-from .api.controllers.routing_controller import api as routing_ns
-from .api.controllers.user_controller import api as user_ns
-from .api.controllers.viagens_controller import api as viagem_ns
 from .core.config import Settings
-from .models import Ocorrencia  # noqa: F401 — registers table with SQLAlchemy
 from .models.base import db
 from .utils import (
     check_production_security,
@@ -44,24 +29,14 @@ jwt = JWTManager()
 logger = logging.getLogger(__name__)
 
 
-def _discover_plugins() -> list[Callable[[Flask, Api], None]]:
-    """Load registration callables published under the 'mebuska.plugins' group.
+def create_app(*, config_overrides: dict[str, Any] | None = None) -> Flask:
+    """App factory for the PaqTcPB product.
 
-    Deployment repos (e.g. mebuska-deploy) declare their plugins in
-    pyproject.toml so the product never imports client code by name.
+    No plugin discovery here: unlike the buska-org/corporate-backend fork
+    this replaces, this repo is not a shared core other repos extend, it is
+    the product for one client. See
+    docs/adr/0001-produto-do-zero-em-vez-de-fork.md.
     """
-    eps = sorted(entry_points(group="mebuska.plugins"), key=lambda ep: ep.name)
-    logger.info("Plugins discovered", extra={"plugins": [ep.name for ep in eps]})
-    return [ep.load() for ep in eps]
-
-
-def create_app(
-    *,
-    config_overrides: dict[str, Any] | None = None,
-    # `plugins=None` (default) discovers via entry points; `plugins=[]` disables
-    # discovery entirely — see the registration loop below for the contract.
-    plugins: list[Callable[[Flask, Api], None]] | None = None,
-) -> Flask:
     load_dotenv()
     settings = Settings()
     app = Flask(__name__)
@@ -174,22 +149,13 @@ def create_app(
 
     api = Api(
         app,
-        title="MeBusKá API",
-        version="1.0.0",
+        title="PaqTcPB API",
+        version="0.1.0",
         description="""
-## Sistema de Mobilidade Corporativa sob Demanda
+## Mobilidade corporativa sob demanda — Parque Tecnológico da Paraíba
 
-API para solicitação de viagens, janela de buffer, validação de capacidade por
-segmento, embarque por QR Code e rastreamento de veículos institucionais.
-
-### Autenticação
-Todos os endpoints (exceto `/auth/login`) requerem autenticação JWT.
-Inclua o header: `Authorization: Bearer <seu_token>`
-
-### Roles
-- **ALUNO**: Solicita viagens, declara origem/destino, acompanha o veículo
-- **MOTORISTA**: Inicia percurso, valida embarques, executa o roteiro
-- **GESTOR**: Acesso completo à organização (pontos, janelas, frota, relatórios)
+Nenhum namespace registrado ainda: esqueleto inicial, sem regra de negócio.
+Ver docs/adr/0001-produto-do-zero-em-vez-de-fork.md.
         """,
         doc="/docs",
         authorizations=authorizations,
@@ -197,23 +163,8 @@ Inclua o header: `Authorization: Bearer <seu_token>`
         contact="BusKá Team",
     )
 
-    # API v1 routes
-    api.add_namespace(auth_ns, path="/v1/auth")
-    api.add_namespace(user_ns, path="/v1/users")
-    api.add_namespace(notificacoes_ns, path="/v1/notificacoes")
-    api.add_namespace(onibus_ns, path="/v1/onibus")
-    api.add_namespace(rotas_ns, path="/v1/rotas")
-    api.add_namespace(pontos_ns, path="/v1/pontos")
-    api.add_namespace(routing_ns, path="/v1/routing")
-    api.add_namespace(viagem_ns, path="/v1/viagens")
-    api.add_namespace(inst_ns, path="/v1/instituicoes")
-    api.add_namespace(alunos_ns, path="/v1/alunos")
-    api.add_namespace(ocorrencias_ns, path="/v1/ocorrencias")
-    api.add_namespace(dashboard_ns, path="/v1/dashboard")
-
-    # Client-specific extensions — see `plugins` param contract on the signature.
-    for register in (_discover_plugins() if plugins is None else plugins):
-        register(app, api)
+    # API v1 routes — nenhuma ainda. Cada controller se registra aqui quando
+    # o recurso correspondente ganhar schema e service reais.
 
     # ==========================================
     # Error Handlers
@@ -255,7 +206,7 @@ Inclua o header: `Authorization: Bearer <seu_token>`
         return (
             jsonify(
                 status="ok",
-                service="mebuska-corporate",
+                service="paqtcpb-backend",
                 environment=settings.ENV,
             ),
             200,

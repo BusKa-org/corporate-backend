@@ -4,15 +4,18 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- Rebuilt as a from-scratch skeleton instead of a fork of `municipal-backend`.
+  See `docs/adr/0001-produto-do-zero-em-vez-de-fork.md`. Pipeline (Flask,
+  SQLAlchemy + PostGIS, `uv`, pytest/ruff/black/mypy, pre-commit, CI, Docker)
+  carried over as-is; all forked domain code (`Aluno`, `Instituicao`,
+  `Organizacao` multi-tenancy, route/trip controllers and services) removed.
+
 ### Added
-- Initial codebase, copied from `municipal-backend` at `v1.2.0`.
-  Shared foundation: authentication, users, fleet, geographic points,
-  notifications, tracking, error handling, logging, Docker, CI.
+- App factory with config, error handling, security headers, `/health` and
+  `/ready`, no domain namespaces registered yet.
+- Empty domain packages (`models`, `schemas`, `services`, `api`, `tasks`)
+  with one stub file per future model, each documenting what lands there.
 
 ### To do
-- Remove municipal-specific modules (route subscription, batch trip generation)
-- Rename `Prefeitura` → `Organizacao`
-- Add on-demand trip lifecycle: `Ociosa → Solicitada → Buffer aberto → Em rota → Finalizada`
-- Add segment capacity vector (Redis)
-- Add QR boarding credentials and offline-first driver sync
-- Refactor `create_app()` for entry-point plugin discovery
+See `TODO.md` for the full plan list.
