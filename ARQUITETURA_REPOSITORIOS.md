@@ -63,6 +63,27 @@ in one undifferentiated tree. Nobody can point at "the PaqTcPB-owned part"
 without file-by-file archaeology. That ambiguity is itself a risk, independent
 of how §2 resolves.
 
+### 3.1 Current module manifest (`app/models`)
+
+Three of the four originally mixed files are now split, resolving the
+archaeology problem above for the model layer. Added 2026-09-09.
+
+| File | Owner | Notes |
+|---|---|---|
+| `user.py` | Background IP | `User`, `Motorista`, `Gestor` |
+| `aluno.py` | BusKá only | `Aluno`, split out of `user.py`, still a `User` subclass |
+| `geo.py` | Background IP | `Ponto`, `Endereco` |
+| `instituicao.py` | BusKá only | `Instituicao`, `TipoInstituicao`, split out of `geo.py` |
+| `enum.py` | Background IP | `TipoInstituicao` moved out to `instituicao.py` |
+| `organizacao.py`, `rota.py`, `viagem.py`, `onibus.py`, `notificacao.py`, `password_reset.py` | Background IP | unmixed already |
+
+`app/__init__.py` is the fourth file the earlier inventory flagged as mixed.
+It still hardcodes the product's own namespaces (`aluno`, `instituicao`
+included) alongside plugin discovery, since removing BusKá's controllers
+from the product's own registration list is a service-layer decision (which
+controllers keep running here), not a model split — out of scope for this
+pass.
+
 ## 4. Target architecture
 
 **Rule: the code boundary matches both the ownership boundary and the
