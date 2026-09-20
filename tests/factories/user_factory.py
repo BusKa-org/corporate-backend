@@ -3,8 +3,9 @@ import uuid
 import factory
 from werkzeug.security import generate_password_hash
 
+from app.models.aluno import Aluno
 from app.models.enum import UserRole
-from app.models.user import Aluno, Gestor, Motorista
+from app.models.user import Gestor, Motorista
 
 
 class GestorFactory(factory.Factory):

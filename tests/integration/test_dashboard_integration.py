@@ -5,10 +5,11 @@ from datetime import date, datetime, time, timedelta
 import pytest
 
 from app.core.exceptions import ForbiddenError
+from app.models.aluno import Aluno
 from app.models.enum import SentidoViagem, StatusViagem, UserRole
 from app.models.geo import Ponto
 from app.models.rota import HorarioRota, Rota
-from app.models.user import Aluno, Gestor, Motorista
+from app.models.user import Gestor, Motorista
 from app.models.viagem import AlunosConfirmados, TelemetriaViagem, Viagem, ViagemPonto
 from app.services.dashboard_service import (
     obter_progresso_viagem,

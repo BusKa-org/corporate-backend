@@ -4,7 +4,6 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
 from .base import db
-from .enum import TipoInstituicao
 
 
 class Ponto(db.Model):
@@ -59,50 +58,6 @@ class Endereco(db.Model):
     ponto = relationship("Ponto", back_populates="endereco")
 
 
-class Instituicao(db.Model):
-    __tablename__ = "instituicao"
-
-    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-
-    fonte = db.Column(db.String(20), nullable=False)  # "EMEC" | "INEP" | "MANUAL"
-    codigo_externo = db.Column(db.String(30), nullable=False)
-
-    nome = db.Column(db.String(200), nullable=False)
-    sigla = db.Column(db.String(40))
-    cnpj = db.Column(db.String(20))
-
-    tipo = db.Column(
-        db.Enum(TipoInstituicao, name="tipo_instituicao"),
-        nullable=False,
-    )
-
-    uf = db.Column(db.String(2), nullable=False, index=True)
-
-    organizacao_id = db.Column(
-        UUID(as_uuid=True),
-        db.ForeignKey("organizacao.id"),
-        nullable=False,
-        index=True,
-    )
-
-    organizacao = db.relationship("Organizacao", lazy="joined")
-
-    situacao = db.Column(db.String(80))
-    categoria_administrativa = db.Column(db.String(80))
-    organizacao_academica = db.Column(db.String(80))
-
-    ponto_id = db.Column(
-        UUID(as_uuid=True),
-        db.ForeignKey("ponto.id", ondelete="CASCADE"),
-        nullable=True,
-    )
-
-    ponto = relationship("Ponto", back_populates="instituicao")
-
-    __table_args__ = (
-        db.UniqueConstraint(
-            "fonte",
-            "codigo_externo",
-            name="uq_instituicao_fonte_codigo_externo",
-        ),
-    )
+# Instituicao (BusKá-only) moved to app/models/instituicao.py — see that file's
+# docstring. Ponto.instituicao above resolves it by name at mapper-configure
+# time, same as before; app/models/__init__.py imports it so it registers.

@@ -7,8 +7,9 @@ from sqlalchemy import or_
 
 from app.core.exceptions import AppError, ForbiddenError, NotFoundError, ValidationError
 from app.models.base import db
-from app.models.enum import TipoInstituicao, UserRole
-from app.models.geo import Endereco, Instituicao, Ponto
+from app.models.enum import UserRole
+from app.models.geo import Endereco, Ponto
+from app.models.instituicao import Instituicao, TipoInstituicao
 from app.models.organizacao import Organizacao
 from app.models.user import User
 

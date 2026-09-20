@@ -1,13 +1,7 @@
 import enum
 
-
-class TipoInstituicao(enum.Enum):
-    INSTITUTO_FEDERAL = "Instituto Federal"
-    UNIVERSIDADE_PUBLICA = "Universidade Pública"
-    UNIVERSIDADE_PRIVADA = "Universidade Privada"
-    ESCOLA_PUBLICA = "Escola Pública"
-    ESCOLA_PRIVADA = "Escola Privada"
-    ESCOLA_COMUNITARIA = "Escola Comunitária"
+# TipoInstituicao (BusKá-only) moved to app/models/instituicao.py — the other
+# enums here are shared-core vocabulary (transport, roles, occurrences).
 
 
 class DiaDaSemana(enum.Enum):

@@ -1,10 +1,11 @@
 import logging
 from datetime import datetime, timedelta
 
+from app.models.aluno import Aluno
 from app.models.base import db
 from app.models.enum import StatusViagem
 from app.models.rota import RotaAluno
-from app.models.user import Aluno, User
+from app.models.user import User
 from app.models.viagem import AlunosConfirmados, Viagem
 from app.services.notificacao_service import NotificacaoService
 

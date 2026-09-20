@@ -13,9 +13,10 @@ from app.core.exceptions import (
     UnauthorizedError,
     ValidationError,
 )
+from app.models.aluno import Aluno
 from app.models.base import db
 from app.models.enum import UserRole, UserStatus
-from app.models.user import Aluno, Gestor, Motorista, User
+from app.models.user import Gestor, Motorista, User
 from app.utils import audit_logger, validate_cpf, validate_email, validate_password, validate_uuid
 
 logger = logging.getLogger(__name__)

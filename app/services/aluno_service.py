@@ -13,10 +13,12 @@ from app.core.exceptions import (
     NotFoundError,
     ValidationError,
 )
+from app.models.aluno import Aluno
 from app.models.base import db
 from app.models.enum import UserRole, UserStatus
-from app.models.geo import Endereco, Instituicao, Ponto
-from app.models.user import Aluno, User
+from app.models.geo import Endereco, Ponto
+from app.models.instituicao import Instituicao
+from app.models.user import User
 from app.services.user_service import _get_gestor_or_403
 from app.utils import audit_logger, validate_cpf, validate_email, validate_password
 from app.utils.email_sender import send_email

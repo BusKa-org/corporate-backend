@@ -13,11 +13,12 @@ from app.core.exceptions import (
 )
 from app.core.transaction import transactional
 from app.extensions import scheduler
+from app.models.aluno import Aluno
 from app.models.base import db
 from app.models.enum import DiaDaSemana, SentidoViagem, StatusViagem, UserRole
 from app.models.geo import Ponto
 from app.models.rota import DiasOperacao, HorarioRota, Rota, RotaAluno, RotaPonto
-from app.models.user import Aluno, User
+from app.models.user import User
 from app.models.viagem import AlunosConfirmados, TelemetriaViagem, Viagem, ViagemPonto
 from app.services.notificacao_service import NotificacaoService
 from app.tasks.viagem_tasks import realizar_auto_checkin
