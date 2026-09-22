@@ -4,9 +4,10 @@ from flask import request
 from flask_jwt_extended import get_jwt_identity, jwt_required
 from flask_restx import Namespace, Resource
 
-from app.api.contracts import ponto_contract, viagem_contract
+from app.api.contracts import credencial_embarque_contract, ponto_contract, viagem_contract
 from app.api.contracts.viagem_parsers import parsers
 from app.core.exceptions import ValidationError
+from app.schemas.credencial_embarque_schema import CredencialEmbarqueResponseSchema
 from app.schemas.ponto_schema import (
     PontoFlatListResponseSchema,
 )
@@ -21,11 +22,12 @@ from app.schemas.viagem_schema import (
     ViagemListResponseSchema,
     ViagemResponseSchema,
 )
-from app.services import viagens_service
+from app.services import credencial_embarque_service, viagens_service
 
 api = Namespace("viagens", description="Execução de Viagens")
 
 ponto_models = ponto_contract.register_models(api)
+credencial_embarque_models = credencial_embarque_contract.register_models(api)
 
 # API contracts (Swagger documentation)
 models = viagem_contract.register_models(api)
@@ -46,6 +48,7 @@ viagem_agenda_aluno_list_response_schema = ViagemAgendaAlunoListResponseSchema()
 
 
 ponto_flat_list_response_schema = PontoFlatListResponseSchema()
+credencial_embarque_response_schema = CredencialEmbarqueResponseSchema()
 
 
 @api.route("/aluno/agenda")
@@ -85,6 +88,18 @@ class ViagemPontosResource(Resource):
             ),
             200,
         )
+
+
+@api.route("/<string:id>/credencial-embarque")
+class ViagemCredencialEmbarqueResource(Resource):
+    @api.doc("get_credencial_embarque_viagem")
+    @api.response(200, "Success", credencial_embarque_models["credencial_embarque_response"])
+    @jwt_required()
+    def get(self, id: str) -> tuple[dict[str, Any], int]:
+        """Retorna o QR de embarque do aluno autenticado para esta viagem."""
+        user_id = get_jwt_identity()
+        credencial = credencial_embarque_service.buscar_credencial_do_aluno(user_id, id)
+        return credencial_embarque_response_schema.dump(credencial), 200
 
 
 @api.route("/<string:id>/confirmacao")

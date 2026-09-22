@@ -79,6 +79,7 @@ class Aluno(User):
         UUID(as_uuid=True), db.ForeignKey("usuario.id", ondelete="CASCADE"), primary_key=True
     )
     matricula = db.Column(db.String(50))
+    foto_url = db.Column(db.String(255))
 
     # Guardian (single responsible person, replaces the old pai/mae pair)
     nome_responsavel = db.Column(db.String(100))
