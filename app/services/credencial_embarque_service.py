@@ -7,11 +7,12 @@ ou valida a credencial correspondente. Não decide quem embarca.
 import secrets
 from datetime import UTC, datetime, timedelta
 
-from app.core.exceptions import NotFoundError, ValidationError
+from app.core.exceptions import ForbiddenError, NotFoundError, ValidationError
 from app.core.transaction import transactional
 from app.models.base import db
 from app.models.credencial_embarque import CredencialEmbarque
-from app.models.enum import StatusViagem
+from app.models.enum import StatusViagem, UserRole
+from app.models.user import User
 from app.models.viagem import Viagem
 
 # ponytail: janela fixa até o Plan 2 (ciclo de vida da viagem) dar um sinal
@@ -44,6 +45,24 @@ def gerar_credencial(viagem_id: str, aluno_id: str, ponto_embarque_id: str) -> C
         db.session.flush()
 
         return credencial
+
+
+def buscar_credencial_do_aluno(user_id: str, viagem_id: str) -> CredencialEmbarque:
+    """
+    Busca a credencial de embarque do aluno autenticado para uma viagem, para
+    o app do passageiro exibir o QR.
+
+    Raises: ForbiddenError, NotFoundError
+    """
+    user = db.session.get(User, user_id)
+    if not user or user.role != UserRole.ALUNO:
+        raise ForbiddenError("Acesso restrito a alunos")
+
+    credencial = CredencialEmbarque.query.filter_by(viagem_id=viagem_id, aluno_id=user_id).first()
+    if not credencial:
+        raise NotFoundError("Credencial de embarque não encontrada")
+
+    return credencial
 
 
 def validar_credencial(token: str) -> CredencialEmbarque:

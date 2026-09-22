@@ -129,3 +129,53 @@ def test_validar_credencial_nao_altera_estado(
 
     _db.session.refresh(credencial)
     assert credencial.usado is False
+
+
+def test_get_credencial_embarque_requires_auth(client, viagem_futura_agendada_com_motorista):
+    r = client.get(f"/v1/viagens/{viagem_futura_agendada_com_motorista.id}/credencial-embarque")
+    assert r.status_code in (401, 422)
+
+
+def test_get_credencial_embarque_only_allows_aluno(gestor, viagem_futura_agendada_com_motorista):
+    r = gestor.client.get(
+        f"/v1/viagens/{viagem_futura_agendada_com_motorista.id}/credencial-embarque"
+    )
+    assert r.status_code == 403
+
+
+def test_get_credencial_embarque_not_generated_yet(aluno, viagem_futura_agendada_com_motorista):
+    r = aluno.client.get(
+        f"/v1/viagens/{viagem_futura_agendada_com_motorista.id}/credencial-embarque"
+    )
+    assert r.status_code == 404
+
+
+def test_get_credencial_embarque_sucesso(_db, aluno, ponto, viagem_futura_agendada_com_motorista):
+    credencial = credencial_embarque_service.gerar_credencial(
+        viagem_id=viagem_futura_agendada_com_motorista.id,
+        aluno_id=aluno.user.id,
+        ponto_embarque_id=ponto.id,
+    )
+
+    r = aluno.client.get(
+        f"/v1/viagens/{viagem_futura_agendada_com_motorista.id}/credencial-embarque"
+    )
+
+    assert r.status_code == 200
+    assert r.json["token"] == credencial.token
+
+
+def test_get_credencial_embarque_nao_vaza_para_outro_aluno(
+    _db, aluno, other_aluno, ponto, viagem_futura_agendada_com_motorista
+):
+    credencial_embarque_service.gerar_credencial(
+        viagem_id=viagem_futura_agendada_com_motorista.id,
+        aluno_id=aluno.user.id,
+        ponto_embarque_id=ponto.id,
+    )
+
+    r = other_aluno.client.get(
+        f"/v1/viagens/{viagem_futura_agendada_com_motorista.id}/credencial-embarque"
+    )
+
+    assert r.status_code == 404
