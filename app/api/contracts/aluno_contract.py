@@ -108,7 +108,19 @@ def register_models(api):
         },
     )
 
+    aprovar_lote_request = api.model(
+        "AlunoAprovarLoteRequest",
+        {
+            "emails": fields.List(fields.String, description="E-mails exatos a aprovar"),
+            "dominio": fields.String(
+                description="Domínio do e-mail, ex.: equipe.corp.org ou *@equipe.corp.org"
+            ),
+            "instituicao_id": fields.String(description="UUID da instituição"),
+        },
+    )
+
     return {
+        "aprovar_lote_request": aprovar_lote_request,
         "aluno_provision_account_request": aluno_provision_account_request,
         "self_signup_request": self_signup_request,
         "me_update_request": me_update_request,

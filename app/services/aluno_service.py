@@ -5,6 +5,7 @@ import secrets
 from typing import Any, cast
 
 from flask import current_app
+from sqlalchemy import func
 from werkzeug.security import generate_password_hash
 
 from app.core.exceptions import (
@@ -16,7 +17,7 @@ from app.core.exceptions import (
 from app.models.base import db
 from app.models.enum import UserRole, UserStatus
 from app.models.geo import Endereco, Instituicao, Ponto
-from app.models.user import Aluno, User
+from app.models.user import Aluno, Gestor, User
 from app.services.user_service import _get_gestor_or_403
 from app.utils import audit_logger, validate_cpf, validate_email, validate_password
 from app.utils.email_sender import send_email
@@ -75,6 +76,18 @@ def _send_guardian_consent_email(aluno: Aluno) -> None:
         logger.exception("Failed to send guardian consent email for aluno %s", aluno.id)
 
 
+def _notificar_gestores_cadastro_pendente(aluno: Aluno, mensagem: str) -> None:
+    from app.services.notificacao_service import NotificacaoService
+
+    gestores = db.session.query(Gestor).filter_by(organizacao_id=aluno.organizacao_id).all()
+    for gestor in gestores:
+        NotificacaoService._criar_notificacao_interna(
+            usuario_id=str(gestor.id),
+            titulo="Novo cadastro aguardando aprovação",
+            mensagem=f"{mensagem} Acesse a tela Equipe para aprovar.",
+        )
+
+
 # ─── Guardian consent ──────────────────────────────────────────────────────────
 
 
@@ -108,26 +121,14 @@ def record_guardian_consent(token: str) -> Aluno:
             raise ValidationError("Este link expirou. Peça ao estudante que refaça o cadastro.")
 
     try:
-        from app.services.notificacao_service import NotificacaoService
-
         aluno.guardian_consented_at = db.func.now()
         aluno.guardian_token = None  # single-use
         aluno.status = UserStatus.PENDING_APPROVAL
         db.session.flush()
 
-        # Notify the gestor(s) of the organizacao
-        from app.models.user import Gestor
-
-        gestores = db.session.query(Gestor).filter_by(organizacao_id=aluno.organizacao_id).all()
-        for gestor in gestores:
-            NotificacaoService._criar_notificacao_interna(
-                usuario_id=str(gestor.id),
-                titulo="Novo cadastro aguardando aprovação",
-                mensagem=(
-                    f"O responsável do aluno {aluno.nome} autorizou o cadastro. "
-                    "Acesse a tela Equipe para aprovar."
-                ),
-            )
+        _notificar_gestores_cadastro_pendente(
+            aluno, f"O responsável do aluno {aluno.nome} autorizou o cadastro."
+        )
 
         db.session.commit()
         return aluno
@@ -337,8 +338,8 @@ def update_me(user_id: str, data: dict[str, Any]) -> Aluno:
                     details={"missing": missing},
                 )
 
-            aluno.status = UserStatus.ACTIVE
-            aluno.signup_completed_at = db.func.now()
+            aluno.status = UserStatus.PENDING_APPROVAL
+            _notificar_gestores_cadastro_pendente(aluno, f"{aluno.nome} concluiu o cadastro.")
             audit_logger.log_user_action(
                 action="complete_signup",
                 user_id=user_id,
@@ -415,6 +416,58 @@ def list_alunos_gestor(gestor_id: str, status: str | None = None) -> list[Aluno]
     return q.all()
 
 
+def _ativar(aluno: Aluno) -> None:
+    from app.services.notificacao_service import NotificacaoService
+
+    aluno.status = UserStatus.ACTIVE
+    aluno.signup_completed_at = db.func.now()
+    NotificacaoService._criar_notificacao_interna(
+        usuario_id=str(aluno.id),
+        titulo="Cadastro Aprovado!",
+        mensagem="Seu cadastro foi aprovado pelo gestor. Você já pode confirmar presença nas viagens.",
+    )
+
+
+def aprovar_alunos_em_lote(gestor_id: str, data: dict[str, Any]) -> list[Aluno]:
+    """
+    Gestor aprova de uma vez os alunos PENDING_APPROVAL da organização que casam
+    com todos os filtros informados: lista de e-mails, domínio do e-mail e/ou instituição.
+
+    Returns: alunos aprovados (lista vazia se nenhum casar)
+    Raises: ForbiddenError, AppError
+    """
+    gestor = _get_gestor_or_403(gestor_id, "Apenas gestores podem aprovar alunos")
+
+    q = db.session.query(Aluno).filter(
+        Aluno.organizacao_id == gestor.organizacao_id,
+        Aluno.status == UserStatus.PENDING_APPROVAL,
+    )
+    if data.get("emails"):
+        q = q.filter(func.lower(Aluno.email).in_(data["emails"]))
+    if data.get("dominio"):
+        q = q.filter(func.lower(Aluno.email).endswith("@" + data["dominio"], autoescape=True))
+    if data.get("instituicao_id"):
+        q = q.filter(Aluno.instituicao_id == data["instituicao_id"])
+
+    try:
+        alunos = q.with_for_update(of=User).all()
+        for aluno in alunos:
+            _ativar(aluno)
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error approving students in batch: {e}")
+        raise AppError(f"Erro ao aprovar alunos: {str(e)}", 500)
+
+    audit_logger.log_user_action(
+        action="aprovar_alunos_em_lote",
+        user_id=gestor_id,
+        resource_type="aluno",
+        details={"filtros": {k: str(v) for k, v in data.items()}, "aprovados": len(alunos)},
+    )
+    return alunos
+
+
 def aprovar_aluno(gestor_id: str, aluno_id: str) -> Aluno:
     """
     Gestor aprova um aluno com PENDING_APPROVAL, ativando sua conta.
@@ -423,7 +476,6 @@ def aprovar_aluno(gestor_id: str, aluno_id: str) -> Aluno:
     Raises: ForbiddenError, NotFoundError, ValidationError
     """
     from app.core.exceptions import ForbiddenError
-    from app.services.notificacao_service import NotificacaoService
 
     gestor = _get_gestor_or_403(gestor_id, "Apenas gestores podem aprovar alunos")
     aluno = db.session.get(Aluno, aluno_id)
@@ -436,19 +488,7 @@ def aprovar_aluno(gestor_id: str, aluno_id: str) -> Aluno:
         raise ValidationError("Aluno não está aguardando aprovação")
 
     try:
-        aluno.status = UserStatus.ACTIVE
-        aluno.signup_completed_at = db.func.now()
-        db.session.flush()
-
-        NotificacaoService._criar_notificacao_interna(
-            usuario_id=str(aluno.id),
-            titulo="Cadastro Aprovado!",
-            mensagem=(
-                "Seu cadastro foi aprovado pelo gestor. "
-                "Você já pode confirmar presença nas viagens."
-            ),
-        )
-
+        _ativar(aluno)
         db.session.commit()
         audit_logger.log_user_action(
             action="aprovar_aluno",

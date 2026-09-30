@@ -97,6 +97,16 @@ def login_user(data: dict[str, Any]) -> dict[str, Any]:
         )
         raise ForbiddenError("Sua conta está desativada. Entre em contato com o gestor municipal.")
 
+    if user.status == UserStatus.PENDING_APPROVAL:
+        audit_logger.log_auth(
+            action="login_attempt",
+            user_id=str(user.id),
+            email=email,
+            success=False,
+            details={"reason": "pending_approval"},
+        )
+        raise ForbiddenError("Seu cadastro aguarda aprovação do gestor.")
+
     # Block minors whose guardian has not yet consented
     if (
         user.role == UserRole.ALUNO

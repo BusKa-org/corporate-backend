@@ -1,4 +1,4 @@
-from marshmallow import fields, validate
+from marshmallow import ValidationError, fields, post_load, validate, validates_schema
 
 from app.schemas.common import BaseSchema
 from app.schemas.endereco_schema import EnderecoInputSchema
@@ -62,6 +62,31 @@ class AlunoMeUpdateRequestSchema(BaseSchema):
     )
 
     endereco_casa = fields.Nested(EnderecoInputSchema, load_default=None, allow_none=True)
+
+
+class AlunoAprovarLoteRequestSchema(BaseSchema):
+    """Gestor aprova em lote. Os filtros informados se combinam (E)."""
+
+    emails = fields.List(fields.Email(), validate=validate.Length(min=1))
+    dominio = fields.String(
+        validate=validate.Regexp(
+            r"^(\*?@)?[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)+$", error="Domínio inválido"
+        )
+    )
+    instituicao_id = fields.UUID()
+
+    @validates_schema
+    def exige_um_filtro(self, data, **kwargs):
+        if not data:
+            raise ValidationError("Informe emails, dominio ou instituicao_id")
+
+    @post_load
+    def normaliza(self, data, **kwargs):
+        if "emails" in data:
+            data["emails"] = [e.lower() for e in data["emails"]]
+        if "dominio" in data:
+            data["dominio"] = data["dominio"].lower().lstrip("*@")
+        return data
 
 
 class AlunoGuardianConsentPublicSchema(BaseSchema):
