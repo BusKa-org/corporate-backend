@@ -1,5 +1,6 @@
 from marshmallow import fields, validate
 
+from app.models.enum import TipoViagem
 from app.schemas.common import BaseSchema
 
 from .horario_schema import HorarioResponseSchema
@@ -31,10 +32,18 @@ class RotaHorarioCreateRequestSchema(BaseSchema):
     dias = fields.List(fields.String(), required=True)
 
 
+# Limites dos parâmetros sob demanda, em minutos.
+BUFFER_MINUTOS_RANGE = validate.Range(min=1, max=30)
+PRAZO_INICIO_MINUTOS_RANGE = validate.Range(min=1, max=120)
+
+
 class RotaCreateRequestSchema(BaseSchema):
     """Schema for creating a new route."""
 
     nome = fields.String(required=True)
+    tipo = fields.Enum(TipoViagem, load_default=TipoViagem.FIXA)
+    buffer_minutos = fields.Integer(load_default=None, validate=BUFFER_MINUTOS_RANGE)
+    prazo_inicio_minutos = fields.Integer(load_default=None, validate=PRAZO_INICIO_MINUTOS_RANGE)
     motorista_padrao_id = fields.String(load_default=None)
     veiculo_padrao_id = fields.String(load_default=None)
     pontos = fields.List(fields.Nested(RotaPontoAddRequestSchema), load_default=[])
@@ -51,6 +60,8 @@ class RotaUpdateRequestSchema(BaseSchema):
     nome = fields.String()
     motorista_padrao_id = fields.String(allow_none=True)
     veiculo_padrao_id = fields.String(allow_none=True)
+    buffer_minutos = fields.Integer(validate=BUFFER_MINUTOS_RANGE)
+    prazo_inicio_minutos = fields.Integer(validate=PRAZO_INICIO_MINUTOS_RANGE)
 
 
 # ==========================================
@@ -61,6 +72,9 @@ class RotaUpdateRequestSchema(BaseSchema):
 class RotaResponseSchema(BaseSchema):
     id = fields.String()
     nome = fields.String()
+    tipo = fields.Enum(TipoViagem)
+    buffer_minutos = fields.Integer()
+    prazo_inicio_minutos = fields.Integer()
     motorista_id = fields.Method("get_motorista_id")
     veiculo_id = fields.Method("get_veiculo_id")
     organizacao_id = fields.String()

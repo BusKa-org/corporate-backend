@@ -43,6 +43,13 @@ def register_models(api):
         "RotaCreateRequest",
         {
             "nome": fields.String(required=True, description="Nome da rota"),
+            "tipo": fields.String(description="FIXA (padrão) ou SOB_DEMANDA"),
+            "buffer_minutos": fields.Integer(
+                description="SOB_DEMANDA: duração do buffer (1-30 min, padrão 5)"
+            ),
+            "prazo_inicio_minutos": fields.Integer(
+                description="SOB_DEMANDA: prazo do motorista para iniciar (1-120 min, padrão 10)"
+            ),
             "motorista_padrao_id": fields.String(description="UUID do motorista padrão"),
             "veiculo_padrao_id": fields.String(description="UUID do veículo padrão"),
             "pontos": fields.List(
@@ -58,6 +65,12 @@ def register_models(api):
         "RotaUpdateRequest",
         {
             "nome": fields.String(required=True, description="Nome da rota"),
+            "buffer_minutos": fields.Integer(
+                description="SOB_DEMANDA: duração do buffer (1-30 min)"
+            ),
+            "prazo_inicio_minutos": fields.Integer(
+                description="SOB_DEMANDA: prazo do motorista para iniciar (1-120 min)"
+            ),
             "motorista_padrao_id": fields.String(description="UUID do motorista padrão"),
             "veiculo_padrao_id": fields.String(description="UUID do veículo padrão"),
             "pontos": fields.List(
@@ -74,6 +87,13 @@ def register_models(api):
         {
             "id": fields.String(description="UUID"),
             "nome": fields.String(description="Nome"),
+            "tipo": fields.String(description="FIXA ou SOB_DEMANDA"),
+            "buffer_minutos": fields.Integer(
+                description="SOB_DEMANDA: duração do buffer (1-30 min)"
+            ),
+            "prazo_inicio_minutos": fields.Integer(
+                description="SOB_DEMANDA: prazo do motorista para iniciar (1-120 min)"
+            ),
             "motorista_id": fields.String(description="UUID do motorista padrão"),
             "veiculo_id": fields.String(description="UUID do veículo padrão"),
             "organizacao_id": fields.String(description="UUID da organização"),
