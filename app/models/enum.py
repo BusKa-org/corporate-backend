@@ -26,6 +26,11 @@ class SentidoViagem(enum.Enum):
     CIRCULAR = "CIRCULAR"
 
 
+class TipoViagem(enum.Enum):
+    FIXA = "FIXA"
+    SOB_DEMANDA = "SOB_DEMANDA"
+
+
 class StatusViagem(enum.Enum):
     AGENDADA = "AGENDADA"
     EM_ANDAMENTO = "EM_ANDAMENTO"
