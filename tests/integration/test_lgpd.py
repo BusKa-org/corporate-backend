@@ -4,12 +4,14 @@ from datetime import UTC, date, datetime, timedelta
 
 from app.models.consentimento import REVOGACAO, Consentimento
 from app.models.enum import StatusViagem, UserStatus
+from app.models.geo import Endereco, Ponto
 from app.models.notificacao import Notificacao
 from app.models.retencao_legal import RetencaoLegal
 from app.models.user import Aluno
 from app.models.viagem import AlunosConfirmados
 from app.services import conta_service
 from app.services.consentimento_service import VERSAO_TERMO_VIGENTE
+from tests.factories.geo_factory import PontoFactory
 from tests.factories.user_factory import AlunoFactory
 from tests.factories.viagem_factory import AlunosConfirmadosFactory, ViagemFactory
 from tests.helpers.auth import login_and_get_headers
@@ -137,6 +139,12 @@ def test_excluir_conta_anonimiza_e_preserva_historico(
     cpf_original = aluno.user.cpf
     aluno.user.nome_responsavel = "Responsável Teste"
     aluno.user.matricula = "12345"
+    ponto_casa = PontoFactory(organizacao_id=aluno.user.organizacao_id)
+    _db.session.add(ponto_casa)
+    _db.session.flush()
+    _db.session.add(Endereco(ponto_id=ponto_casa.id, logradouro="Rua das Flores", numero="10"))
+    aluno.user.ponto_casa_id = ponto_casa.id
+    ponto_casa_id = ponto_casa.id
     _db.session.add(Notificacao(usuario_id=aluno_id, titulo="Aviso", mensagem="Teste"))
     viagem_finalizada = ViagemFactory(
         horario_rota_id=horario_rota.id,
@@ -170,6 +178,9 @@ def test_excluir_conta_anonimiza_e_preserva_historico(
     assert excluido.email != email_original
     assert excluido.matricula is None
     assert excluido.nome_responsavel is None
+    assert excluido.ponto_casa_id is None
+    assert _db.session.get(Ponto, ponto_casa_id) is None
+    assert Endereco.query.filter_by(ponto_id=ponto_casa_id).count() == 0
 
     assert Notificacao.query.filter_by(usuario_id=aluno_id).count() == 0
     presencas = AlunosConfirmados.query.filter_by(aluno_id=aluno_id).all()

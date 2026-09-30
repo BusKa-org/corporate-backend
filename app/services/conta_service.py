@@ -15,6 +15,7 @@ from app.core.transaction import transactional
 from app.models.base import db
 from app.models.consentimento import REVOGACAO, Consentimento
 from app.models.enum import StatusViagem, UserRole, UserStatus
+from app.models.geo import Endereco, Ponto
 from app.models.notificacao import Notificacao
 from app.models.password_reset import PasswordResetToken
 from app.models.retencao_legal import RetencaoLegal
@@ -63,12 +64,22 @@ def _anonimizar(user: User) -> None:
         user.matricula = None
         user.foto_url = None
         user.data_nascimento = None
-        user.ponto_casa_id = None
         user.nome_responsavel = None
         user.cpf_responsavel = None
         user.email_responsavel = None
         user.guardian_token = None
         user.guardian_consented_at = None
+
+
+def _apagar_ponto_casa(user: User) -> None:
+    """Latitude, longitude e endereço da casa do aluno não têm valor estatístico."""
+    if not isinstance(user, Aluno) or user.ponto_casa_id is None:
+        return
+    ponto_id = user.ponto_casa_id
+    user.ponto_casa_id = None
+    db.session.flush()
+    Endereco.query.filter_by(ponto_id=ponto_id).delete()
+    Ponto.query.filter_by(id=ponto_id).delete()
 
 
 def _apagar_dados_sem_valor_estatistico(aluno_id) -> None:
@@ -114,6 +125,7 @@ def excluir_conta(user_id: str, email: str, senha: str) -> None:
     aluno_id = user.id
 
     with transactional():
+        _apagar_ponto_casa(user)
         _apagar_dados_sem_valor_estatistico(aluno_id)
         db.session.add(
             RetencaoLegal(

@@ -355,29 +355,6 @@ def update_me(user_id: str, data: dict[str, Any]) -> Aluno:
         raise AppError(f"Erro ao atualizar perfil: {str(e)}", 500)
 
 
-def delete_me(user_id: str) -> None:
-    """
-    Aluno se auto-exclui.
-
-    Raises: NotFoundError, AppError
-    """
-    aluno = db.session.get(Aluno, user_id)
-    if not aluno:
-        raise NotFoundError("Aluno não encontrado")
-
-    try:
-        if aluno.ponto_casa:
-            db.session.delete(aluno.ponto_casa)
-
-        db.session.delete(aluno)
-        db.session.commit()
-
-    except Exception as e:
-        db.session.rollback()
-        logger.error(f"Error deleting student account: {e}")
-        raise AppError(f"Erro ao excluir conta: {str(e)}", 500)
-
-
 def get_aluno_by_id(gestor_id: str, aluno_id: str) -> Aluno:
     """
     Gestor retrieves full details for a single aluno.
