@@ -8,6 +8,11 @@ All notable changes to this project will be documented in this file.
 - Initial codebase, copied from `municipal-backend` at `v1.2.0`.
   Shared foundation: authentication, users, fleet, geographic points,
   notifications, tracking, error handling, logging, Docker, CI.
+- Passenger invitations: the gestor invites people by e-mail, one by one or in a JSON
+  batch (`POST /v1/convites`), and lists, resends or cancels them. The person finishes
+  the registration from the e-mailed link (`/v1/convites/aceite/<token>`). The invitation
+  counts as the gestor's approval, so the account is created active. E-mails are sent in
+  the background by a scheduler job. New optional setting `APP_DOWNLOAD_URL`.
 
 ### To do
 - Remove municipal-specific modules (route subscription, batch trip generation)
