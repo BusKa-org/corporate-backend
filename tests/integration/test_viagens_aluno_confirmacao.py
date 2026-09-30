@@ -1,3 +1,11 @@
+from datetime import date, timedelta
+
+import pytest
+
+from app.models.enum import StatusViagem
+from tests.factories.viagem_factory import AlunosConfirmadosFactory, ViagemFactory
+
+
 def test_confirmar_presenca_requires_auth(client, viagem_futura_agendada_com_motorista, ponto):
     r = client.put(
         f"/v1/viagens/{viagem_futura_agendada_com_motorista.id}/confirmacao",
@@ -84,3 +92,40 @@ def test_confirmar_presenca_success_confirm_and_unconfirm(
     # se teu retorno for a confirmação serializada:
     if isinstance(data2, dict) and "ponto_embarque" in data2:
         assert data2["ponto_embarque"] is None
+
+
+@pytest.mark.parametrize(
+    "status_outra, esperado",
+    [
+        (StatusViagem.AGENDADA, 409),
+        (StatusViagem.EM_ANDAMENTO, 409),
+        (StatusViagem.FINALIZADA, 200),
+    ],
+)
+def test_confirmar_presenca_bloqueada_se_inscrito_em_outra_viagem_ativa(
+    _db,
+    aluno,
+    rota_aluno,
+    horario_rota,
+    viagem_futura_agendada_com_motorista,
+    rota_ponto,
+    status_outra,
+    esperado,
+):
+    outra = ViagemFactory(
+        horario_rota_id=horario_rota.id,
+        data=date.today() + timedelta(days=1),
+        status=status_outra,
+        motorista_id=viagem_futura_agendada_com_motorista.motorista_id,
+    )
+    _db.session.add(outra)
+    _db.session.add(
+        AlunosConfirmadosFactory(viagem_id=outra.id, aluno_id=aluno.user.id, confirmacao=True)
+    )
+    _db.session.commit()
+
+    r = aluno.client.put(
+        f"/v1/viagens/{viagem_futura_agendada_com_motorista.id}/confirmacao",
+        json={"confirmacao": True, "ponto_embarque_id": str(rota_ponto.ponto_id)},
+    )
+    assert r.status_code == esperado, r.get_data(as_text=True)
