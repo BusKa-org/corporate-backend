@@ -23,6 +23,9 @@ All notable changes to this project will be documented in this file.
   the background by a scheduler job. New optional setting `APP_DOWNLOAD_URL`.
   A person who types an enabled e-mail straight into the app gets a 10-minute PIN by e-mail
   (`POST /v1/convites/pin`, `POST /v1/convites/pin/validar`) instead of using the link.
+- Trip types (`TipoViagem`: `FIXA`, `SOB_DEMANDA`) on `Rota`. On-demand routes
+  take `buffer_minutos` (1–30, default 5) and `prazo_inicio_minutos` (1–120,
+  default 10) instead of a timetable; `POST`/`PUT /v1/rotas` accept and return them.
 
 ### Removed
 - Passenger self-signup (`POST /v1/alunos/signup`), the guardian consent endpoints, the

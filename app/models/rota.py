@@ -4,17 +4,35 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
 from .base import db
-from .enum import DiaDaSemana, SentidoViagem
+from .enum import DiaDaSemana, SentidoViagem, TipoViagem
 
 
 class Rota(db.Model):
     __tablename__ = "rota"
+    __table_args__ = (
+        db.CheckConstraint(
+            "tipo = 'FIXA' OR (buffer_minutos IS NOT NULL AND prazo_inicio_minutos IS NOT NULL)",
+            name="ck_rota_parametros_sob_demanda",
+        ),
+    )
 
     id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     organizacao_id = db.Column(
         UUID(as_uuid=True), db.ForeignKey("organizacao.id", ondelete="CASCADE"), nullable=False
     )
     nome = db.Column(db.String(100), nullable=False)
+    tipo = db.Column(
+        db.Enum(TipoViagem, name="tipo_viagem"),
+        nullable=False,
+        default=TipoViagem.FIXA,
+        server_default=TipoViagem.FIXA.value,
+    )
+
+    # Parâmetros sob demanda (NULL em rotas FIXA).
+    # buffer_minutos: duração da janela de buffer após o motorista iniciar (RF-11).
+    # prazo_inicio_minutos: tempo para o motorista iniciar antes de avisar o gestor (RF-11 FS1).
+    buffer_minutos = db.Column(db.Integer, nullable=True)
+    prazo_inicio_minutos = db.Column(db.Integer, nullable=True)
 
     motorista_padrao_id = db.Column(
         UUID(as_uuid=True), db.ForeignKey("motorista.usuario_id", ondelete="SET NULL")
