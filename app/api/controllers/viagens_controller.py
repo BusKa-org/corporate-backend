@@ -22,6 +22,7 @@ from app.schemas.viagem_schema import (
     ViagemResponseSchema,
 )
 from app.services import viagens_service
+from app.services.consentimento_service import exige_consentimento
 
 api = Namespace("viagens", description="Execução de Viagens")
 
@@ -93,6 +94,7 @@ class ViagemConfirmacaoResource(Resource):
     @api.expect(models["viagem_confirmacao_request"])
     @api.response(200, "Success", models["viagem_aluno_confirmacao_response"])
     @jwt_required()
+    @exige_consentimento
     def put(self, id: str) -> tuple[dict[str, Any], int]:
         user_id = get_jwt_identity()
         data = request.get_json(silent=True) or {}

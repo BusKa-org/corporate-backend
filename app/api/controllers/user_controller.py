@@ -9,6 +9,7 @@ from app.schemas.aluno_schema import AlunoProvisionAccountRequestSchema
 from app.schemas.user_schema import (
     ChangePasswordRequestSchema,
     ChangePasswordResponseSchema,
+    ExcluirContaRequestSchema,
     FcmTokenRequestSchema,
     FcmTokenResponseSchema,
     MotoristaCreateRequestSchema,
@@ -16,7 +17,7 @@ from app.schemas.user_schema import (
     UserListResponseSchema,
     UserResponseSchema,
 )
-from app.services import user_service
+from app.services import consentimento_service, conta_service, user_service
 
 api = Namespace("users", description="Gerenciamento de Usuários e Perfil")
 
@@ -34,6 +35,7 @@ change_password_response_schema = ChangePasswordResponseSchema()
 fcm_token_request_schema = FcmTokenRequestSchema()
 fcm_token_response_schema = FcmTokenResponseSchema()
 update_profile_schema = UpdateProfileRequestSchema()
+excluir_conta_schema = ExcluirContaRequestSchema()
 
 
 @api.route("")
@@ -65,7 +67,11 @@ class UserProfile(Resource):
         """Perfil do usuário logado"""
         current_user_id = get_jwt_identity()
         user = user_service.get_user_by_id(current_user_id)
-        return user_response_schema.dump(user), 200
+        data = user_response_schema.dump(user)
+        data["consentimento_pendente"] = consentimento_service.consentimento_pendente(
+            current_user_id
+        )
+        return data, 200
 
     @api.doc(
         "update_my_profile",
@@ -80,6 +86,23 @@ class UserProfile(Resource):
         payload = update_profile_schema.load(request.get_json(silent=True) or {})
         user = user_service.update_profile(current_user_id, payload)
         return user_response_schema.dump(user), 200
+
+    @api.doc(
+        "delete_my_account",
+        responses={
+            200: "Conta excluída",
+            401: "Credenciais inválidas",
+            403: "Somente passageiros podem excluir a conta",
+            409: "Viagem em andamento",
+        },
+    )
+    @jwt_required()
+    def delete(self) -> tuple[dict[str, str], int]:
+        """Exclui a conta e os dados pessoais do passageiro logado. Corpo: {"email", "senha"}"""
+        current_user_id = get_jwt_identity()
+        payload = excluir_conta_schema.load(request.get_json(silent=True) or {})
+        conta_service.excluir_conta(current_user_id, payload["email"], payload["senha"])
+        return {"message": "Conta excluída com sucesso"}, 200
 
 
 @api.route("/<string:id>")
