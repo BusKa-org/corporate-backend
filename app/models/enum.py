@@ -27,8 +27,8 @@ class SentidoViagem(enum.Enum):
 
 
 class TipoViagem(enum.Enum):
-    FIXA = "FIXA"  # grade de horários (HorarioRota)
-    SOB_DEMANDA = "SOB_DEMANDA"  # passageiro solicita, motorista abre o buffer (RF-10/11)
+    FIXA = "FIXA"
+    SOB_DEMANDA = "SOB_DEMANDA"
 
 
 class StatusViagem(enum.Enum):

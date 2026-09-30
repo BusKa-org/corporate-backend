@@ -24,7 +24,6 @@ def upgrade() -> None:
         op.get_bind(), checkfirst=True
     )
 
-    # Existing routes are all schedule-based, so FIXA backfills them.
     op.add_column(
         "rota",
         sa.Column("tipo", sa.Enum(name="tipo_viagem"), nullable=False, server_default="FIXA"),

@@ -18,7 +18,6 @@ from app.utils import audit_logger, validate_uuid
 
 logger = logging.getLogger(__name__)
 
-# Padrões dos parâmetros sob demanda, em minutos.
 BUFFER_MINUTOS_PADRAO = 5
 PRAZO_INICIO_MINUTOS_PADRAO = 10
 PARAMETROS_SOB_DEMANDA = ("buffer_minutos", "prazo_inicio_minutos")
@@ -79,7 +78,7 @@ def create_rota(gestor_id: str, data: dict[str, Any]) -> Rota:
     if not nome:
         raise ValidationError("Nome da rota é obrigatório")
 
-    tipo = data.get("tipo") or TipoViagem.FIXA
+    tipo = data["tipo"]
     parametros = {}
     if tipo == TipoViagem.SOB_DEMANDA:
         if data.get("horarios"):

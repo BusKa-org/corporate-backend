@@ -32,7 +32,6 @@ class RotaHorarioCreateRequestSchema(BaseSchema):
     dias = fields.List(fields.String(), required=True)
 
 
-# Limites dos parâmetros sob demanda, em minutos.
 BUFFER_MINUTOS_RANGE = validate.Range(min=1, max=30)
 PRAZO_INICIO_MINUTOS_RANGE = validate.Range(min=1, max=120)
 

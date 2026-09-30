@@ -28,9 +28,6 @@ class Rota(db.Model):
         server_default=TipoViagem.FIXA.value,
     )
 
-    # Parâmetros sob demanda (NULL em rotas FIXA).
-    # buffer_minutos: duração da janela de buffer após o motorista iniciar (RF-11).
-    # prazo_inicio_minutos: tempo para o motorista iniciar antes de avisar o gestor (RF-11 FS1).
     buffer_minutos = db.Column(db.Integer, nullable=True)
     prazo_inicio_minutos = db.Column(db.Integer, nullable=True)
 
