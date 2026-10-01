@@ -16,6 +16,12 @@ All notable changes to this project will be documented in this file.
   A person who types an enabled e-mail straight into the app gets a 10-minute PIN by e-mail
   (`POST /v1/convites/pin`, `POST /v1/convites/pin/validar`) instead of using the link.
 
+### Removed
+- Passenger self-signup (`POST /v1/alunos/signup`), the guardian consent endpoints, the
+  single and batch approval endpoints (`POST /v1/alunos/<id>/aprovar`, `POST /v1/alunos/aprovar`)
+  and the gestor-creates-account-with-password endpoint (`POST /v1/users/alunos`).
+  Invitations replace all of them: nobody signs up on their own.
+
 ### To do
 - Remove municipal-specific modules (route subscription, batch trip generation)
 - Rename `Prefeitura` → `Organizacao`

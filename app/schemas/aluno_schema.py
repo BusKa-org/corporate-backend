@@ -1,50 +1,12 @@
-from marshmallow import ValidationError, fields, post_load, validate, validates_schema
+from marshmallow import fields
 
 from app.schemas.common import BaseSchema
 from app.schemas.endereco_schema import EnderecoInputSchema
 from app.schemas.validators import (
-    validate_cpf,
     validate_optional_cpf,
     validate_optional_phone,
     validate_optional_string,
 )
-
-
-class AlunoProvisionAccountRequestSchema(BaseSchema):
-    """Gestor creates a minimal Aluno account (credentials + identity)."""
-
-    nome = fields.String(required=True, validate=validate.Length(min=1))
-    email = fields.Email(required=True, error_messages={"invalid": "Email inválido"})
-    password = fields.String(required=True, load_only=True, validate=validate.Length(min=1))
-    cpf = fields.String(required=True, validate=validate_cpf)
-    telefone = fields.String(load_default=None, allow_none=True, validate=validate_optional_phone)
-
-
-class AlunoSelfSignupRequestSchema(BaseSchema):
-    """Aluno self-signs up for an account."""
-
-    nome = fields.String(required=True, validate=validate.Length(min=1))
-    email = fields.Email(required=True, error_messages={"invalid": "Email inválido"})
-    password = fields.String(required=True, load_only=True, validate=validate.Length(min=1))
-    cpf = fields.String(required=True, validate=validate_cpf)
-    telefone = fields.String(load_default=None, allow_none=True, validate=validate_optional_phone)
-
-    matricula = fields.String(required=True, validate=validate.Length(min=1))
-    instituicao_id = fields.UUID(required=True)
-
-    # Date of birth — determines whether guardian consent is required
-    data_nascimento = fields.Date(required=True, format="%Y-%m-%d")
-
-    # Guardian (required when minor, optional for adults)
-    nome_responsavel = fields.String(
-        load_default=None, allow_none=True, validate=validate_optional_string
-    )
-    cpf_responsavel = fields.String(
-        load_default=None, allow_none=True, validate=validate_optional_cpf
-    )
-    email_responsavel = fields.Email(load_default=None, allow_none=True)
-
-    endereco_casa = fields.Nested(EnderecoInputSchema, required=True)
 
 
 class AlunoMeUpdateRequestSchema(BaseSchema):
@@ -62,43 +24,6 @@ class AlunoMeUpdateRequestSchema(BaseSchema):
     )
 
     endereco_casa = fields.Nested(EnderecoInputSchema, load_default=None, allow_none=True)
-
-
-class AlunoAprovarLoteRequestSchema(BaseSchema):
-    """Gestor aprova em lote. Os filtros informados se combinam (E)."""
-
-    emails = fields.List(fields.Email(), validate=validate.Length(min=1))
-    dominio = fields.String(
-        validate=validate.Regexp(
-            r"^(\*?@)?[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)+$", error="Domínio inválido"
-        )
-    )
-    instituicao_id = fields.UUID()
-
-    @validates_schema
-    def exige_um_filtro(self, data, **kwargs):
-        if not data:
-            raise ValidationError("Informe emails, dominio ou instituicao_id")
-
-    @post_load
-    def normaliza(self, data, **kwargs):
-        if "emails" in data:
-            emails_em_minusculas = []
-            for email in data["emails"]:
-                emails_em_minusculas.append(email.lower())
-            data["emails"] = emails_em_minusculas
-        if "dominio" in data:
-            data["dominio"] = data["dominio"].lower().lstrip("*@")
-        return data
-
-
-class AlunoGuardianConsentPublicSchema(BaseSchema):
-    """Public info returned to the guardian consent screen."""
-
-    nome = fields.String()
-    data_nascimento = fields.Date(dump_default=None)
-    is_minor = fields.Boolean()
-    guardian_consented_at = fields.DateTime(dump_default=None)
 
 
 class AlunoResponseSchema(BaseSchema):

@@ -4,8 +4,7 @@ from flask import request
 from flask_jwt_extended import get_jwt_identity, jwt_required
 from flask_restx import Namespace, Resource
 
-from app.api.contracts import aluno_contract, user_contract
-from app.schemas.aluno_schema import AlunoProvisionAccountRequestSchema
+from app.api.contracts import user_contract
 from app.schemas.user_schema import (
     ChangePasswordRequestSchema,
     ChangePasswordResponseSchema,
@@ -22,13 +21,11 @@ api = Namespace("users", description="Gerenciamento de Usuários e Perfil")
 
 # API contracts (Swagger documentation)
 models = user_contract.register_models(api)
-models_aluno = aluno_contract.register_models(api)
 
 # Validation schemas (Marshmallow)
 user_list_response_schema = UserListResponseSchema()
 motorista_create_schema = MotoristaCreateRequestSchema()
 change_password_schema = ChangePasswordRequestSchema()
-aluno_provision_account_request_schema = AlunoProvisionAccountRequestSchema()
 user_response_schema = UserResponseSchema()
 change_password_response_schema = ChangePasswordResponseSchema()
 fcm_token_request_schema = FcmTokenRequestSchema()
@@ -93,29 +90,6 @@ class UserResource(Resource):
         current_user_id = get_jwt_identity()
         user = user_service.get_user_by_id(id, current_user_id)
         return user_response_schema.dump(user), 200
-
-
-@api.route("/alunos")
-class AlunoProvisionAccountResource(Resource):
-    @api.doc(
-        "aluno_provision_account",
-        responses={
-            201: "Aluno account created",
-            400: "Validation error",
-            403: "Forbidden - not a gestor",
-            409: "Conflict - duplicate email/CPF",
-        },
-    )
-    @api.expect(models_aluno["aluno_provision_account_request"])
-    @jwt_required()
-    def post(self):
-        """Gestor provisiona uma nova conta de aluno"""
-        current_user_id = get_jwt_identity()
-        data = request.get_json() or {}
-        payload = aluno_provision_account_request_schema.load(data)
-
-        aluno = user_service.create_aluno_account(current_user_id, payload)
-        return {"message": "Aluno account created with success", "id": str(aluno.id)}, 201
 
 
 @api.route("/motoristas/<string:motorista_id>")
