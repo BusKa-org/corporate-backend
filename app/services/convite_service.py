@@ -1,5 +1,7 @@
 """Convites de cadastro de passageiro: o gestor convida, a pessoa conclui."""
 
+import hashlib
+import hmac
 import logging
 import secrets
 from datetime import UTC, datetime, timedelta
@@ -40,6 +42,9 @@ VALIDADE_DIAS = 7
 LIMITE_LOTE = 500
 LIMITE_ENVIO_POR_EXECUCAO = 50
 MAX_TENTATIVAS_ENVIO = 3
+PIN_VALIDADE_MINUTOS = 10
+PIN_MAX_TENTATIVAS = 5
+PIN_INTERVALO_SEGUNDOS = 60
 ESTADOS_DO_CONVITE = (PENDENTE, CONCLUIDO, CANCELADO)
 
 
@@ -54,6 +59,14 @@ def _renovar(convite: Convite) -> None:
     convite.envio_estado = ENVIO_PENDENTE
     convite.envio_tentativas = 0
     convite.enviado_em = None
+    _limpar_pin(convite)
+    convite.pin_enviado_em = None
+
+
+def _limpar_pin(convite: Convite) -> None:
+    convite.pin_hash = None
+    convite.pin_expira_em = None
+    convite.pin_tentativas = 0
 
 
 def _texto(dados: dict[str, Any], campo: str) -> str | None:
@@ -346,6 +359,85 @@ def concluir_convite(token: str, dados: dict[str, Any]) -> Aluno:
         details={"campos_alterados": alterados},
     )
     return aluno
+
+
+# ─── Pessoa convidada: PIN para quem digita o e-mail no app ───────────────────
+
+
+def _hash_do_pin(convite: Convite, pin: str) -> str:
+    # O token do convite entra no hash para o PIN deixar de valer se o convite for reenviado.
+    return hashlib.sha256(f"{convite.token}:{pin}".encode()).hexdigest()
+
+
+def _convite_pendente_do_email(email_bruto: str) -> Convite | None:
+    """Convite pendente e dentro da validade para o e-mail, ou None."""
+    try:
+        email = validate_email(email_bruto)
+    except ValidationError:
+        return None
+    convite = Convite.query.filter_by(email=email, estado=PENDENTE).first()
+    if convite is None or convite.expira_em <= _agora():
+        return None
+    return convite
+
+
+def solicitar_pin(email_bruto: str) -> None:
+    """Envia um PIN ao e-mail habilitado. Nunca revela se o e-mail está habilitado."""
+    convite = _convite_pendente_do_email(email_bruto)
+    if convite is None:
+        return
+
+    agora = _agora()
+    if convite.pin_enviado_em is not None:
+        if agora - convite.pin_enviado_em < timedelta(seconds=PIN_INTERVALO_SEGUNDOS):
+            return
+
+    if not _mail_configurado():
+        logger.warning("E-mail não configurado: PIN não enviado.")
+        return
+
+    pin = f"{secrets.randbelow(1_000_000):06d}"
+    convite.pin_hash = _hash_do_pin(convite, pin)
+    convite.pin_expira_em = agora + timedelta(minutes=PIN_VALIDADE_MINUTOS)
+    convite.pin_tentativas = 0
+    convite.pin_enviado_em = agora
+    db.session.commit()
+
+    # ponytail: envio dentro da requisição. É um e-mail só, e a pessoa está esperando o código.
+    try:
+        send_email(
+            to=convite.email,
+            subject="Seu código de verificação",
+            body_plain=(
+                f"Seu código de verificação é {pin}.\n\n"
+                f"Ele vale por {PIN_VALIDADE_MINUTOS} minutos. "
+                "Se você não pediu este código, ignore este e-mail."
+            ),
+        )
+    except Exception:
+        logger.exception("Falha ao enviar o PIN do convite %s", convite.id)
+
+
+def validar_pin(email_bruto: str, pin: str) -> str:
+    """Confere o PIN e devolve o token do convite, que abre a tela de completar o cadastro."""
+    erro = ValidationError("PIN inválido ou expirado")
+
+    convite = _convite_pendente_do_email(email_bruto)
+    if convite is None or convite.pin_hash is None or convite.pin_expira_em is None:
+        raise erro
+    if convite.pin_expira_em <= _agora():
+        raise erro
+
+    if not hmac.compare_digest(convite.pin_hash, _hash_do_pin(convite, pin.strip())):
+        convite.pin_tentativas += 1
+        if convite.pin_tentativas >= PIN_MAX_TENTATIVAS:
+            _limpar_pin(convite)
+        db.session.commit()
+        raise erro
+
+    _limpar_pin(convite)  # uso único
+    db.session.commit()
+    return convite.token
 
 
 # ─── Envio do e-mail (chamado pela tarefa do agendador) ────────────────────────

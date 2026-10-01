@@ -1,5 +1,6 @@
 """Convites de cadastro de passageiro, pela API HTTP e pela tarefa de envio."""
 
+import re
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -483,3 +484,143 @@ def test_tarefa_sem_email_configurado_mantem_a_fila(gestor, app, monkeypatch, em
 
     assert emails_enviados == []
     assert _convite(_db, "g@parque.test").envio_estado == ENVIO_PENDENTE
+
+
+# ---------- PIN para quem digita o e-mail no app ----------
+
+
+def _pedir_pin(client, email):
+    return client.post("/v1/convites/pin", json={"email": email})
+
+
+def _validar_pin(client, email, pin):
+    return client.post("/v1/convites/pin/validar", json={"email": email, "pin": pin})
+
+
+def _pin_do_ultimo_email(emails_enviados):
+    return re.search(r"\b(\d{6})\b", emails_enviados[-1]["texto"]).group(1)
+
+
+def _liberar_novo_pin(_db, email):
+    convite = _convite(_db, email)
+    convite.pin_enviado_em = datetime.now(UTC) - timedelta(minutes=5)
+    _db.session.commit()
+
+
+def test_pin_certo_devolve_o_token_do_convite_e_so_vale_uma_vez(
+    gestor, client, email_configurado, emails_enviados, _db
+):
+    _convidar(gestor, [{"email": "pin@parque.test"}])
+    convite = _convite(_db, "pin@parque.test")
+
+    resposta = _pedir_pin(client, "pin@parque.test")
+    assert resposta.status_code == 200
+    assert len(emails_enviados) == 1
+    assert emails_enviados[0]["to"] == "pin@parque.test"
+    pin = _pin_do_ultimo_email(emails_enviados)
+
+    errado = "000000" if pin != "000000" else "111111"
+    assert _validar_pin(client, "pin@parque.test", errado).status_code == 400
+
+    certo = _validar_pin(client, "pin@parque.test", pin)
+    assert certo.status_code == 200
+    assert certo.get_json()["token"] == convite.token
+    assert client.get(f"/v1/convites/aceite/{convite.token}").status_code == 200
+
+    assert _validar_pin(client, "pin@parque.test", pin).status_code == 400
+
+
+def test_pin_nao_revela_se_o_email_esta_habilitado(
+    gestor, client, email_configurado, emails_enviados, _db
+):
+    _convidar(gestor, [{"email": "cancelado@parque.test"}, {"email": "vencido@parque.test"}])
+    cancelado = _convite(_db, "cancelado@parque.test")
+    vencido = _convite(_db, "vencido@parque.test")
+    cancelado.estado = CANCELADO
+    vencido.expira_em = datetime.now(UTC) - timedelta(days=1)
+    _db.session.commit()
+
+    respostas = [
+        _pedir_pin(client, "desconhecido@parque.test"),
+        _pedir_pin(client, "cancelado@parque.test"),
+        _pedir_pin(client, "vencido@parque.test"),
+        _pedir_pin(client, "isto-nao-e-email"),
+    ]
+
+    for resposta in respostas:
+        assert resposta.status_code == 200
+        assert resposta.get_json() == respostas[0].get_json()
+    assert emails_enviados == []
+    assert _validar_pin(client, "desconhecido@parque.test", "123456").status_code == 400
+
+
+def test_pin_expira_em_dez_minutos(gestor, client, email_configurado, emails_enviados, _db):
+    _convidar(gestor, [{"email": "tempo@parque.test"}])
+    _pedir_pin(client, "tempo@parque.test")
+    pin = _pin_do_ultimo_email(emails_enviados)
+    convite = _convite(_db, "tempo@parque.test")
+    assert convite.pin_expira_em > datetime.now(UTC) + timedelta(minutes=9)
+
+    convite.pin_expira_em = datetime.now(UTC) - timedelta(seconds=1)
+    _db.session.commit()
+
+    assert _validar_pin(client, "tempo@parque.test", pin).status_code == 400
+
+
+def test_pin_e_invalidado_depois_de_cinco_erros(
+    gestor, client, email_configurado, emails_enviados, _db
+):
+    _convidar(gestor, [{"email": "forca@parque.test"}])
+    _pedir_pin(client, "forca@parque.test")
+    pin = _pin_do_ultimo_email(emails_enviados)
+    errado = "000000" if pin != "000000" else "111111"
+
+    for _ in range(5):
+        assert _validar_pin(client, "forca@parque.test", errado).status_code == 400
+
+    assert _validar_pin(client, "forca@parque.test", pin).status_code == 400
+
+    # Um PIN novo, depois do intervalo, funciona.
+    _liberar_novo_pin(_db, "forca@parque.test")
+    _pedir_pin(client, "forca@parque.test")
+    novo_pin = _pin_do_ultimo_email(emails_enviados)
+    assert _validar_pin(client, "forca@parque.test", novo_pin).status_code == 200
+
+
+def test_pin_tem_intervalo_minimo_entre_envios(
+    gestor, client, email_configurado, emails_enviados, _db
+):
+    _convidar(gestor, [{"email": "spam@parque.test"}])
+
+    _pedir_pin(client, "spam@parque.test")
+    _pedir_pin(client, "spam@parque.test")
+    assert len(emails_enviados) == 1
+
+    _liberar_novo_pin(_db, "spam@parque.test")
+    _pedir_pin(client, "spam@parque.test")
+    assert len(emails_enviados) == 2
+
+
+def test_reenviar_o_convite_invalida_o_pin_anterior(
+    gestor, client, email_configurado, emails_enviados, _db
+):
+    _convidar(gestor, [{"email": "novo-link@parque.test"}])
+    _pedir_pin(client, "novo-link@parque.test")
+    pin = _pin_do_ultimo_email(emails_enviados)
+    convite = _convite(_db, "novo-link@parque.test")
+
+    gestor.client.post(f"/v1/convites/{convite.id}/reenviar")
+
+    assert _validar_pin(client, "novo-link@parque.test", pin).status_code == 400
+
+
+def test_pin_sem_email_configurado_nao_envia_nada(
+    gestor, client, app, monkeypatch, emails_enviados, _db
+):
+    monkeypatch.setitem(app.config, "MAIL_SERVER", "")
+    _convidar(gestor, [{"email": "sem-smtp@parque.test"}])
+
+    resposta = _pedir_pin(client, "sem-smtp@parque.test")
+
+    assert resposta.status_code == 200
+    assert emails_enviados == []

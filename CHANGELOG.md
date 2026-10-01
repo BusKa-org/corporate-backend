@@ -13,6 +13,8 @@ All notable changes to this project will be documented in this file.
   the registration from the e-mailed link (`/v1/convites/aceite/<token>`). The invitation
   counts as the gestor's approval, so the account is created active. E-mails are sent in
   the background by a scheduler job. New optional setting `APP_DOWNLOAD_URL`.
+  A person who types an enabled e-mail straight into the app gets a 10-minute PIN by e-mail
+  (`POST /v1/convites/pin`, `POST /v1/convites/pin/validar`) instead of using the link.
 
 ### To do
 - Remove municipal-specific modules (route subscription, batch trip generation)

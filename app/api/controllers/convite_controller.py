@@ -9,6 +9,8 @@ from app.schemas.convite_schema import (
     ConviteListQuerySchema,
     ConviteResponseSchema,
     ConvitesCreateRequestSchema,
+    PinSolicitarRequestSchema,
+    PinValidarRequestSchema,
 )
 from app.services import convite_service
 
@@ -18,6 +20,8 @@ convites_create_schema = ConvitesCreateRequestSchema()
 convite_list_query_schema = ConviteListQuerySchema()
 convite_aceite_schema = ConviteAceiteRequestSchema()
 convite_response_schema = ConviteResponseSchema()
+pin_solicitar_schema = PinSolicitarRequestSchema()
+pin_validar_schema = PinValidarRequestSchema()
 
 
 @api.route("")
@@ -93,3 +97,27 @@ class ConviteAceiteResource(Resource):
         payload = convite_aceite_schema.load(request.get_json(silent=True) or {})
         convite_service.concluir_convite(token, payload)
         return {"message": "Cadastro concluído. Entre com seu e-mail e senha."}, 201
+
+
+@api.route("/pin")
+class ConvitePinSolicitarResource(Resource):
+    @api.doc("solicitar_pin_do_convite", responses={200: "Resposta igual para qualquer e-mail"})
+    def post(self) -> tuple[dict[str, str], int]:
+        """(Público) Envia um PIN de 10 minutos ao e-mail, se ele estiver habilitado. Corpo: {"email"}"""
+        payload = pin_solicitar_schema.load(request.get_json(silent=True) or {})
+        convite_service.solicitar_pin(payload["email"])
+        return {
+            "message": "Se o e-mail estiver habilitado, enviamos um PIN válido por 10 minutos."
+        }, 200
+
+
+@api.route("/pin/validar")
+class ConvitePinValidarResource(Resource):
+    @api.doc(
+        "validar_pin_do_convite", responses={200: "PIN correto", 400: "PIN inválido ou expirado"}
+    )
+    def post(self) -> tuple[dict[str, str], int]:
+        """(Público) Confere o PIN. Devolve o token que abre /aceite/<token>. Corpo: {"email", "pin"}"""
+        payload = pin_validar_schema.load(request.get_json(silent=True) or {})
+        token = convite_service.validar_pin(payload["email"], payload["pin"])
+        return {"token": token}, 200

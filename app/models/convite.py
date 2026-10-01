@@ -53,6 +53,13 @@ class Convite(db.Model):
     expira_em = db.Column(db.DateTime(timezone=True), nullable=False)
     estado = db.Column(db.String(10), nullable=False, default=PENDENTE)
 
+    # PIN de 10 minutos, para quem digita o e-mail direto no app em vez de usar o link.
+    # Guarda só o hash do PIN.
+    pin_hash = db.Column(db.String(64))
+    pin_expira_em = db.Column(db.DateTime(timezone=True))
+    pin_tentativas = db.Column(db.Integer, nullable=False, default=0)
+    pin_enviado_em = db.Column(db.DateTime(timezone=True))
+
     envio_estado = db.Column(db.String(10), nullable=False, default=ENVIO_PENDENTE)
     envio_tentativas = db.Column(db.Integer, nullable=False, default=0)
     enviado_em = db.Column(db.DateTime(timezone=True))

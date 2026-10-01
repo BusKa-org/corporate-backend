@@ -25,6 +25,15 @@ class ConviteAceiteRequestSchema(BaseSchema):
     senha = fields.String(required=True, load_only=True)
 
 
+class PinSolicitarRequestSchema(BaseSchema):
+    email = fields.String(required=True)
+
+
+class PinValidarRequestSchema(BaseSchema):
+    email = fields.String(required=True)
+    pin = fields.String(required=True, load_only=True)
+
+
 class ConviteResponseSchema(BaseSchema):
     id = fields.String()
     email = fields.String()
