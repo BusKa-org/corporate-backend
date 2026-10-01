@@ -180,10 +180,11 @@ there first. "It's already in `municipal-backend`" is not a reason to promote
 something into `buska-core`; "every current and plausible future client needs
 this regardless of their trip model" is the only test that counts.
 
-If a capability is specific to one contract — anything under RF-05, RF-10
-through RF-19 in the PaqTcPB requirements doc, or anything specific to
-scheduled school routes (route subscription, batch trip generation) — it does
-not go in the core, even if it looks reusable. `docs/plugins.md` already
+If a capability is specific to one contract (PaqTcPB's on-demand trip model,
+such as availability windows, trip requests, the buffer window, per-segment
+capacity and QR boarding, or scheduled school routes, such as route
+subscription and batch trip generation), it does not go in the core, even if
+it looks reusable. `docs/plugins.md` already
 states the inverse rule for routes ("if it's not client-specific, it's not a
 plugin"); this is the mirror of that at the core/module boundary. Reusing
 PaqTcPB's Foreground IP for a future client is a licensing conversation with
