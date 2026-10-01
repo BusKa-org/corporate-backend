@@ -1,5 +1,6 @@
 """Consentimento LGPD e exclusão de conta, pela API HTTP."""
 
+import re
 from datetime import UTC, date, datetime, timedelta
 
 from app.models.consentimento import REVOGACAO, Consentimento
@@ -11,6 +12,7 @@ from app.models.user import Aluno
 from app.models.viagem import AlunosConfirmados
 from app.services import conta_service
 from app.services.consentimento_service import VERSAO_TERMO_VIGENTE
+from app.tasks.retencao_tasks import job_anonimizar_retencoes
 from tests.factories.geo_factory import PontoFactory
 from tests.factories.user_factory import AlunoFactory
 from tests.factories.viagem_factory import AlunosConfirmadosFactory, ViagemFactory
@@ -217,3 +219,72 @@ def test_conta_excluida_nao_faz_login_com_o_email_antigo(client, organizacao, _d
 
     login = client.post("/v1/auth/login", json={"email": email_original, "password": SENHA})
     assert login.status_code == 401
+
+
+# ---------- anonimização depois do prazo de retenção ----------
+
+
+def test_job_troca_e_mail_e_cpf_vencidos_por_hash_e_nao_mexe_nos_outros(organizacao, _db):
+    vencido = AlunoFactory(organizacao_id=organizacao.id)
+    no_prazo = AlunoFactory(organizacao_id=organizacao.id)
+    _db.session.add_all([vencido, no_prazo])
+    _db.session.commit()
+    agora = datetime.now(UTC)
+    _db.session.add(
+        RetencaoLegal(
+            usuario_id=vencido.id,
+            email="velho@parque.test",
+            cpf="52998224725",
+            reter_ate=agora - timedelta(days=1),
+        )
+    )
+    _db.session.add(
+        RetencaoLegal(
+            usuario_id=no_prazo.id,
+            email="recente@parque.test",
+            cpf="11144477735",
+            reter_ate=agora + timedelta(days=30),
+        )
+    )
+    _db.session.commit()
+
+    job_anonimizar_retencoes()
+
+    _db.session.expire_all()
+    anonimizado = _db.session.get(RetencaoLegal, vencido.id)
+    assert anonimizado.anonimizado_em is not None
+    for valor in (anonimizado.email, anonimizado.cpf):
+        assert re.fullmatch(r"[0-9a-f]{64}", valor)
+    assert "velho" not in anonimizado.email
+    assert anonimizado.cpf != "52998224725"
+
+    intacto = _db.session.get(RetencaoLegal, no_prazo.id)
+    assert intacto.email == "recente@parque.test"
+    assert intacto.cpf == "11144477735"
+    assert intacto.anonimizado_em is None
+
+
+def test_job_nao_refaz_a_anonimizacao_de_quem_ja_foi(organizacao, _db):
+    aluno = AlunoFactory(organizacao_id=organizacao.id)
+    _db.session.add(aluno)
+    _db.session.commit()
+    _db.session.add(
+        RetencaoLegal(
+            usuario_id=aluno.id,
+            email="velho@parque.test",
+            cpf="52998224725",
+            reter_ate=datetime.now(UTC) - timedelta(days=1),
+        )
+    )
+    _db.session.commit()
+
+    job_anonimizar_retencoes()
+    _db.session.expire_all()
+    primeiro = _db.session.get(RetencaoLegal, aluno.id)
+    email_hash, cpf_hash, quando = primeiro.email, primeiro.cpf, primeiro.anonimizado_em
+
+    job_anonimizar_retencoes()
+
+    _db.session.expire_all()
+    segundo = _db.session.get(RetencaoLegal, aluno.id)
+    assert (segundo.email, segundo.cpf, segundo.anonimizado_em) == (email_hash, cpf_hash, quando)

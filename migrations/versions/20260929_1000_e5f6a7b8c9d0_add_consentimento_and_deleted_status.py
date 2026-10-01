@@ -36,11 +36,12 @@ def upgrade() -> None:
         "retencao_legal",
         sa.Column("usuario_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("email", sa.String(length=120), nullable=False),
-        sa.Column("cpf", sa.String(length=14), nullable=False),
+        sa.Column("cpf", sa.String(length=64), nullable=False),
         sa.Column(
             "excluido_em", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False
         ),
         sa.Column("reter_ate", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("anonimizado_em", sa.DateTime(timezone=True), nullable=True),
         sa.ForeignKeyConstraint(["usuario_id"], ["usuario.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("usuario_id"),
     )

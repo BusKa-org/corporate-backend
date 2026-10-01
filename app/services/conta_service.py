@@ -5,7 +5,9 @@ finalizadas continue ligado a um id sem dado pessoal. O que não tem valor
 estatístico é apagado.
 """
 
+import hashlib
 import logging
+import secrets
 from datetime import UTC, datetime, timedelta
 
 from werkzeug.security import check_password_hash
@@ -29,8 +31,9 @@ from app.utils.email_sender import send_email
 logger = logging.getLogger(__name__)
 
 # ponytail: 10 anos, prazo geral de prescrição civil (art. 205 do Código Civil). Decisão da
-# equipe, sem validação jurídica formal. Falta a limpeza automática de `reter_ate`.
+# equipe, sem validação jurídica formal. Passado o prazo, e-mail e CPF viram hashes.
 ANOS_DE_RETENCAO = 10
+LIMITE_ANONIMIZACAO_POR_EXECUCAO = 500
 
 
 def _tem_viagem_em_andamento(aluno_id) -> bool:
@@ -159,3 +162,38 @@ def excluir_conta(user_id: str, email: str, senha: str) -> None:
         )
     except Exception:
         logger.exception("Falha ao enviar confirmação de exclusão para o usuário %s", aluno_id)
+
+
+def _hash_irreversivel(valor: str) -> str:
+    """Hash SHA-256 com sal aleatório que é descartado.
+
+    Hash puro do CPF seria reversível por força bruta (são só cerca de 10^9 CPFs possíveis).
+    Com o sal jogado fora, ninguém recupera o valor e ninguém consegue conferir um palpite.
+    """
+    sal = secrets.token_bytes(16)
+    return hashlib.sha256(sal + valor.encode()).hexdigest()
+
+
+def anonimizar_retencoes_vencidas() -> int:
+    """Troca e-mail e CPF retidos por hashes quando o prazo de retenção acabou.
+
+    Devolve quantas linhas foram anonimizadas. Roda todo dia e pode rodar de novo sem efeito
+    nas linhas que já foram anonimizadas.
+    """
+    agora = datetime.now(UTC)
+    vencidas = (
+        RetencaoLegal.query.filter(
+            RetencaoLegal.reter_ate <= agora,
+            RetencaoLegal.anonimizado_em.is_(None),
+        )
+        .limit(LIMITE_ANONIMIZACAO_POR_EXECUCAO)
+        .all()
+    )
+
+    for retencao in vencidas:
+        retencao.email = _hash_irreversivel(retencao.email)
+        retencao.cpf = _hash_irreversivel(retencao.cpf)
+        retencao.anonimizado_em = agora
+
+    db.session.commit()
+    return len(vencidas)

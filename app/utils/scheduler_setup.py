@@ -5,6 +5,7 @@ from flask import Flask
 from flask_apscheduler import APScheduler
 
 from app.tasks.notificacao_tasks import verificar_viagens_10min, verificar_viagens_24h
+from app.tasks.retencao_tasks import job_anonimizar_retencoes
 
 
 def init_scheduler(app: Flask, scheduler: APScheduler):
@@ -36,6 +37,15 @@ def init_scheduler(app: Flask, scheduler: APScheduler):
         args=[app],
         trigger="interval",
         minutes=10,
+        replace_existing=True,
+    )
+
+    scheduler.add_job(
+        id="job_retencao",
+        func=job_anonimizar_retencoes,
+        trigger="cron",
+        hour=3,
+        minute=0,
         replace_existing=True,
     )
 
