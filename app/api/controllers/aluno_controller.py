@@ -55,15 +55,6 @@ class AlunoMeResource(Resource):
         aluno = aluno_service.update_me(user_id, payload)
         return aluno_response_schema.dump(aluno), 200
 
-    @api.doc("aluno_delete")
-    @api.response(200, "Success")
-    @jwt_required()
-    def delete(self) -> tuple[dict[str, Any], int]:
-        """Aluno exclui sua conta"""
-        user_id = get_jwt_identity()
-        aluno_service.delete_me(user_id)
-        return {"message": "Conta excluída com sucesso"}, 200
-
 
 @api.route("/")
 class AlunoListResource(Resource):

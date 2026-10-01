@@ -39,6 +39,13 @@ class MotoristaCreateRequestSchema(BaseSchema):
     cnh = fields.String(required=True)
 
 
+class ExcluirContaRequestSchema(BaseSchema):
+    """Schema for deleting the logged-in account."""
+
+    email = fields.String(required=True)
+    senha = fields.String(required=True)
+
+
 class ChangePasswordRequestSchema(BaseSchema):
     """Schema for changing password."""
 
