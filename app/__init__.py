@@ -20,6 +20,7 @@ from app.utils.scheduler_setup import init_scheduler
 
 from .api.controllers.aluno_controller import api as alunos_ns
 from .api.controllers.auth_controller import api as auth_ns
+from .api.controllers.convite_controller import api as convites_ns
 from .api.controllers.dashboard_controller import api as dashboard_ns
 from .api.controllers.instituicao_controller import api as inst_ns
 from .api.controllers.notificacao_controller import api as notificacoes_ns
@@ -102,6 +103,7 @@ def create_app(
     app.config["MAIL_PASSWORD"] = settings.MAIL_PASSWORD
     app.config["MAIL_USE_TLS"] = settings.MAIL_USE_TLS
     app.config["FRONTEND_URL"] = settings.FRONTEND_URL
+    app.config["APP_DOWNLOAD_URL"] = settings.APP_DOWNLOAD_URL
 
     # Maximum request size (16MB)
     app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024
@@ -200,6 +202,7 @@ Inclua o header: `Authorization: Bearer <seu_token>`
     # API v1 routes
     api.add_namespace(auth_ns, path="/v1/auth")
     api.add_namespace(user_ns, path="/v1/users")
+    api.add_namespace(convites_ns, path="/v1/convites")
     api.add_namespace(notificacoes_ns, path="/v1/notificacoes")
     api.add_namespace(onibus_ns, path="/v1/onibus")
     api.add_namespace(rotas_ns, path="/v1/rotas")

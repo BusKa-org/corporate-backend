@@ -4,6 +4,7 @@ import os
 from flask import Flask
 from flask_apscheduler import APScheduler
 
+from app.tasks.convite_tasks import enviar_convites_pendentes
 from app.tasks.notificacao_tasks import verificar_viagens_10min, verificar_viagens_24h
 
 
@@ -36,6 +37,14 @@ def init_scheduler(app: Flask, scheduler: APScheduler):
         args=[app],
         trigger="interval",
         minutes=10,
+        replace_existing=True,
+    )
+
+    scheduler.add_job(
+        id="job_convites",
+        func=enviar_convites_pendentes,
+        trigger="interval",
+        minutes=1,
         replace_existing=True,
     )
 
