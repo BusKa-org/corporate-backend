@@ -22,6 +22,12 @@ All notable changes to this project will be documented in this file.
   and the gestor-creates-account-with-password endpoint (`POST /v1/users/alunos`).
   Invitations replace all of them: nobody signs up on their own.
 
+### Fixed
+- `PUT /v1/alunos/me` is a partial update again: omitted fields are left alone. Before,
+  the schema defaulted every omitted field to `None`, so sending only the address wiped
+  `nome` and `matricula` and ended in a 500. `nome` and `endereco_casa` now return 400
+  when sent as null.
+
 ### To do
 - Remove municipal-specific modules (route subscription, batch trip generation)
 - Rename `Prefeitura` → `Organizacao`

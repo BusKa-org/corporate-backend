@@ -10,20 +10,21 @@ from app.schemas.validators import (
 
 
 class AlunoMeUpdateRequestSchema(BaseSchema):
-    """Aluno updates their profile (partial update)."""
+    """Aluno updates their profile (partial update).
 
-    nome = fields.String(load_default=None, allow_none=True, validate=validate_optional_string)
-    telefone = fields.String(load_default=None, allow_none=True, validate=validate_optional_phone)
+    Campo omitido não é tocado. Não há `load_default`: um default None faria o serviço
+    gravar None em todo campo que o cliente não enviou.
+    """
 
-    matricula = fields.String(load_default=None, allow_none=True, validate=validate_optional_string)
-    nome_responsavel = fields.String(
-        load_default=None, allow_none=True, validate=validate_optional_string
-    )
-    cpf_responsavel = fields.String(
-        load_default=None, allow_none=True, validate=validate_optional_cpf
-    )
+    # Nome e endereço não podem ser apagados. Os demais aceitam null para limpar o campo.
+    nome = fields.String(validate=validate_optional_string)
+    telefone = fields.String(allow_none=True, validate=validate_optional_phone)
 
-    endereco_casa = fields.Nested(EnderecoInputSchema, load_default=None, allow_none=True)
+    matricula = fields.String(allow_none=True, validate=validate_optional_string)
+    nome_responsavel = fields.String(allow_none=True, validate=validate_optional_string)
+    cpf_responsavel = fields.String(allow_none=True, validate=validate_optional_cpf)
+
+    endereco_casa = fields.Nested(EnderecoInputSchema)
 
 
 class AlunoResponseSchema(BaseSchema):
