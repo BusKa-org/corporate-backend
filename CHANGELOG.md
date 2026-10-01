@@ -14,7 +14,7 @@ All notable changes to this project will be documented in this file.
 - Account deletion: `DELETE /v1/users/me` for passengers anonymizes personal
   data, keeps finished-trip history without PII and adds the `DELETED` user status.
   E-mail and CPF are kept in a restricted `retencao_legal` table for 10 years for
-  legal purposes. After that a daily job replaces them with irreversible hashes (the row
+  legal purposes. After that a quarterly job replaces them with irreversible hashes (the row
   stays, with nothing sensitive in it).
 
 ### To do

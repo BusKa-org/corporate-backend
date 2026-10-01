@@ -7,7 +7,11 @@ logger = logging.getLogger(__name__)
 
 
 def job_anonimizar_retencoes():
-    """Job diário: anonimiza e-mail e CPF retidos cujo prazo de retenção acabou."""
+    """Job trimestral: anonimiza e-mail e CPF retidos cujo prazo de retenção acabou.
+
+    Nada vence antes de 10 anos, então uma vez a cada 3 meses basta. Um dado vencido espera
+    no máximo 3 meses pela anonimização.
+    """
     # Sem `args=[app]`: o jobstore compartilhado serializa o job com pickle, e o objeto
     # Flask não serializa. O app vem do próprio agendador.
     app = scheduler.app

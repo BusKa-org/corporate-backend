@@ -177,8 +177,8 @@ def _hash_irreversivel(valor: str) -> str:
 def anonimizar_retencoes_vencidas() -> int:
     """Troca e-mail e CPF retidos por hashes quando o prazo de retenção acabou.
 
-    Devolve quantas linhas foram anonimizadas. Roda todo dia e pode rodar de novo sem efeito
-    nas linhas que já foram anonimizadas.
+    Devolve quantas linhas foram anonimizadas. Roda uma vez a cada 3 meses e pode rodar de
+    novo sem efeito nas linhas que já foram anonimizadas.
     """
     agora = datetime.now(UTC)
     vencidas = (

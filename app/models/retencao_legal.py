@@ -2,7 +2,7 @@
 
 Guarda só o necessário para contato e localização em uma eventual apuração
 (auditoria, processo). Nenhum endpoint lê esta tabela. Quando `reter_ate`
-passa, uma tarefa diária troca e-mail e CPF por hashes irreversíveis e marca
+passa, uma tarefa trimestral troca e-mail e CPF por hashes irreversíveis e marca
 `anonimizado_em`. A linha não é apagada.
 """
 
