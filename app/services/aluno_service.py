@@ -11,6 +11,7 @@ from werkzeug.security import generate_password_hash
 from app.core.exceptions import (
     AppError,
     ConflictError,
+    ForbiddenError,
     NotFoundError,
     ValidationError,
 )
@@ -18,6 +19,7 @@ from app.models.base import db
 from app.models.enum import UserRole, UserStatus
 from app.models.geo import Endereco, Instituicao, Ponto
 from app.models.user import Aluno, Gestor, User
+from app.services.notificacao_service import NotificacaoService
 from app.services.user_service import _get_gestor_or_403
 from app.utils import audit_logger, validate_cpf, validate_email, validate_password
 from app.utils.email_sender import send_email
@@ -77,8 +79,6 @@ def _send_guardian_consent_email(aluno: Aluno) -> None:
 
 
 def _notificar_gestores_cadastro_pendente(aluno: Aluno, mensagem: str) -> None:
-    from app.services.notificacao_service import NotificacaoService
-
     gestores = db.session.query(Gestor).filter_by(organizacao_id=aluno.organizacao_id).all()
     for gestor in gestores:
         NotificacaoService._criar_notificacao_interna(
@@ -385,8 +385,6 @@ def get_aluno_by_id(gestor_id: str, aluno_id: str) -> Aluno:
 
     Raises: ForbiddenError, NotFoundError
     """
-    from app.core.exceptions import ForbiddenError
-
     gestor = _get_gestor_or_403(gestor_id, "Apenas gestores podem consultar alunos")
     aluno = db.session.get(Aluno, aluno_id)
 
@@ -417,8 +415,6 @@ def list_alunos_gestor(gestor_id: str, status: str | None = None) -> list[Aluno]
 
 
 def _ativar(aluno: Aluno) -> None:
-    from app.services.notificacao_service import NotificacaoService
-
     aluno.status = UserStatus.ACTIVE
     aluno.signup_completed_at = db.func.now()
     NotificacaoService._criar_notificacao_interna(
@@ -459,11 +455,15 @@ def aprovar_alunos_em_lote(gestor_id: str, data: dict[str, Any]) -> list[Aluno]:
         logger.error(f"Error approving students in batch: {e}")
         raise AppError(f"Erro ao aprovar alunos: {str(e)}", 500)
 
+    filtros: dict[str, str] = {}
+    for chave, valor in data.items():
+        filtros[chave] = str(valor)
+
     audit_logger.log_user_action(
         action="aprovar_alunos_em_lote",
         user_id=gestor_id,
         resource_type="aluno",
-        details={"filtros": {k: str(v) for k, v in data.items()}, "aprovados": len(alunos)},
+        details={"filtros": filtros, "aprovados": len(alunos)},
     )
     return alunos
 
@@ -475,8 +475,6 @@ def aprovar_aluno(gestor_id: str, aluno_id: str) -> Aluno:
     Returns: Aluno object
     Raises: ForbiddenError, NotFoundError, ValidationError
     """
-    from app.core.exceptions import ForbiddenError
-
     gestor = _get_gestor_or_403(gestor_id, "Apenas gestores podem aprovar alunos")
     aluno = db.session.get(Aluno, aluno_id)
 

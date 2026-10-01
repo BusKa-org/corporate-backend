@@ -83,7 +83,10 @@ class AlunoAprovarLoteRequestSchema(BaseSchema):
     @post_load
     def normaliza(self, data, **kwargs):
         if "emails" in data:
-            data["emails"] = [e.lower() for e in data["emails"]]
+            emails_em_minusculas = []
+            for email in data["emails"]:
+                emails_em_minusculas.append(email.lower())
+            data["emails"] = emails_em_minusculas
         if "dominio" in data:
             data["dominio"] = data["dominio"].lower().lstrip("*@")
         return data
