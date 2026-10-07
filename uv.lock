@@ -131,8 +131,8 @@ wheels = [
 
 [[package]]
 name = "buska-core"
-version = "0.1.0"
-source = { path = "vendor/buska_core-0.1.0-py3-none-any.whl" }
+version = "0.2.0"
+source = { path = "vendor/buska_core-0.2.0-py3-none-any.whl" }
 dependencies = [
     { name = "flask" },
     { name = "flask-jwt-extended" },
@@ -140,7 +140,7 @@ dependencies = [
     { name = "sqlalchemy" },
 ]
 wheels = [
-    { filename = "buska_core-0.1.0-py3-none-any.whl", hash = "sha256:9fb6248c796fbcf3137ccc87e49672d432e37b733a237366908ebfb81b19ce09" },
+    { filename = "buska_core-0.2.0-py3-none-any.whl", hash = "sha256:ac7299a8440d572db07ec917b62c28b09c850730c0489e7ce6c25afc0051b4df" },
 ]
 
 [package.metadata]
@@ -1286,7 +1286,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "alembic", specifier = ">=1.13.0" },
-    { name = "buska-core", path = "vendor/buska_core-0.1.0-py3-none-any.whl" },
+    { name = "buska-core", path = "vendor/buska_core-0.2.0-py3-none-any.whl" },
     { name = "firebase-admin", specifier = ">=7.2.0" },
     { name = "flasgger", specifier = ">=0.9.7.1" },
     { name = "flask", specifier = ">=3.1.2" },

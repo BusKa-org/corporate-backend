@@ -5,7 +5,7 @@ description = "Backend API for MeBusKá - On-demand Corporate Transport"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "buska-core>=0.1.0",
+    "buska-core>=0.2.0",
     "flasgger>=0.9.7.1",
     "flask>=3.1.2",
     "flask-cors>=6.0.1",
@@ -36,7 +36,7 @@ dependencies = [
 # table — it installs the same vendored wheel directly instead (see
 # Dockerfile).
 [tool.uv.sources]
-buska-core = { path = "vendor/buska_core-0.1.0-py3-none-any.whl" }
+buska-core = { path = "vendor/buska_core-0.2.0-py3-none-any.whl" }
 
 # ==========================================
 # Tool Configurations

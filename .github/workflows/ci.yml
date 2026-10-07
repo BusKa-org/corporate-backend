@@ -110,7 +110,8 @@ jobs:
       - name: "Fetch buska-core"
         uses: BusKa-org/buska-core/.github/actions/fetch-buska-core@main
         with:
-          token: ${{ secrets.BUSKA_CORE_READ_TOKEN }}
+          app-client-id: ${{ secrets.BUSKA_CORE_APP_CLIENT_ID }}
+          app-private-key: ${{ secrets.BUSKA_CORE_APP_PRIVATE_KEY }}
 
       - name: "Install dependencies (dev)"
         run: uv sync --frozen --dev
@@ -235,7 +236,8 @@ jobs:
       - name: "Fetch buska-core"
         uses: BusKa-org/buska-core/.github/actions/fetch-buska-core@main
         with:
-          token: ${{ secrets.BUSKA_CORE_READ_TOKEN }}
+          app-client-id: ${{ secrets.BUSKA_CORE_APP_CLIENT_ID }}
+          app-private-key: ${{ secrets.BUSKA_CORE_APP_PRIVATE_KEY }}
 
       - name: "Install dependencies (dev)"
         run: uv sync --frozen --dev
@@ -452,7 +454,8 @@ jobs:
       - name: "Fetch buska-core"
         uses: BusKa-org/buska-core/.github/actions/fetch-buska-core@main
         with:
-          token: ${{ secrets.BUSKA_CORE_READ_TOKEN }}
+          app-client-id: ${{ secrets.BUSKA_CORE_APP_CLIENT_ID }}
+          app-private-key: ${{ secrets.BUSKA_CORE_APP_PRIVATE_KEY }}
 
       - name: "Create Development .env"
         run: |
@@ -630,7 +633,8 @@ jobs:
       - name: "Fetch buska-core"
         uses: BusKa-org/buska-core/.github/actions/fetch-buska-core@main
         with:
-          token: ${{ secrets.BUSKA_CORE_READ_TOKEN }}
+          app-client-id: ${{ secrets.BUSKA_CORE_APP_CLIENT_ID }}
+          app-private-key: ${{ secrets.BUSKA_CORE_APP_PRIVATE_KEY }}
 
       - name: "Install dependencies"
         run: uv sync --frozen --dev
