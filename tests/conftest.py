@@ -5,12 +5,12 @@ from typing import Any
 
 import psycopg2
 import pytest
+from buska_core.config import Settings
 from dotenv import load_dotenv
 from flask_jwt_extended import create_access_token
 from sqlalchemy.engine import make_url
 
 from app import create_app
-from app.core.config import Settings
 from app.models.base import db
 from app.models.enum import DiaDaSemana, StatusViagem, UserStatus
 from tests.factories.geo_factory import PontoFactory

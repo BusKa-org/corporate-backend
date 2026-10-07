@@ -11,12 +11,13 @@ from buska_core.exceptions import (
     UnauthorizedError,
     ValidationError,
 )
+from buska_core.validation import validate_email, validate_password, validate_uuid
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from app.models.base import db
 from app.models.enum import UserRole, UserStatus
 from app.models.user import Aluno, Gestor, Motorista, User
-from app.utils import audit_logger, validate_cpf, validate_email, validate_password, validate_uuid
+from app.utils import audit_logger, validate_cpf
 
 logger = logging.getLogger(__name__)
 
@@ -200,7 +201,7 @@ def change_password(user_id: str, data: dict[str, Any]) -> None:
     if not current_password or not new_password:
         raise ValidationError("Senha atual e nova senha são obrigatórias")
 
-    new_password = validate_password(new_password, "Nova senha")
+    new_password = validate_password(new_password, field_name="Nova senha")
 
     if new_password == current_password:
         raise ValidationError("Nova senha deve ser diferente da senha atual")

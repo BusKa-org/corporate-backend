@@ -50,8 +50,8 @@ def test_create_app_empty_plugin_list_skips_discovery(monkeypatch):
 
     monkeypatch.setattr(
         app_module,
-        "_discover_plugins",
-        lambda: (_ for _ in ()).throw(AssertionError("discovery ran")),
+        "discover_plugins",
+        lambda group: (_ for _ in ()).throw(AssertionError("discovery ran")),
     )
     create_app(plugins=[])  # must not raise
 

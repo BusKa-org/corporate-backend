@@ -11,6 +11,7 @@ from buska_core.exceptions import (
     NotFoundError,
     ValidationError,
 )
+from buska_core.geo import haversine_distance_meters
 from buska_core.transaction import transactional
 
 from app.extensions import scheduler
@@ -23,7 +24,6 @@ from app.models.viagem import AlunosConfirmados, TelemetriaViagem, Viagem, Viage
 from app.services.notificacao_service import NotificacaoService
 from app.tasks.viagem_tasks import realizar_auto_checkin
 from app.utils import audit_logger
-from app.utils.geo_utils import calcular_distancia_metros
 
 logger = logging.getLogger(__name__)
 
@@ -356,7 +356,7 @@ def controlar_viagem(user_id: str, viagem_id: str, data: dict[str, Any]) -> Viag
                 for i in range(len(rastros) - 1):
                     p1 = rastros[i]
                     p2 = rastros[i + 1]
-                    distancia_metros += calcular_distancia_metros(
+                    distancia_metros += haversine_distance_meters(
                         float(p1.latitude),
                         float(p1.longitude),
                         float(p2.latitude),
@@ -477,7 +477,7 @@ def atualizar_localizacao(user_id: str, viagem_id: str, data: dict) -> dict:
     proximo_ponto = proximos_pontos[0]
     ponto_geo = proximo_ponto.ponto
 
-    distancia_metros = calcular_distancia_metros(
+    distancia_metros = haversine_distance_meters(
         float(data["latitude"]),
         float(data["longitude"]),
         float(ponto_geo.latitude),

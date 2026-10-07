@@ -3,11 +3,13 @@ import logging
 import os
 from collections.abc import Callable
 from datetime import timedelta
-from importlib.metadata import entry_points
 from typing import Any
 
 import firebase_admin
+from buska_core.config import Settings
 from buska_core.error_handlers import register_error_handlers, register_jwt_handlers
+from buska_core.plugins import discover_plugins
+from buska_core.security import check_production_security, setup_security_headers
 from dotenv import load_dotenv
 from firebase_admin import credentials
 from flask import Flask, Response, jsonify
@@ -30,29 +32,14 @@ from .api.controllers.rotas_controller import api as rotas_ns
 from .api.controllers.routing_controller import api as routing_ns
 from .api.controllers.user_controller import api as user_ns
 from .api.controllers.viagens_controller import api as viagem_ns
-from .core.config import Settings
 from .models import Ocorrencia  # noqa: F401 — registers table with SQLAlchemy
 from .models.base import db
-from .utils import (
-    check_production_security,
-    setup_logging,
-    setup_request_id_middleware,
-    setup_security_headers,
-)
+from .utils import setup_logging, setup_request_id_middleware
 
 jwt = JWTManager()
 logger = logging.getLogger(__name__)
 
-
-def _discover_plugins() -> list[Callable[[Flask, Api], None]]:
-    """Load registration callables published under the 'mebuska.plugins' group.
-
-    Deployment repos (e.g. mebuska-deploy) declare their plugins in
-    pyproject.toml so the product never imports client code by name.
-    """
-    eps = sorted(entry_points(group="mebuska.plugins"), key=lambda ep: ep.name)
-    logger.info("Plugins discovered", extra={"plugins": [ep.name for ep in eps]})
-    return [ep.load() for ep in eps]
+PLUGIN_GROUP = "mebuska.plugins"
 
 
 def create_app(
@@ -63,7 +50,7 @@ def create_app(
     plugins: list[Callable[[Flask, Api], None]] | None = None,
 ) -> Flask:
     load_dotenv()
-    settings = Settings()
+    settings = Settings.load()
     app = Flask(__name__)
     app.url_map.strict_slashes = False
 
@@ -212,7 +199,7 @@ Inclua o header: `Authorization: Bearer <seu_token>`
     api.add_namespace(dashboard_ns, path="/v1/dashboard")
 
     # Client-specific extensions — see `plugins` param contract on the signature.
-    for register in (_discover_plugins() if plugins is None else plugins):
+    for register in (discover_plugins(PLUGIN_GROUP) if plugins is None else plugins):
         register(app, api)
 
     # ==========================================
