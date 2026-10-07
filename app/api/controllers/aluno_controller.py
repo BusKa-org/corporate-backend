@@ -6,11 +6,9 @@ from flask_restx import Namespace, Resource
 
 from app.api.contracts import aluno_contract
 from app.schemas.aluno_schema import (
-    AlunoGuardianConsentPublicSchema,
     AlunoListResponseSchema,
     AlunoMeUpdateRequestSchema,
     AlunoResponseSchema,
-    AlunoSelfSignupRequestSchema,
 )
 from app.services import aluno_service
 
@@ -20,24 +18,9 @@ api = Namespace("alunos", description="Área do Aluno (App)")
 models = aluno_contract.register_models(api)
 
 # Validation / serialisation schemas (Marshmallow)
-self_signup_schema = AlunoSelfSignupRequestSchema()
 me_update_schema = AlunoMeUpdateRequestSchema()
 aluno_response_schema = AlunoResponseSchema()
 aluno_list_response_schema = AlunoListResponseSchema()
-guardian_public_schema = AlunoGuardianConsentPublicSchema()
-
-
-@api.route("/signup")
-class AlunoSignupResource(Resource):
-    @api.doc("aluno_signup", security=[])
-    @api.expect(models["self_signup_request"])
-    @api.response(201, "Success", models["aluno_response"])
-    def post(self):
-        """Auto-cadastro do Aluno (Público)"""
-        data = request.get_json(silent=True) or {}
-        payload = self_signup_schema.load(data)
-        aluno = aluno_service.auto_cadastro(payload)
-        return aluno_response_schema.dump(aluno), 201
 
 
 @api.route("/me")
@@ -98,33 +81,4 @@ class AlunoDetailResource(Resource):
         """(Gestor) Obtém detalhes completos de um aluno"""
         gestor_id = get_jwt_identity()
         aluno = aluno_service.get_aluno_by_id(gestor_id, aluno_id)
-        return aluno_response_schema.dump(aluno), 200
-
-
-@api.route("/<string:aluno_id>/aprovar")
-class AlunoAprovarResource(Resource):
-    @api.doc("aprovar_aluno")
-    @api.response(200, "Success")
-    @jwt_required()
-    def post(self, aluno_id: str) -> tuple[dict[str, Any], int]:
-        """(Gestor) Aprova cadastro de um aluno menor"""
-        gestor_id = get_jwt_identity()
-        aluno = aluno_service.aprovar_aluno(gestor_id, aluno_id)
-        return aluno_response_schema.dump(aluno), 200
-
-
-@api.route("/guardian-consent/<string:token>")
-class GuardianConsentResource(Resource):
-    @api.doc("guardian_consent_info", security=[])
-    @api.response(200, "Success", models["guardian_consent_response"])
-    def get(self, token: str) -> tuple[dict[str, Any], int]:
-        """(Público) Busca dados do aluno para a tela de consentimento do responsável"""
-        aluno = aluno_service.get_guardian_consent_info(token)
-        return guardian_public_schema.dump(aluno), 200
-
-    @api.doc("guardian_consent_confirm", security=[])
-    @api.response(200, "Success", models["aluno_response"])
-    def post(self, token: str) -> tuple[dict[str, Any], int]:
-        """(Público) Responsável confirma consentimento para o aluno menor"""
-        aluno = aluno_service.record_guardian_consent(token)
         return aluno_response_schema.dump(aluno), 200
