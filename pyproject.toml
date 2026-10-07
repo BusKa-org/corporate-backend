@@ -5,6 +5,7 @@ description = "Backend API for MeBusKá - On-demand Corporate Transport"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "buska-core>=0.2.0",
     "flasgger>=0.9.7.1",
     "flask>=3.1.2",
     "flask-cors>=6.0.1",
@@ -23,6 +24,19 @@ dependencies = [
     "firebase-admin>=7.2.0",
     "requests>=2.32.0",
 ]
+
+# buska-core isn't on any package index — no PyPI listing, no self-hosted
+# server to run. `.buska-core-version` pins the release tag; `make
+# fetch-buska-core` (also a dependency of `install`/`install-dev`/
+# `docker-build`, and called in CI via the shared BusKa-org/buska-core/
+# .github/actions/fetch-buska-core action) downloads that release's wheel
+# into ./vendor (gitignored). This points uv at the downloaded file.
+# Bumping the version means updating BOTH `.buska-core-version` AND the
+# filename below. The Dockerfile uses plain `pip`, which doesn't read this
+# table — it installs the same vendored wheel directly instead (see
+# Dockerfile).
+[tool.uv.sources]
+buska-core = { path = "vendor/buska_core-0.2.0-py3-none-any.whl" }
 
 # ==========================================
 # Tool Configurations

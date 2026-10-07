@@ -4,22 +4,23 @@ import logging
 import secrets
 from typing import Any, cast
 
-from flask import current_app
-from werkzeug.security import generate_password_hash
-
-from app.core.exceptions import (
+from buska_core.exceptions import (
     AppError,
     ConflictError,
     NotFoundError,
     ValidationError,
 )
+from buska_core.notifications import send_email
+from buska_core.validation import validate_email, validate_password
+from flask import current_app
+from werkzeug.security import generate_password_hash
+
 from app.models.base import db
 from app.models.enum import UserRole, UserStatus
 from app.models.geo import Endereco, Instituicao, Ponto
 from app.models.user import Aluno, User
 from app.services.user_service import _get_gestor_or_403
-from app.utils import audit_logger, validate_cpf, validate_email, validate_password
-from app.utils.email_sender import send_email
+from app.utils import audit_logger, validate_cpf
 
 logger = logging.getLogger(__name__)
 
@@ -384,7 +385,7 @@ def get_aluno_by_id(gestor_id: str, aluno_id: str) -> Aluno:
 
     Raises: ForbiddenError, NotFoundError
     """
-    from app.core.exceptions import ForbiddenError
+    from buska_core.exceptions import ForbiddenError
 
     gestor = _get_gestor_or_403(gestor_id, "Apenas gestores podem consultar alunos")
     aluno = db.session.get(Aluno, aluno_id)
@@ -422,7 +423,8 @@ def aprovar_aluno(gestor_id: str, aluno_id: str) -> Aluno:
     Returns: Aluno object
     Raises: ForbiddenError, NotFoundError, ValidationError
     """
-    from app.core.exceptions import ForbiddenError
+    from buska_core.exceptions import ForbiddenError
+
     from app.services.notificacao_service import NotificacaoService
 
     gestor = _get_gestor_or_403(gestor_id, "Apenas gestores podem aprovar alunos")

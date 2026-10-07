@@ -47,6 +47,11 @@ dist/
 *.egg-info/
 .eggs/
 
+# buska-core wheel fetched by CI (see .github/workflows/ci.yml's "Fetch
+# buska-core" steps) — not committed, fetched fresh from
+# BusKa-org/buska-core's GitHub Releases before install.
+vendor/
+
 # =========================
 # SQLite local (se usar)
 # =========================

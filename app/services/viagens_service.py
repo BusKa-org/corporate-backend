@@ -4,14 +4,16 @@ import logging
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
-from app.core.exceptions import (
+from buska_core.exceptions import (
     AppError,
     ConflictError,
     ForbiddenError,
     NotFoundError,
     ValidationError,
 )
-from app.core.transaction import transactional
+from buska_core.geo import haversine_distance_meters
+from buska_core.transaction import transactional
+
 from app.extensions import scheduler
 from app.models.base import db
 from app.models.enum import DiaDaSemana, SentidoViagem, StatusViagem, UserRole
@@ -22,7 +24,6 @@ from app.models.viagem import AlunosConfirmados, TelemetriaViagem, Viagem, Viage
 from app.services.notificacao_service import NotificacaoService
 from app.tasks.viagem_tasks import realizar_auto_checkin
 from app.utils import audit_logger
-from app.utils.geo_utils import calcular_distancia_metros
 
 logger = logging.getLogger(__name__)
 
@@ -136,7 +137,7 @@ def confirmar_presenca_aluno(
     confirmacao: bool = data["confirmacao"]
     ponto_embarque_id = data.get("ponto_embarque_id")
 
-    with transactional():
+    with transactional(db.session):
         viagem = db.session.get(Viagem, viagem_id)
         if not viagem:
             raise NotFoundError("Viagem não encontrada")
@@ -287,7 +288,7 @@ def gerar_viagem(user_id: str, data_input: dict) -> Viagem:
             f"Viagem já gerada para este dia/horário: {data_viagem} {horario_selecionado.horario_saida.strftime('%H:%M')}"
         )
 
-    with transactional():
+    with transactional(db.session):
         nova_viagem = Viagem(
             data=data_viagem,
             horario_rota_id=horario_selecionado.id,
@@ -326,7 +327,7 @@ def controlar_viagem(user_id: str, viagem_id: str, data: dict[str, Any]) -> Viag
 
     acao = data.get("acao")
 
-    with transactional():
+    with transactional(db.session):
         if acao == "INICIAR":
             if viagem.status != StatusViagem.AGENDADA:
                 raise ValidationError(
@@ -355,7 +356,7 @@ def controlar_viagem(user_id: str, viagem_id: str, data: dict[str, Any]) -> Viag
                 for i in range(len(rastros) - 1):
                     p1 = rastros[i]
                     p2 = rastros[i + 1]
-                    distancia_metros += calcular_distancia_metros(
+                    distancia_metros += haversine_distance_meters(
                         float(p1.latitude),
                         float(p1.longitude),
                         float(p2.latitude),
@@ -476,7 +477,7 @@ def atualizar_localizacao(user_id: str, viagem_id: str, data: dict) -> dict:
     proximo_ponto = proximos_pontos[0]
     ponto_geo = proximo_ponto.ponto
 
-    distancia_metros = calcular_distancia_metros(
+    distancia_metros = haversine_distance_meters(
         float(data["latitude"]),
         float(data["longitude"]),
         float(ponto_geo.latitude),

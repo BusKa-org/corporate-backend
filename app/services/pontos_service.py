@@ -3,7 +3,8 @@
 import logging
 from typing import Any
 
-from app.core.exceptions import AppError, ForbiddenError, NotFoundError, ValidationError
+from buska_core.exceptions import AppError, ForbiddenError, NotFoundError, ValidationError
+
 from app.models.base import db
 from app.models.enum import UserRole
 from app.models.geo import Ponto

@@ -3,8 +3,8 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
+from buska_core.exceptions import ForbiddenError, NotFoundError
 
-from app.core.exceptions import ForbiddenError, NotFoundError
 from app.models.enum import UserRole
 from app.services.notificacao_service import NotificacaoService
 

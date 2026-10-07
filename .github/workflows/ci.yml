@@ -107,6 +107,12 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           enable-cache: true
 
+      - name: "Fetch buska-core"
+        uses: BusKa-org/buska-core/.github/actions/fetch-buska-core@main
+        with:
+          app-client-id: ${{ secrets.BUSKA_CORE_APP_CLIENT_ID }}
+          app-private-key: ${{ secrets.BUSKA_CORE_APP_PRIVATE_KEY }}
+
       - name: "Install dependencies (dev)"
         run: uv sync --frozen --dev
 
@@ -226,6 +232,12 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           enable-cache: true
+
+      - name: "Fetch buska-core"
+        uses: BusKa-org/buska-core/.github/actions/fetch-buska-core@main
+        with:
+          app-client-id: ${{ secrets.BUSKA_CORE_APP_CLIENT_ID }}
+          app-private-key: ${{ secrets.BUSKA_CORE_APP_PRIVATE_KEY }}
 
       - name: "Install dependencies (dev)"
         run: uv sync --frozen --dev
@@ -439,6 +451,12 @@ jobs:
           echo "$TAGS" >> "$GITHUB_OUTPUT"
           echo "EOF" >> "$GITHUB_OUTPUT"
 
+      - name: "Fetch buska-core"
+        uses: BusKa-org/buska-core/.github/actions/fetch-buska-core@main
+        with:
+          app-client-id: ${{ secrets.BUSKA_CORE_APP_CLIENT_ID }}
+          app-private-key: ${{ secrets.BUSKA_CORE_APP_PRIVATE_KEY }}
+
       - name: "Create Development .env"
         run: |
           cat > .env <<EOF
@@ -611,6 +629,12 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           enable-cache: true
+
+      - name: "Fetch buska-core"
+        uses: BusKa-org/buska-core/.github/actions/fetch-buska-core@main
+        with:
+          app-client-id: ${{ secrets.BUSKA_CORE_APP_CLIENT_ID }}
+          app-private-key: ${{ secrets.BUSKA_CORE_APP_PRIVATE_KEY }}
 
       - name: "Install dependencies"
         run: uv sync --frozen --dev

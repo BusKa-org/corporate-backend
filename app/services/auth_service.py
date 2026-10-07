@@ -5,10 +5,7 @@ import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from flask_jwt_extended import create_access_token
-from werkzeug.security import check_password_hash, generate_password_hash
-
-from app.core.exceptions import (
+from buska_core.exceptions import (
     AppError,
     ConflictError,
     ForbiddenError,
@@ -16,13 +13,17 @@ from app.core.exceptions import (
     UnauthorizedError,
     ValidationError,
 )
+from buska_core.notifications import send_email
+from buska_core.validation import validate_email, validate_password
+from flask_jwt_extended import create_access_token
+from werkzeug.security import check_password_hash, generate_password_hash
+
 from app.models.base import db
 from app.models.enum import UserRole, UserStatus
 from app.models.organizacao import Organizacao
 from app.models.password_reset import PasswordResetToken
 from app.models.user import Aluno, Gestor, Motorista, User
-from app.utils import audit_logger, validate_cpf, validate_email, validate_password
-from app.utils.email_sender import send_email
+from app.utils import audit_logger, validate_cpf
 
 logger = logging.getLogger(__name__)
 
@@ -328,7 +329,7 @@ def reset_password(token: str, new_password: str) -> None:
         db.session.commit()
         raise ValidationError("Link expirado. Solicite uma nova recuperação de senha.")
 
-    new_password = validate_password(new_password, "Nova senha")
+    new_password = validate_password(new_password, field_name="Nova senha")
     user = User.query.get(record.user_id)
     if not user:
         db.session.delete(record)
