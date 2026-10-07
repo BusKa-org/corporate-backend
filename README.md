@@ -1,167 +1,167 @@
 # MeBusKá Backend
 
-API Flask para transporte corporativo sob demanda (DRT).
+Flask API for on-demand corporate transport (DRT).
 
-## Setup Local
+## Local Setup
 
-### Pré-requisitos
+### Prerequisites
 - Python 3.12+
 - Docker + Docker Compose
-- Ansible (para automação)
+- Ansible (for automation)
 
-### Opção 1: Setup Automatizado (Recomendado)
+### Option 1: Automated Setup (Recommended)
 
 ```bash
-# Clone o repositório e entre no diretório
+# Clone the repo and enter the directory
 git clone https://github.com/BusKa-org/corporate-backend.git
 cd corporate-backend
 
-# Setup completo (venv + dependências + banco + docker)
+# Full setup (venv + dependencies + database + docker)
 chmod +x setup.sh start.sh
 ./start.sh
 
-# Para reinicializar o banco de dados
+# To reset the database
 ./start.sh -e clean_database=true
 ```
 
-A API estará disponível em: **http://localhost:5000/docs**
+The API will be available at: **http://localhost:5000/docs**
 
 ---
 
-### Opção 2: Setup Manual
+### Option 2: Manual Setup
 
 ```bash
-# 1. Criar ambiente virtual
+# 1. Create a virtual environment
 python3 -m venv .venv
 source .venv/bin/activate
 
-# 2. Instalar dependências
+# 2. Install dependencies
 make install
 
-# 3. Iniciar banco de dados (em outro terminal)
+# 3. Start the database (in another terminal)
 docker compose -f infra/database.yml up -d
 
-# 4. Popular banco de dados
+# 4. Seed the database
 make initdb
 
-# 5. Rodar servidor
+# 5. Run the server
 make run
 ```
 
-A API estará em: **http://localhost:5000** | Swagger: **http://localhost:5000/docs**
+The API will be at: **http://localhost:5000** | Swagger: **http://localhost:5000/docs**
 
-#### Verificar Instalação
+#### Verify Installation
 
 ```bash
-# Verificar dependências
+# Check dependencies
 pip list | grep -E "python-json-logger"
 
-# Verificar security headers
+# Check security headers
 curl -I http://localhost:5000/v1/auth/login | grep -E "X-Content-Type|X-Frame|X-XSS|X-Request-ID"
 ```
 
 ---
 
-## Comandos Disponíveis
+## Available Commands
 
-### Desenvolvimento Local
-
-```bash
-make install        # Instalar dependências
-make run            # Rodar servidor (porta 5000)
-make initdb         # Criar e popular banco de dados
-make deletedb       # Limpar banco de dados
-make bdcon          # Conectar ao banco via psql
-```
-
-### Docker (Produção)
+### Local Development
 
 ```bash
-make docker-build   # Buildar imagem
-make docker-up      # Subir containers (porta 5000)
-make docker-down    # Parar containers
-make docker-logs    # Ver logs em tempo real
-make docker-clean   # Limpar tudo (volumes + imagens)
+make install        # Install dependencies
+make run            # Run the server (port 5000)
+make initdb         # Create and seed the database
+make deletedb       # Wipe the database
+make bdcon          # Connect to the database via psql
 ```
 
-## 📁 Estrutura do Projeto
+### Docker (Production)
+
+```bash
+make docker-build   # Build the image
+make docker-up      # Bring up containers (port 5000)
+make docker-down    # Stop containers
+make docker-logs    # Tail logs
+make docker-clean   # Clean up everything (volumes + images)
+```
+
+## 📁 Project Structure
 
 ```
 mebuska-corporate/
-├── app/                    # Código da aplicação
+├── app/                    # Application code
 │   ├── api/
-│   │   ├── controllers/    # Lógica dos endpoints
-│   │   └── routes/         # Definição das rotas
+│   │   ├── controllers/    # Endpoint logic
+│   │   └── routes/         # Route definitions
 │   ├── core/
-│   │   ├── auth.py         # Autenticação JWT
-│   │   └── config.py       # Configurações
-│   ├── models/             # Modelos SQLAlchemy
-│   └── services/           # Serviços de negócio
-├── database/               # Scripts SQL
-│   ├── init.sql            # Schema e extensões
-│   └── populate.sql        # Dados iniciais
-├── docs/                   # Documentação da API
-│   └── endpoints/          # Specs YAML (Swagger)
+│   │   ├── auth.py         # JWT authentication
+│   │   └── config.py       # Configuration
+│   ├── models/             # SQLAlchemy models
+│   └── services/           # Business logic services
+├── database/               # SQL scripts
+│   ├── init.sql            # Schema and extensions
+│   └── populate.sql        # Seed data
+├── docs/                   # API documentation
+│   └── endpoints/          # YAML specs (Swagger)
 ├── infra/
 │   ├── database.yml        # Docker Compose (dev)
-│   └── terraform/          # Infraestrutura (OpenStack)
-├── ansible/                # Playbooks de automação
-│   ├── setup-dev.yml       # Setup local
-│   ├── run-docker.yml      # Deploy Docker
-│   └── deploy-prod.yml     # Deploy OpenStack
-├── tests/                  # Testes automatizados
-├── Dockerfile              # Build de produção
-├── docker-compose.prod.yml # Orquestração (prod)
-├── Makefile                # Automação de comandos
-├── setup.sh                # Setup automatizado
+│   └── terraform/          # Infrastructure (OpenStack)
+├── ansible/                # Automation playbooks
+│   ├── setup-dev.yml       # Local setup
+│   ├── run-docker.yml      # Docker deploy
+│   └── deploy-prod.yml     # OpenStack deploy
+├── tests/                  # Automated tests
+├── Dockerfile              # Production build
+├── docker-compose.prod.yml # Orchestration (prod)
+├── Makefile                # Command automation
+├── setup.sh                # Automated setup
 ├── start.sh                # Setup + Docker
-└── pyproject.toml          # Dependências Python
+└── pyproject.toml          # Python dependencies
 ```
 
-## Variáveis de Ambiente
+## Environment Variables
 
-Copie o `.env.example` para `.env.prod` e configure:
+Copy `.env.example` to `.env.prod` and configure:
 
 ```bash
 # Database
 DB_USER=buska_user
-DB_PASSWORD=senha_segura_aqui
+DB_PASSWORD=your_secure_password
 DB_NAME=buska_db
 
 # API
 API_PORT=5000
 DEBUG=false
-JWT_SECRET_KEY=chave_jwt_longa_e_aleatoria
+JWT_SECRET_KEY=a_long_random_jwt_secret
 JWT_EXPIRES_HOURS=2
 ```
 
-## 📚 Documentação
+## 📚 Documentation
 
-### Documentação da API
-A documentação completa e interativa da API está disponível em:
+### API Documentation
+Full interactive API documentation is available at:
 - **Swagger UI**: http://localhost:5000/docs
 - **ReDoc**: http://localhost:5000/redoc
 
-Principais endpoints:
-- `POST /auth/login` - Autenticar
-- `POST /auth/register` - Criar conta
-- `GET /rotas` - Listar rotas
-- `GET /viagens` - Listar viagens
-- `GET /me` - Dados do usuário autenticado
+Main endpoints:
+- `POST /auth/login` - Authenticate
+- `POST /auth/register` - Create an account
+- `GET /rotas` - List routes
+- `GET /viagens` - List trips
+- `GET /me` - Authenticated user's data
 
-## 🔒 Segurança
+## 🔒 Security
 
-O backend implementa múltiplas camadas de segurança:
+The backend implements multiple layers of security:
 
-### Autenticação & Autorização
-- **JWT** com expiração configurável (padrão: 2 horas)
+### Authentication & Authorization
+- **JWT** with configurable expiration (default: 2 hours)
 - **RBAC** (Role-Based Access Control): ALUNO, MOTORISTA, GESTOR
-- **Isolamento por Prefeitura** (tenant isolation)
+- **Tenant isolation** per Prefeitura (municipality)
 
-### Proteções Implementadas
+### Protections in Place
 - ✅ **Security Headers**: CSP, XSS Protection, HSTS, etc.
-- ✅ **Audit Logging**: Registro de todas operações sensíveis
-- ✅ **Request ID Tracking**: Rastreamento de requisições
+- ✅ **Audit Logging**: logs every sensitive operation
+- ✅ **Request ID Tracking**
 
 ## 🚢 Deployment
 
@@ -173,41 +173,40 @@ terraform init
 terraform plan
 terraform apply
 
-# Depois, deploy via Ansible
+# Then, deploy via Ansible
 ansible-playbook ansible/deploy-prod.yml
 ```
 
-### Docker Local
+### Local Docker
 
 ```bash
 ./start.sh
 ```
 
-Containers iniciados:
-- `buska_api` - Flask API com Gunicorn (porta 5000)
-- `buska_db_prod` - PostgreSQL + PostGIS (porta 5432)
+Containers started:
+- `buska_api` - Flask API with Gunicorn (port 5000)
+- `buska_db_prod` - PostgreSQL + PostGIS (port 5432)
 
 ## 🐛 Troubleshooting
 
-### Erro: Import errors para utilitários novos
+### Error: import errors for new utilities
 ```bash
-# Reinstalar dependências
+# Reinstall dependencies
 pip install -e "."
 ```
 
-### Logs não estão em formato legível
+### Logs aren't in a readable format
 ```bash
-# Adicionar DEBUG=true no .env
+# Add DEBUG=true to .env
 echo "DEBUG=true" >> .env
 
-# Limpar cache e reiniciar
+# Clear cache and restart
 find . -type d -name "__pycache__" -exec rm -r {} +
 make run
 ```
 
 ### Type checking errors (mypy)
 ```bash
-# Rodar com configurações menos estritas
+# Run with less strict settings
 mypy app --no-strict-optional --ignore-missing-imports
 ```
-
