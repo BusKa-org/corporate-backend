@@ -15,8 +15,6 @@ from app.models.enum import StatusViagem, UserRole
 from app.models.user import User
 from app.models.viagem import Viagem
 
-# ponytail: janela fixa até o Plan 2 (ciclo de vida da viagem) dar um sinal
-# real de duração da viagem; ajustar quando esse sinal existir.
 EXPIRACAO_PADRAO = timedelta(hours=4)
 
 
