@@ -16,6 +16,7 @@ from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError, Un
 from app.core.transaction import transactional
 from app.models.base import db
 from app.models.consentimento import REVOGACAO, Consentimento
+from app.models.credencial_embarque import CredencialEmbarque
 from app.models.enum import StatusViagem, UserRole, UserStatus
 from app.models.geo import Endereco, Ponto
 from app.models.notificacao import Notificacao
@@ -87,6 +88,7 @@ def _apagar_ponto_casa(user: User) -> None:
 
 def _apagar_dados_sem_valor_estatistico(aluno_id) -> None:
     Notificacao.query.filter_by(usuario_id=aluno_id).delete()
+    CredencialEmbarque.query.filter_by(aluno_id=aluno_id).delete()
     PasswordResetToken.query.filter_by(user_id=aluno_id).delete()
     RotaAluno.query.filter_by(aluno_id=aluno_id).delete()
 

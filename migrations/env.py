@@ -21,16 +21,18 @@ load_dotenv()
 # Import models to ensure they're registered with SQLAlchemy metadata
 from app.models.base import db
 from app.models import (
-    user,
+    consentimento,
+    convite,
+    credencial_embarque,
     geo,
-    rota,
-    viagem,
+    notificacao,
     onibus,
     organizacao,
-    notificacao,
     password_reset,
-    consentimento,
     retencao_legal,
+    rota,
+    user,
+    viagem,
 )
 
 # Alembic Config object

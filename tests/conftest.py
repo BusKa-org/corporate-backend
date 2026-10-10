@@ -237,6 +237,9 @@ def other_aluno(client, app, _db, other_organizacao):
     u = AlunoFactory(organizacao_id=other_organizacao.id)
     _db.session.add(u)
     _db.session.commit()
+    # Passageiro que já aceitou o termo, como o fixture `aluno`.
+    _db.session.add(Consentimento(usuario_id=u.id, versao=VERSAO_TERMO_VIGENTE, acao=ACEITE))
+    _db.session.commit()
 
     with app.app_context():
         token = create_access_token(identity=str(u.id))

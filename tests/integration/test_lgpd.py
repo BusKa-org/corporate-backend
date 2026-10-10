@@ -4,6 +4,7 @@ import re
 from datetime import UTC, date, datetime, timedelta
 
 from app.models.consentimento import REVOGACAO, Consentimento
+from app.models.credencial_embarque import CredencialEmbarque
 from app.models.enum import StatusViagem, UserStatus
 from app.models.geo import Endereco, Ponto
 from app.models.notificacao import Notificacao
@@ -13,6 +14,7 @@ from app.models.viagem import AlunosConfirmados
 from app.services import conta_service
 from app.services.consentimento_service import VERSAO_TERMO_VIGENTE
 from app.tasks.retencao_tasks import job_anonimizar_retencoes
+from tests.factories.credencial_embarque_factory import CredencialEmbarqueFactory
 from tests.factories.geo_factory import PontoFactory
 from tests.factories.user_factory import AlunoFactory
 from tests.factories.viagem_factory import AlunosConfirmadosFactory, ViagemFactory
@@ -75,6 +77,16 @@ def test_confirmar_presenca_bloqueia_sem_consentimento(aluno):
     assert liberado.status_code == 404  # passou pelo bloqueio e não achou a viagem
 
 
+def test_credencial_de_embarque_bloqueia_sem_consentimento(aluno):
+    _revogar_consentimento(aluno)
+    url = f"/v1/viagens/{VIAGEM_INEXISTENTE}/credencial-embarque"
+
+    assert aluno.client.get(url).status_code == 403
+
+    aluno.client.post("/v1/consentimento", json={"versao": VERSAO_TERMO_VIGENTE})
+    assert aluno.client.get(url).status_code == 404  # passou pelo bloqueio e não achou a credencial
+
+
 def test_login_e_perfil_trazem_a_flag_de_consentimento_pendente(client, organizacao, _db):
     novo = AlunoFactory(organizacao_id=organizacao.id)
     _db.session.add(novo)
@@ -129,7 +141,7 @@ def test_excluir_conta_bloqueia_com_viagem_em_andamento(
 
 
 def test_excluir_conta_anonimiza_e_preserva_historico(
-    aluno, horario_rota, rota_aluno, viagem_futura_agendada_com_motorista, _db, monkeypatch
+    aluno, ponto, horario_rota, rota_aluno, viagem_futura_agendada_com_motorista, _db, monkeypatch
 ):
     emails_enviados = []
     monkeypatch.setattr(
@@ -148,6 +160,13 @@ def test_excluir_conta_anonimiza_e_preserva_historico(
     aluno.user.ponto_casa_id = ponto_casa.id
     ponto_casa_id = ponto_casa.id
     _db.session.add(Notificacao(usuario_id=aluno_id, titulo="Aviso", mensagem="Teste"))
+    _db.session.add(
+        CredencialEmbarqueFactory(
+            viagem_id=viagem_futura_agendada_com_motorista.id,
+            aluno_id=aluno_id,
+            ponto_embarque_id=ponto.id,
+        )
+    )
     viagem_finalizada = ViagemFactory(
         horario_rota_id=horario_rota.id,
         data=date.today(),
@@ -185,6 +204,7 @@ def test_excluir_conta_anonimiza_e_preserva_historico(
     assert Endereco.query.filter_by(ponto_id=ponto_casa_id).count() == 0
 
     assert Notificacao.query.filter_by(usuario_id=aluno_id).count() == 0
+    assert CredencialEmbarque.query.filter_by(aluno_id=aluno_id).count() == 0
     presencas = AlunosConfirmados.query.filter_by(aluno_id=aluno_id).all()
     assert len(presencas) == 1
     assert presencas[0].viagem_id == viagem_finalizada.id

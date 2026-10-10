@@ -1,7 +1,7 @@
 """add consentimento table and DELETED user status
 
 Revision ID: e5f6a7b8c9d0
-Revises: a1b2c3d4e5f7
+Revises: b7c8d9e0f1a2
 Create Date: 2026-09-29 10:00:00.000000+00:00
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ from sqlalchemy.dialects import postgresql
 
 
 revision: str = "e5f6a7b8c9d0"
-down_revision: Union[str, None] = "a1b2c3d4e5f7"
+down_revision: Union[str, None] = "b7c8d9e0f1a2"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

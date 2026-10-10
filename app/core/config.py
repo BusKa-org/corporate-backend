@@ -52,6 +52,9 @@ class Settings:
         # Frontend URL (used for guardian consent email links)
         self.FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:8081")
 
+        # Link de download do app, incluído no e-mail de convite (opcional)
+        self.APP_DOWNLOAD_URL = os.getenv("APP_DOWNLOAD_URL", "")
+
         # CORS settings
         self.CORS_ORIGINS = self._parse_cors_origins()
 

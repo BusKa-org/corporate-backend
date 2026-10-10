@@ -15,7 +15,7 @@ from app.core.exceptions import (
 )
 from app.models.base import db
 from app.models.enum import UserRole, UserStatus
-from app.models.user import Aluno, Gestor, Motorista, User
+from app.models.user import Gestor, Motorista, User
 from app.utils import audit_logger, validate_cpf, validate_email, validate_password, validate_uuid
 
 logger = logging.getLogger(__name__)
@@ -112,40 +112,6 @@ def update_user(user_id: str, data: dict[str, Any]) -> User:
         db.session.rollback()
         logger.error(f"Error updating user: {e}", exc_info=True)
         raise AppError(f"Erro ao atualizar usuário: {str(e)}", 500)
-
-
-def create_aluno_account(gestor_id: str, data: dict[str, Any]) -> Aluno:
-    """Create a new aluno account (gestor only)."""
-    gestor = _get_gestor_or_403(gestor_id, "Apenas gestores podem cadastrar alunos")
-
-    email = validate_email(data.get("email", ""))
-    cpf_clean = validate_cpf(data.get("cpf", ""))
-
-    if db.session.query(User).filter((User.email == email) | (User.cpf == cpf_clean)).first():
-        raise ConflictError("Email ou CPF já cadastrado")
-
-    password = validate_password(data.get("password", ""))
-    try:
-        new_aluno = Aluno(
-            organizacao_id=gestor.organizacao_id,
-            nome=data["nome"],
-            email=email,
-            senha_hash=generate_password_hash(password),
-            cpf=cpf_clean,
-            telefone=(data.get("telefone") or "").strip() or None,
-            role=UserRole.ALUNO,
-            status=UserStatus.PENDING_SIGNUP,
-        )
-
-        db.session.add(new_aluno)
-        db.session.commit()
-        return new_aluno
-    except (ValidationError, ConflictError, ForbiddenError):
-        raise
-    except Exception as e:
-        db.session.rollback()
-        logger.error(f"Error creating aluno account: {e}", exc_info=True)
-        raise AppError(f"Erro ao criar conta de aluno: {str(e)}", 500)
 
 
 def create_motorista(gestor_id: str, data: dict[str, Any]) -> Motorista:
