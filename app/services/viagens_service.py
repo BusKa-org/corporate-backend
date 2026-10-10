@@ -176,12 +176,12 @@ def confirmar_presenca_aluno(
                     AlunosConfirmados.aluno_id == aluno.usuario_id,
                     AlunosConfirmados.viagem_id != viagem.id,
                     AlunosConfirmados.confirmacao.is_(True),
-                    Viagem.status.in_((StatusViagem.AGENDADA, StatusViagem.EM_ANDAMENTO)),
+                    Viagem.status == StatusViagem.EM_ANDAMENTO,
                 )
                 .first()
             )
             if inscrito_em_outra:
-                raise ConflictError("Você já está inscrito em outra viagem")
+                raise ConflictError("Você já está em outra viagem em andamento")
 
             # schema already enforces ponto_embarque_id presence on confirmacao=True
             ponto_valido = (

@@ -97,12 +97,12 @@ def test_confirmar_presenca_success_confirm_and_unconfirm(
 @pytest.mark.parametrize(
     "status_outra, esperado",
     [
-        (StatusViagem.AGENDADA, 409),
+        (StatusViagem.AGENDADA, 200),
         (StatusViagem.EM_ANDAMENTO, 409),
         (StatusViagem.FINALIZADA, 200),
     ],
 )
-def test_confirmar_presenca_bloqueada_se_inscrito_em_outra_viagem_ativa(
+def test_confirmar_presenca_bloqueada_se_em_outra_viagem_em_andamento(
     _db,
     aluno,
     rota_aluno,
