@@ -21,6 +21,7 @@ from app.models.enum import UserRole, UserStatus
 from app.models.organizacao import Organizacao
 from app.models.password_reset import PasswordResetToken
 from app.models.user import Aluno, Gestor, Motorista, User
+from app.services import consentimento_service
 from app.utils import audit_logger, validate_cpf, validate_email, validate_password
 from app.utils.email_sender import send_email
 
@@ -144,6 +145,7 @@ def login_user(data: dict[str, Any]) -> dict[str, Any]:
     return {
         "message": "Login successful",
         "token": access_token,
+        "consentimento_pendente": consentimento_service.consentimento_pendente(str(user.id)),
         "user": {
             "id": str(user.id),
             "nome": user.nome,

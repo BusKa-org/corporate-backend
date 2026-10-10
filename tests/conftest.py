@@ -12,7 +12,9 @@ from sqlalchemy.engine import make_url
 from app import create_app
 from app.core.config import Settings
 from app.models.base import db
+from app.models.consentimento import ACEITE, Consentimento
 from app.models.enum import DiaDaSemana, StatusViagem, UserStatus
+from app.services.consentimento_service import VERSAO_TERMO_VIGENTE
 from tests.factories.geo_factory import PontoFactory
 from tests.factories.onibus_factory import OnibusFactory
 from tests.factories.organizacao_factory import OrganizacaoFactory
@@ -204,6 +206,9 @@ def aluno(client, app, _db, organizacao):
     u = AlunoFactory(organizacao_id=organizacao.id)
     _db.session.add(u)
     _db.session.commit()
+    # Passageiro que já aceitou o termo. Os testes de LGPD revogam quando precisam.
+    _db.session.add(Consentimento(usuario_id=u.id, versao=VERSAO_TERMO_VIGENTE, acao=ACEITE))
+    _db.session.commit()
 
     with app.app_context():
         token = create_access_token(identity=str(u.id))
@@ -231,6 +236,9 @@ def aluno_pending(client, app, _db, organizacao):
 def other_aluno(client, app, _db, other_organizacao):
     u = AlunoFactory(organizacao_id=other_organizacao.id)
     _db.session.add(u)
+    _db.session.commit()
+    # Passageiro que já aceitou o termo, como o fixture `aluno`.
+    _db.session.add(Consentimento(usuario_id=u.id, versao=VERSAO_TERMO_VIGENTE, acao=ACEITE))
     _db.session.commit()
 
     with app.app_context():

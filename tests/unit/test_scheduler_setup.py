@@ -20,7 +20,7 @@ ENV_OBRIGATORIAS = [
     "MAIL_SERVER",
 ]
 
-JOBS_ESPERADOS = {"job_24h", "job_10min", "job_convites"}
+JOBS_ESPERADOS = {"job_24h", "job_10min", "job_convites", "job_retencao"}
 
 
 @pytest.fixture()

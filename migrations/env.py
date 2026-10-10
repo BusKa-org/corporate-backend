@@ -21,6 +21,7 @@ load_dotenv()
 # Import models to ensure they're registered with SQLAlchemy metadata
 from app.models.base import db
 from app.models import (
+    consentimento,
     convite,
     credencial_embarque,
     geo,
@@ -28,6 +29,7 @@ from app.models import (
     onibus,
     organizacao,
     password_reset,
+    retencao_legal,
     rota,
     user,
     viagem,
