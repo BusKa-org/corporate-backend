@@ -6,7 +6,7 @@ material.
 
 ## What this is
 
-MeBusKá Corporate Backend: a Flask API for demand responsive transport (DRT),
+BusKá Corporate Backend: a Flask API for demand responsive transport (DRT),
 built for the PaqTcPB engagement. It started as a fork of `municipal-backend`,
 BusKá's fixed route school transport product, with the tenant model
 generalized from `Prefeitura` to `Organizacao`. Full architecture, layering,

@@ -1,4 +1,4 @@
-# MeBusKá Corporate Backend — Architecture
+# BusKá Corporate Backend — Architecture
 
 This document describes `corporate-backend` as it stands today: a fork of
 `municipal-backend` renamed to a generic tenant model, with a plugin
