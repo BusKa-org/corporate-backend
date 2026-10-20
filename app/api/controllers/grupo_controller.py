@@ -10,6 +10,8 @@ from app.schemas.grupo_schema import (
     GrupoUpdateRequestSchema,
     MembroAddRequestSchema,
     MembroResponseSchema,
+    RegraEmailCreateRequestSchema,
+    RegraEmailResponseSchema,
 )
 from app.services import grupo_service
 
@@ -20,6 +22,8 @@ grupo_update_schema = GrupoUpdateRequestSchema()
 membro_add_schema = MembroAddRequestSchema()
 grupo_response_schema = GrupoResponseSchema()
 membro_response_schema = MembroResponseSchema()
+regra_create_schema = RegraEmailCreateRequestSchema()
+regra_response_schema = RegraEmailResponseSchema()
 
 
 @api.route("")
@@ -103,3 +107,34 @@ class GrupoMembroResource(Resource):
         """(Gestor) Fecha o vínculo do passageiro. O histórico fica."""
         grupo_service.remover_membro(get_jwt_identity(), grupo_id, usuario_id)
         return {"message": "Membro removido"}, 200
+
+
+@api.route("/<string:grupo_id>/regras-email")
+class GrupoRegrasEmailResource(Resource):
+    @api.doc("listar_regras_email_do_grupo", responses={200: "Domínios que sugerem este grupo"})
+    @jwt_required()
+    def get(self, grupo_id: str) -> tuple[dict[str, Any], int]:
+        """(Gestor) Domínios de e-mail que sugerem este grupo no convite"""
+        regras = grupo_service.listar_regras_email(get_jwt_identity(), grupo_id)
+        return {"items": regra_response_schema.dump(regras, many=True), "total": len(regras)}, 200
+
+    @api.doc(
+        "criar_regra_email_do_grupo",
+        responses={201: "Regra criada", 400: "Domínio inválido", 409: "Domínio já cadastrado"},
+    )
+    @jwt_required()
+    def post(self, grupo_id: str) -> tuple[dict[str, Any], int]:
+        """(Gestor) Cadastra um domínio que sugere este grupo. Corpo: {"dominio": "@nubank.com"}"""
+        payload = regra_create_schema.load(request.get_json(silent=True) or {})
+        regra = grupo_service.criar_regra_email(get_jwt_identity(), grupo_id, payload)
+        return regra_response_schema.dump(regra), 201
+
+
+@api.route("/<string:grupo_id>/regras-email/<string:regra_id>")
+class GrupoRegraEmailResource(Resource):
+    @api.doc("apagar_regra_email_do_grupo", responses={200: "Apagada", 404: "Não encontrada"})
+    @jwt_required()
+    def delete(self, grupo_id: str, regra_id: str) -> tuple[dict[str, str], int]:
+        """(Gestor) Apaga a regra. Convites já enviados não mudam."""
+        grupo_service.apagar_regra_email(get_jwt_identity(), grupo_id, regra_id)
+        return {"message": "Regra apagada"}, 200

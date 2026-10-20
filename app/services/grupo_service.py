@@ -1,5 +1,6 @@
 """Grupos de passageiros: o gestor cria grupos e controla quem participa deles."""
 
+import re
 from datetime import date
 from typing import Any
 
@@ -10,13 +11,14 @@ from app.core.transaction import transactional
 from app.models.base import db
 from app.models.convite import Convite
 from app.models.enum import StatusViagem, UserStatus
-from app.models.grupo import Grupo, GrupoMembro, convite_grupo
+from app.models.grupo import Grupo, GrupoMembro, RegraEmailGrupo, convite_grupo
 from app.models.user import Aluno, User
 from app.models.viagem import AlunosConfirmados, Viagem
 from app.services.user_service import _get_gestor_or_403
-from app.utils import audit_logger, validate_uuid
+from app.utils import audit_logger, validate_email, validate_uuid
 
 CAMPOS_DO_GRUPO = ("nome", "descricao", "data_inicio", "data_fim")
+DOMINIO_VALIDO = re.compile(r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$")
 
 
 def _grupo_da_organizacao(gestor, grupo_id: str) -> Grupo:
@@ -271,6 +273,104 @@ def listar_membros(gestor_id: str, grupo_id: str) -> list[dict[str, Any]]:
             }
         )
     return membros
+
+
+# ─── Regras de e-mail ──────────────────────────────────────────────────────────
+
+
+def _normalizar_dominio(texto: str) -> str:
+    dominio = texto.strip().lower()
+    if dominio.startswith("@"):
+        dominio = dominio[1:]
+    if len(dominio) > 255 or DOMINIO_VALIDO.match(dominio) is None:
+        raise ValidationError("Domínio inválido. Exemplo: nubank.com")
+    return dominio
+
+
+def criar_regra_email(gestor_id: str, grupo_id: str, dados: dict[str, Any]) -> RegraEmailGrupo:
+    gestor = _get_gestor_or_403(gestor_id, "Apenas gestores podem cadastrar regras de e-mail")
+    grupo = _grupo_da_organizacao(gestor, grupo_id)
+    dominio = _normalizar_dominio(dados["dominio"])
+
+    repetida = RegraEmailGrupo.query.filter_by(grupo_id=grupo.id, dominio=dominio).first()
+    if repetida is not None:
+        raise ConflictError("Este domínio já está cadastrado no grupo", field="dominio")
+
+    regra = RegraEmailGrupo(grupo_id=grupo.id, dominio=dominio)
+    with transactional():
+        db.session.add(regra)
+
+    audit_logger.log_user_action(
+        action="criar_regra_email_grupo",
+        user_id=gestor_id,
+        resource_type="grupo",
+        resource_id=str(grupo.id),
+        details={"dominio": dominio},
+    )
+    return regra
+
+
+def listar_regras_email(gestor_id: str, grupo_id: str) -> list[RegraEmailGrupo]:
+    gestor = _get_gestor_or_403(gestor_id, "Apenas gestores podem ver as regras de e-mail")
+    grupo = _grupo_da_organizacao(gestor, grupo_id)
+    return (
+        RegraEmailGrupo.query.filter_by(grupo_id=grupo.id).order_by(RegraEmailGrupo.dominio).all()
+    )
+
+
+def apagar_regra_email(gestor_id: str, grupo_id: str, regra_id: str) -> None:
+    gestor = _get_gestor_or_403(gestor_id, "Apenas gestores podem apagar regras de e-mail")
+    grupo = _grupo_da_organizacao(gestor, grupo_id)
+
+    regra = db.session.get(RegraEmailGrupo, validate_uuid(regra_id, "Regra"))
+    if regra is None or regra.grupo_id != grupo.id:
+        raise NotFoundError("Regra não encontrada")
+
+    with transactional():
+        db.session.delete(regra)
+
+    audit_logger.log_user_action(
+        action="apagar_regra_email_grupo",
+        user_id=gestor_id,
+        resource_type="grupo",
+        resource_id=str(grupo.id),
+        details={"dominio": regra.dominio},
+    )
+
+
+def sugerir_grupos(gestor_id: str, email: str) -> list[Grupo]:
+    """Grupos sugeridos para o e-mail, do domínio mais específico para o mais geral.
+
+    `ana@aluno.nubank.com` casa as regras `aluno.nubank.com` e `nubank.com`. Grupo encerrado
+    fica de fora, e um grupo com regra nos dois domínios aparece uma vez. Não grava nada.
+    """
+    gestor = _get_gestor_or_403(gestor_id, "Apenas gestores podem pedir sugestões de grupo")
+    dominio = validate_email(email).split("@")[1]
+
+    # Tira o rótulo da esquerda enquanto sobrar um ponto, então "com" nunca é candidato.
+    candidatos: list[str] = []
+    rotulos = dominio.split(".")
+    while len(rotulos) >= 2:
+        candidatos.append(".".join(rotulos))
+        rotulos = rotulos[1:]
+
+    regras = (
+        db.session.query(RegraEmailGrupo, Grupo)
+        .join(Grupo, Grupo.id == RegraEmailGrupo.grupo_id)
+        .filter(
+            Grupo.organizacao_id == gestor.organizacao_id,
+            RegraEmailGrupo.dominio.in_(candidatos),
+        )
+        .order_by(func.length(RegraEmailGrupo.dominio).desc(), Grupo.nome)
+        .all()
+    )
+
+    sugeridos: list[Grupo] = []
+    for _regra, grupo in regras:
+        if grupo.encerrado or grupo in sugeridos:
+            continue
+        sugeridos.append(grupo)
+    return sugeridos
 
 
 # ─── Convite ───────────────────────────────────────────────────────────────────

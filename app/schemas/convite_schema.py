@@ -15,6 +15,10 @@ class ConviteListQuerySchema(BaseSchema):
     estado = fields.String(load_default=None, allow_none=True)
 
 
+class SugestaoGruposQuerySchema(BaseSchema):
+    email = fields.String(required=True)
+
+
 class ConviteAceiteRequestSchema(BaseSchema):
     """Dados da pessoa ao concluir. Nome, CPF e instituição podem vir do convite."""
 

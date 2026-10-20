@@ -2,8 +2,9 @@
 
 from datetime import date, timedelta
 
+from app.models.convite import Convite
 from app.models.enum import StatusViagem
-from app.models.grupo import Grupo, GrupoMembro
+from app.models.grupo import Grupo, GrupoMembro, RegraEmailGrupo
 from tests.factories.viagem_factory import AlunosConfirmadosFactory, ViagemFactory
 
 SENHA = "StrongPass123!"
@@ -374,3 +375,134 @@ def test_datas_do_filho_nao_dependem_das_do_pai(gestor):
     )
 
     assert resposta.status_code == 201
+
+
+# ---------- regras de e-mail e sugestão de grupos ----------
+
+
+def _regra(gestor, grupo_id, dominio):
+    return gestor.client.post(f"/v1/grupos/{grupo_id}/regras-email", json={"dominio": dominio})
+
+
+def _sugestao(gestor, email):
+    return gestor.client.get("/v1/convites/sugestao-grupos", query_string={"email": email})
+
+
+def _nomes_sugeridos(gestor, email):
+    resposta = _sugestao(gestor, email)
+    assert resposta.status_code == 200, resposta.get_data(as_text=True)
+    nomes = []
+    for item in resposta.get_json()["items"]:
+        nomes.append(item["nome"])
+    return nomes
+
+
+def test_regra_guarda_o_dominio_sem_arroba_e_em_minusculo(gestor):
+    textos = ["@Nubank.com", "NUBANK.com", "  nubank.com  "]
+    for posicao, texto in enumerate(textos):
+        grupo_id = _criar_grupo(gestor, f"Grupo {posicao}")
+
+        resposta = _regra(gestor, grupo_id, texto)
+
+        assert resposta.status_code == 201, resposta.get_data(as_text=True)
+        assert resposta.get_json()["dominio"] == "nubank.com"
+
+
+def test_regra_invalida_ou_repetida_e_recusada(gestor):
+    grupo_id = _criar_grupo(gestor)
+
+    assert _regra(gestor, grupo_id, "com").status_code == 400
+    assert _regra(gestor, grupo_id, "nubank").status_code == 400
+    assert _regra(gestor, grupo_id, "ana@nubank.com").status_code == 400
+    assert _regra(gestor, grupo_id, "-nubank.com").status_code == 400
+    assert gestor.client.post(f"/v1/grupos/{grupo_id}/regras-email", json={}).status_code == 400
+
+    assert _regra(gestor, grupo_id, "nubank.com").status_code == 201
+    assert _regra(gestor, grupo_id, "@NUBANK.com").status_code == 409
+
+
+def test_listar_e_apagar_regra_respeita_a_organizacao(gestor, other_gestor, aluno):
+    grupo_id = _criar_grupo(gestor)
+    regra_id = _regra(gestor, grupo_id, "nubank.com").get_json()["id"]
+
+    assert gestor.client.get(f"/v1/grupos/{grupo_id}/regras-email").get_json()["total"] == 1
+    assert aluno.client.get(f"/v1/grupos/{grupo_id}/regras-email").status_code == 403
+    assert other_gestor.client.get(f"/v1/grupos/{grupo_id}/regras-email").status_code == 404
+    apagar_de_fora = other_gestor.client.delete(f"/v1/grupos/{grupo_id}/regras-email/{regra_id}")
+    assert apagar_de_fora.status_code == 404
+
+    assert gestor.client.delete(f"/v1/grupos/{grupo_id}/regras-email/{regra_id}").status_code == 200
+    assert gestor.client.get(f"/v1/grupos/{grupo_id}/regras-email").get_json()["total"] == 0
+
+
+def test_regra_de_outro_grupo_nao_e_apagada_pela_rota_errada(gestor):
+    grupo_a = _criar_grupo(gestor, "A")
+    grupo_b = _criar_grupo(gestor, "B")
+    regra_de_a = _regra(gestor, grupo_a, "nubank.com").get_json()["id"]
+
+    resposta = gestor.client.delete(f"/v1/grupos/{grupo_b}/regras-email/{regra_de_a}")
+
+    assert resposta.status_code == 404
+
+
+def test_apagar_o_grupo_apaga_as_regras(gestor, _db):
+    grupo_id = _criar_grupo(gestor)
+    _regra(gestor, grupo_id, "nubank.com")
+
+    gestor.client.delete(f"/v1/grupos/{grupo_id}")
+
+    _db.session.expire_all()
+    assert RegraEmailGrupo.query.count() == 0
+
+
+def test_sugestao_traz_o_dominio_e_os_dominios_pai_do_mais_especifico_ao_mais_geral(gestor):
+    pai = _criar_grupo(gestor, "Nubank")
+    filho = _criar_grupo(gestor, "Nubank Alunos", grupo_pai_id=pai)
+    _regra(gestor, pai, "nubank.com")
+    _regra(gestor, filho, "@aluno.nubank.com")
+
+    assert _nomes_sugeridos(gestor, "ana@aluno.nubank.com") == ["Nubank Alunos", "Nubank"]
+    assert _nomes_sugeridos(gestor, "Ana@NUBANK.com") == ["Nubank"]
+
+
+def test_sugestao_so_casa_na_fronteira_do_ponto(gestor):
+    grupo_id = _criar_grupo(gestor, "Nubank")
+    _regra(gestor, grupo_id, "nubank.com")
+
+    assert _nomes_sugeridos(gestor, "ana@fakenubank.com") == []
+    assert _nomes_sugeridos(gestor, "ana@nubank.com.br") == []
+    assert _nomes_sugeridos(gestor, "ana@outro.com") == []
+
+
+def test_sugestao_ignora_encerrado_outra_organizacao_e_nao_repete(gestor, other_gestor):
+    velho = _criar_grupo(gestor, "Velho")
+    _regra(gestor, velho, "nubank.com")
+    gestor.client.put(
+        f"/v1/grupos/{velho}", json={"data_fim": (HOJE - timedelta(days=1)).isoformat()}
+    )
+    de_fora = _criar_grupo(other_gestor, "De fora")
+    _regra(other_gestor, de_fora, "nubank.com")
+    duas_regras = _criar_grupo(gestor, "Duas regras")
+    _regra(gestor, duas_regras, "nubank.com")
+    _regra(gestor, duas_regras, "aluno.nubank.com")
+
+    assert _nomes_sugeridos(gestor, "ana@aluno.nubank.com") == ["Duas regras"]
+
+
+def test_sugestao_recusa_email_invalido_e_quem_nao_e_gestor(gestor, aluno):
+    assert _sugestao(gestor, "sem-arroba").status_code == 400
+    assert gestor.client.get("/v1/convites/sugestao-grupos").status_code == 400
+    assert _sugestao(aluno, "ana@nubank.com").status_code == 403
+
+
+def test_sugestao_nao_aplica_nada_ao_convite(gestor, _db):
+    grupo_id = _criar_grupo(gestor, "Nubank")
+    _regra(gestor, grupo_id, "nubank.com")
+    assert _nomes_sugeridos(gestor, "ana@nubank.com") == ["Nubank"]
+
+    resposta = gestor.client.post("/v1/convites", json={"convites": [{"email": "ana@nubank.com"}]})
+
+    assert resposta.status_code == 200
+    _db.session.expire_all()
+    convite = Convite.query.filter_by(email="ana@nubank.com").first()
+    assert convite.grupos == []

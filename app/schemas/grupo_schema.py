@@ -47,3 +47,13 @@ class MembroResponseSchema(BaseSchema):
     viagens_confirmadas = fields.Integer()
     viagens_finalizadas = fields.Integer()
     viagens_com_presenca = fields.Integer()
+
+
+class RegraEmailCreateRequestSchema(BaseSchema):
+    dominio = fields.String(required=True)
+
+
+class RegraEmailResponseSchema(BaseSchema):
+    id = fields.String()
+    dominio = fields.String()
+    created_at = fields.DateTime()

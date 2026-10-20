@@ -70,6 +70,24 @@ class GrupoMembro(db.Model):
     data_fim = db.Column(db.Date)
 
 
+class RegraEmailGrupo(db.Model):
+    """Domínio de e-mail que sugere um grupo no convite. A regra só sugere, nunca aplica."""
+
+    __tablename__ = "regra_email_grupo"
+    __table_args__ = (
+        db.UniqueConstraint("grupo_id", "dominio", name="uq_regra_email_grupo_dominio"),
+        db.Index("idx_regra_email_grupo_dominio", "dominio"),
+    )
+
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    grupo_id = db.Column(
+        UUID(as_uuid=True), db.ForeignKey("grupo.id", ondelete="CASCADE"), nullable=False
+    )
+    # Minúsculo e sem "@", por exemplo "nubank.com".
+    dominio = db.Column(db.String(255), nullable=False)
+    created_at = db.Column(db.DateTime(timezone=True), server_default=db.func.now(), nullable=False)
+
+
 # Grupos em que a pessoa convidada entra ao concluir o cadastro.
 convite_grupo = db.Table(
     "convite_grupo",
