@@ -1,7 +1,7 @@
 """Convites de cadastro de passageiro, pela API HTTP e pela tarefa de envio."""
 
 import re
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 
@@ -16,6 +16,7 @@ from app.models.convite import (
 )
 from app.models.enum import TipoInstituicao, UserStatus
 from app.models.geo import Instituicao
+from app.models.grupo import GrupoMembro
 from app.models.user import Aluno
 from app.services import convite_service
 from app.tasks.convite_tasks import enviar_convites_pendentes
@@ -624,3 +625,85 @@ def test_pin_sem_email_configurado_nao_envia_nada(
 
     assert resposta.status_code == 200
     assert emails_enviados == []
+
+
+# ---------- convite com grupos ----------
+
+
+def _grupo(gestor, nome, **campos):
+    resposta = gestor.client.post("/v1/grupos", json={"nome": nome, **campos})
+    assert resposta.status_code == 201, resposta.get_data(as_text=True)
+    return resposta.get_json()["id"]
+
+
+def _grupos_do_aluno(email):
+    aluno = Aluno.query.filter_by(email=email).first()
+    nomes: list[str] = []
+    for vinculo in GrupoMembro.query.filter_by(usuario_id=aluno.id).all():
+        nomes.append(str(vinculo.grupo_id))
+    return sorted(nomes)
+
+
+def test_convite_com_grupos_coloca_a_pessoa_nos_grupos_ao_concluir(
+    gestor, client, instituicao, _db
+):
+    grupo_a = _grupo(gestor, "A")
+    grupo_b = _grupo(gestor, "B")
+    _convidar(gestor, [{"email": "g@parque.test", "grupo_ids": [grupo_a, grupo_b, grupo_a]}])
+    convite = _convite(_db, "g@parque.test")
+
+    lista = gestor.client.get("/v1/convites").get_json()["items"]
+    assert sorted(lista[0]["grupo_ids"]) == sorted([grupo_a, grupo_b])
+
+    resposta = _concluir(
+        client, convite.token, nome="G", cpf=CPF_A, instituicao_id=str(instituicao.id), senha=SENHA
+    )
+    assert resposta.status_code == 201
+
+    assert _grupos_do_aluno("g@parque.test") == sorted([grupo_a, grupo_b])
+
+
+def test_convite_recusa_grupo_de_outra_organizacao_ou_encerrado(gestor, other_gestor, _db):
+    de_outra_org = _grupo(other_gestor, "Outra")
+    encerrado = _grupo(gestor, "Velho", data_fim=(date.today() - timedelta(days=1)).isoformat())
+
+    resultados = _convidar(
+        gestor,
+        [
+            {"email": "um@parque.test", "grupo_ids": [de_outra_org]},
+            {"email": "dois@parque.test", "grupo_ids": [encerrado]},
+            {"email": "tres@parque.test", "grupo_ids": ["nao-e-uuid"]},
+        ],
+    )
+
+    for resultado in resultados:
+        assert resultado["resultado"] == "INVALIDO"
+    assert Convite.query.count() == 0
+
+
+def test_grupo_encerrado_depois_do_convite_e_ignorado_ao_concluir(gestor, client, instituicao, _db):
+    grupo_ok = _grupo(gestor, "Ok")
+    grupo_velho = _grupo(gestor, "Vai encerrar")
+    _convidar(gestor, [{"email": "h@parque.test", "grupo_ids": [grupo_ok, grupo_velho]}])
+    convite = _convite(_db, "h@parque.test")
+    ontem = (date.today() - timedelta(days=1)).isoformat()
+    gestor.client.put(f"/v1/grupos/{grupo_velho}", json={"data_fim": ontem})
+
+    resposta = _concluir(
+        client, convite.token, nome="H", cpf=CPF_A, instituicao_id=str(instituicao.id), senha=SENHA
+    )
+
+    assert resposta.status_code == 201
+    assert _grupos_do_aluno("h@parque.test") == [grupo_ok]
+
+
+def test_convidar_de_novo_troca_os_grupos_do_convite(gestor, _db):
+    grupo_a = _grupo(gestor, "A")
+    grupo_b = _grupo(gestor, "B")
+    _convidar(gestor, [{"email": "i@parque.test", "grupo_ids": [grupo_a]}])
+    _vencer(_db, _convite(_db, "i@parque.test"))
+
+    _convidar(gestor, [{"email": "i@parque.test", "grupo_ids": [grupo_b]}])
+
+    lista = gestor.client.get("/v1/convites").get_json()["items"]
+    assert lista[0]["grupo_ids"] == [grupo_b]
