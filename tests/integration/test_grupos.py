@@ -1,0 +1,248 @@
+"""Grupos de passageiros: cadastro, membros com histórico e relatório de viagens."""
+
+from datetime import date, timedelta
+
+from app.models.enum import StatusViagem
+from app.models.grupo import Grupo, GrupoMembro
+from tests.factories.viagem_factory import AlunosConfirmadosFactory, ViagemFactory
+
+SENHA = "StrongPass123!"
+HOJE = date.today()
+
+
+def _criar_grupo(gestor, nome="Visitantes", **campos):
+    resposta = gestor.client.post("/v1/grupos", json={"nome": nome, **campos})
+    assert resposta.status_code == 201, resposta.get_data(as_text=True)
+    return resposta.get_json()["id"]
+
+
+def _adicionar(gestor, grupo_id, aluno):
+    return gestor.client.post(f"/v1/grupos/{grupo_id}/membros", json={"usuario_id": str(aluno.id)})
+
+
+def _membros(gestor, grupo_id):
+    resposta = gestor.client.get(f"/v1/grupos/{grupo_id}/membros")
+    assert resposta.status_code == 200, resposta.get_data(as_text=True)
+    return resposta.get_json()["items"]
+
+
+def _vinculo(_db, grupo_id, aluno, inicio, fim=None):
+    """Vínculo com datas escolhidas, para testar períodos sem esperar dias passarem."""
+    vinculo = GrupoMembro(grupo_id=grupo_id, usuario_id=aluno.id, data_inicio=inicio, data_fim=fim)
+    _db.session.add(vinculo)
+    _db.session.commit()
+    return vinculo
+
+
+def _confirmar(_db, aluno, dias_atras, status, confirmacao=True, embarcou=False):
+    viagem = ViagemFactory(data=HOJE - timedelta(days=dias_atras), status=status)
+    _db.session.add(viagem)
+    _db.session.commit()
+    registro = AlunosConfirmadosFactory(
+        viagem_id=viagem.id, aluno_id=aluno.id, confirmacao=confirmacao
+    )
+    registro.embarcou = embarcou
+    _db.session.add(registro)
+    _db.session.commit()
+    return viagem
+
+
+# ---------- grupos ----------
+
+
+def test_gestor_cria_lista_edita_e_apaga_grupo(gestor):
+    grupo_id = _criar_grupo(gestor, "Evento", descricao="Visita de outubro")
+
+    listagem = gestor.client.get("/v1/grupos").get_json()
+    assert listagem["total"] == 1
+    assert listagem["items"][0]["nome"] == "Evento"
+    assert listagem["items"][0]["ativo"] is True
+
+    editado = gestor.client.put(f"/v1/grupos/{grupo_id}", json={"nome": "Evento 2"}).get_json()
+    assert editado["nome"] == "Evento 2"
+    assert editado["descricao"] == "Visita de outubro"
+
+    assert gestor.client.delete(f"/v1/grupos/{grupo_id}").status_code == 200
+    assert gestor.client.get("/v1/grupos").get_json()["total"] == 0
+
+
+def test_so_gestor_mexe_em_grupos(aluno, motorista):
+    assert aluno.client.post("/v1/grupos", json={"nome": "X"}).status_code == 403
+    assert aluno.client.get("/v1/grupos").status_code == 403
+    assert motorista.client.get("/v1/grupos").status_code == 403
+
+
+def test_outra_organizacao_nao_ve_nem_altera(gestor, other_gestor):
+    grupo_id = _criar_grupo(gestor)
+
+    assert other_gestor.client.get("/v1/grupos").get_json()["total"] == 0
+    assert other_gestor.client.put(f"/v1/grupos/{grupo_id}", json={"nome": "Y"}).status_code == 404
+    assert other_gestor.client.delete(f"/v1/grupos/{grupo_id}").status_code == 404
+    assert other_gestor.client.get(f"/v1/grupos/{grupo_id}/membros").status_code == 404
+
+
+def test_datas_invalidas_e_nome_repetido(gestor, other_gestor):
+    resposta = gestor.client.post(
+        "/v1/grupos", json={"nome": "A", "data_inicio": "2026-10-10", "data_fim": "2026-10-01"}
+    )
+    assert resposta.status_code == 400
+
+    _criar_grupo(gestor, "Repetido")
+    outro_id = _criar_grupo(gestor, "Outro")
+    assert gestor.client.post("/v1/grupos", json={"nome": "Repetido"}).status_code == 409
+    assert gestor.client.put(f"/v1/grupos/{outro_id}", json={"nome": "Repetido"}).status_code == 409
+    # O mesmo nome em outra organização é permitido.
+    _criar_grupo(other_gestor, "Repetido")
+
+
+def test_grupo_ativo_depende_das_datas(gestor):
+    futuro = _criar_grupo(gestor, "Futuro", data_inicio=(HOJE + timedelta(days=5)).isoformat())
+    encerrado = _criar_grupo(gestor, "Passado", data_fim=(HOJE - timedelta(days=1)).isoformat())
+    sem_datas = _criar_grupo(gestor, "Aberto")
+
+    ativos = {}
+    for item in gestor.client.get("/v1/grupos").get_json()["items"]:
+        ativos[item["id"]] = item["ativo"]
+
+    assert ativos == {futuro: False, encerrado: False, sem_datas: True}
+
+
+# ---------- membros ----------
+
+
+def test_adicionar_remover_e_readicionar_guarda_o_historico(gestor, aluno, _db):
+    grupo_id = _criar_grupo(gestor)
+
+    assert _adicionar(gestor, grupo_id, aluno.user).status_code == 201
+    membros = _membros(gestor, grupo_id)
+    assert len(membros) == 1
+    assert membros[0]["atual"] is True
+    assert membros[0]["data_inicio"] == HOJE.isoformat()
+
+    resposta = gestor.client.delete(f"/v1/grupos/{grupo_id}/membros/{aluno.user.id}")
+    assert resposta.status_code == 200
+    membros = _membros(gestor, grupo_id)
+    assert membros[0]["atual"] is False
+    assert membros[0]["data_fim"] == HOJE.isoformat()
+
+    assert _adicionar(gestor, grupo_id, aluno.user).status_code == 201
+    membros = _membros(gestor, grupo_id)
+    assert len(membros) == 2
+    atuais = 0
+    for membro in membros:
+        if membro["atual"]:
+            atuais += 1
+    assert atuais == 1
+
+
+def test_membro_invalido_e_recusado(gestor, aluno, other_aluno, motorista, _db):
+    grupo_id = _criar_grupo(gestor)
+    assert _adicionar(gestor, grupo_id, aluno.user).status_code == 201
+
+    assert _adicionar(gestor, grupo_id, aluno.user).status_code == 409
+    assert _adicionar(gestor, grupo_id, other_aluno.user).status_code == 404
+    assert _adicionar(gestor, grupo_id, motorista.user).status_code == 404
+    assert gestor.client.post(f"/v1/grupos/{grupo_id}/membros", json={}).status_code == 400
+    sem_vinculo = gestor.client.delete(f"/v1/grupos/{grupo_id}/membros/{other_aluno.user.id}")
+    assert sem_vinculo.status_code == 404
+
+
+def test_grupo_encerrado_nao_aceita_membro_ate_ser_renovado(gestor, aluno):
+    grupo_id = _criar_grupo(gestor, data_fim=(HOJE - timedelta(days=1)).isoformat())
+
+    assert _adicionar(gestor, grupo_id, aluno.user).status_code == 409
+
+    renovado = gestor.client.put(f"/v1/grupos/{grupo_id}", json={"data_fim": None})
+    assert renovado.get_json()["ativo"] is True
+    assert _adicionar(gestor, grupo_id, aluno.user).status_code == 201
+
+
+def test_apagar_grupo_leva_os_vinculos(gestor, aluno, _db):
+    grupo_id = _criar_grupo(gestor)
+    _adicionar(gestor, grupo_id, aluno.user)
+
+    gestor.client.delete(f"/v1/grupos/{grupo_id}")
+
+    _db.session.expire_all()
+    assert Grupo.query.count() == 0
+    assert GrupoMembro.query.count() == 0
+
+
+# ---------- relatório de viagens ----------
+
+
+def test_relatorio_conta_so_as_viagens_do_periodo_do_vinculo(gestor, aluno, _db):
+    grupo_id = _criar_grupo(gestor)
+    _vinculo(_db, grupo_id, aluno.user, HOJE - timedelta(days=10))
+
+    _confirmar(_db, aluno.user, 12, StatusViagem.FINALIZADA, embarcou=True)  # antes do vínculo
+    _confirmar(_db, aluno.user, 5, StatusViagem.FINALIZADA, embarcou=True)
+    _confirmar(_db, aluno.user, 3, StatusViagem.CANCELADA)
+    _confirmar(_db, aluno.user, 2, StatusViagem.AGENDADA)
+    _confirmar(_db, aluno.user, 1, StatusViagem.FINALIZADA, confirmacao=False)
+
+    membro = _membros(gestor, grupo_id)[0]
+
+    assert membro["viagens_confirmadas"] == 2
+    assert membro["viagens_finalizadas"] == 1
+    assert membro["viagens_com_presenca"] == 1
+
+
+def test_relatorio_para_no_fim_do_grupo_e_volta_a_contar_ao_estender(gestor, aluno, _db):
+    grupo_id = _criar_grupo(gestor)
+    _vinculo(_db, grupo_id, aluno.user, HOJE - timedelta(days=10))
+    _confirmar(_db, aluno.user, 5, StatusViagem.FINALIZADA)
+    _confirmar(_db, aluno.user, 1, StatusViagem.FINALIZADA)
+
+    fim = (HOJE - timedelta(days=3)).isoformat()
+    gestor.client.put(f"/v1/grupos/{grupo_id}", json={"data_fim": fim})
+    membro = _membros(gestor, grupo_id)[0]
+    assert membro["viagens_finalizadas"] == 1
+    assert membro["atual"] is False
+
+    gestor.client.put(f"/v1/grupos/{grupo_id}", json={"data_fim": None})
+    membro = _membros(gestor, grupo_id)[0]
+    assert membro["viagens_finalizadas"] == 2
+    assert membro["atual"] is True
+
+
+def test_vinculos_antigos_contam_cada_um_o_seu_periodo(gestor, aluno, _db):
+    grupo_id = _criar_grupo(gestor)
+    _vinculo(_db, grupo_id, aluno.user, HOJE - timedelta(days=20), HOJE - timedelta(days=15))
+    _vinculo(_db, grupo_id, aluno.user, HOJE - timedelta(days=5))
+    _confirmar(_db, aluno.user, 18, StatusViagem.FINALIZADA)
+    _confirmar(_db, aluno.user, 10, StatusViagem.FINALIZADA)  # entre os dois vínculos
+    _confirmar(_db, aluno.user, 2, StatusViagem.FINALIZADA)
+
+    membros = _membros(gestor, grupo_id)
+
+    # Ordem: o vínculo mais recente primeiro.
+    assert membros[0]["viagens_finalizadas"] == 1
+    assert membros[1]["viagens_finalizadas"] == 1
+
+
+def test_pessoa_em_dois_grupos_tem_a_viagem_contada_nos_dois(gestor, aluno, _db):
+    grupo_a = _criar_grupo(gestor, "A")
+    grupo_b = _criar_grupo(gestor, "B")
+    _vinculo(_db, grupo_a, aluno.user, HOJE - timedelta(days=10))
+    _vinculo(_db, grupo_b, aluno.user, HOJE - timedelta(days=10))
+    _confirmar(_db, aluno.user, 2, StatusViagem.FINALIZADA)
+
+    assert _membros(gestor, grupo_a)[0]["viagens_finalizadas"] == 1
+    assert _membros(gestor, grupo_b)[0]["viagens_finalizadas"] == 1
+
+
+# ---------- exclusão de conta ----------
+
+
+def test_excluir_conta_fecha_os_vinculos_abertos(gestor, aluno, _db):
+    grupo_id = _criar_grupo(gestor)
+    _adicionar(gestor, grupo_id, aluno.user)
+
+    resposta = aluno.client.delete("/v1/users/me", json={"email": aluno.user.email, "senha": SENHA})
+    assert resposta.status_code == 200, resposta.get_data(as_text=True)
+
+    membros = _membros(gestor, grupo_id)
+    assert len(membros) == 1
+    assert membros[0]["atual"] is False
+    assert membros[0]["data_fim"] == HOJE.isoformat()
