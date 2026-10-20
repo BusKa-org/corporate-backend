@@ -246,3 +246,131 @@ def test_excluir_conta_fecha_os_vinculos_abertos(gestor, aluno, _db):
     assert len(membros) == 1
     assert membros[0]["atual"] is False
     assert membros[0]["data_fim"] == HOJE.isoformat()
+
+
+# ---------- subgrupos ----------
+
+
+def _por_grupo(membros, grupo_nome):
+    achados = []
+    for membro in membros:
+        if membro["grupo_nome"] == grupo_nome:
+            achados.append(membro)
+    return achados
+
+
+def test_subgrupo_guarda_o_pai_e_a_listagem_mostra(gestor):
+    pai_id = _criar_grupo(gestor, "Nubank")
+    filho_id = _criar_grupo(gestor, "Nubank Alunos", grupo_pai_id=pai_id)
+
+    itens = {}
+    for item in gestor.client.get("/v1/grupos").get_json()["items"]:
+        itens[item["id"]] = item["grupo_pai_id"]
+
+    assert itens == {pai_id: None, filho_id: pai_id}
+
+
+def test_pai_invalido_e_recusado(gestor, other_gestor):
+    raiz = _criar_grupo(gestor, "Raiz")
+    filho = _criar_grupo(gestor, "Filho", grupo_pai_id=raiz)
+    de_outra_org = _criar_grupo(other_gestor, "Outra")
+    solto = _criar_grupo(gestor, "Solto")
+
+    def criar_com_pai(pai):
+        return gestor.client.post("/v1/grupos", json={"nome": "Novo", "grupo_pai_id": pai})
+
+    assert criar_com_pai(de_outra_org).status_code == 400
+    assert criar_com_pai(filho).status_code == 400  # neto
+    assert criar_com_pai("nao-e-uuid").status_code == 400
+    assert criar_com_pai("00000000-0000-4000-8000-000000000000").status_code == 400
+
+    proprio = gestor.client.put(f"/v1/grupos/{solto}", json={"grupo_pai_id": solto})
+    assert proprio.status_code == 400
+    # Quem já tem filhos não pode virar filho.
+    com_filhos = gestor.client.put(f"/v1/grupos/{raiz}", json={"grupo_pai_id": solto})
+    assert com_filhos.status_code == 400
+
+
+def test_trocar_e_remover_o_pai_pelo_put(gestor):
+    pai_a = _criar_grupo(gestor, "A")
+    pai_b = _criar_grupo(gestor, "B")
+    filho = _criar_grupo(gestor, "Filho", grupo_pai_id=pai_a)
+
+    trocado = gestor.client.put(f"/v1/grupos/{filho}", json={"grupo_pai_id": pai_b}).get_json()
+    assert trocado["grupo_pai_id"] == pai_b
+
+    removido = gestor.client.put(f"/v1/grupos/{filho}", json={"grupo_pai_id": None}).get_json()
+    assert removido["grupo_pai_id"] is None
+
+
+def test_apagar_pai_com_filhos_e_bloqueado(gestor):
+    pai = _criar_grupo(gestor, "Pai")
+    filho = _criar_grupo(gestor, "Filho", grupo_pai_id=pai)
+
+    assert gestor.client.delete(f"/v1/grupos/{pai}").status_code == 409
+    assert gestor.client.delete(f"/v1/grupos/{filho}").status_code == 200
+    assert gestor.client.delete(f"/v1/grupos/{pai}").status_code == 200
+
+
+def test_relatorio_do_pai_inclui_o_filho_e_o_do_filho_nao_inclui_o_pai(gestor, aluno, _db):
+    pai = _criar_grupo(gestor, "Pai")
+    filho = _criar_grupo(gestor, "Filho", grupo_pai_id=pai)
+    assert _adicionar(gestor, filho, aluno.user).status_code == 201
+
+    no_pai = _membros(gestor, pai)
+    assert len(no_pai) == 1
+    assert no_pai[0]["grupo_nome"] == "Filho"
+    assert no_pai[0]["atual"] is True
+
+    # Quem também entra no pai aparece em duas linhas, uma por vínculo.
+    assert _adicionar(gestor, pai, aluno.user).status_code == 201
+    no_pai = _membros(gestor, pai)
+    assert len(no_pai) == 2
+    assert len(_por_grupo(no_pai, "Pai")) == 1
+    assert len(_por_grupo(no_pai, "Filho")) == 1
+
+    no_filho = _membros(gestor, filho)
+    assert len(no_filho) == 1
+    assert no_filho[0]["grupo_nome"] == "Filho"
+
+
+def test_remover_do_pai_quem_so_esta_no_filho(gestor, aluno):
+    pai = _criar_grupo(gestor, "Pai")
+    filho = _criar_grupo(gestor, "Filho", grupo_pai_id=pai)
+    _adicionar(gestor, filho, aluno.user)
+
+    resposta = gestor.client.delete(f"/v1/grupos/{pai}/membros/{aluno.user.id}")
+
+    assert resposta.status_code == 404
+    assert _membros(gestor, pai)[0]["atual"] is True
+
+
+def test_periodo_de_cada_vinculo_usa_as_datas_do_grupo_dele(gestor, aluno, _db):
+    pai = _criar_grupo(gestor, "Pai")
+    filho = _criar_grupo(
+        gestor, "Filho", grupo_pai_id=pai, data_fim=(HOJE - timedelta(days=3)).isoformat()
+    )
+    _vinculo(_db, filho, aluno.user, HOJE - timedelta(days=10))
+    _confirmar(_db, aluno.user, 5, StatusViagem.FINALIZADA)
+    _confirmar(_db, aluno.user, 1, StatusViagem.FINALIZADA)
+
+    linha = _membros(gestor, pai)[0]
+
+    assert linha["grupo_nome"] == "Filho"
+    assert linha["viagens_finalizadas"] == 1
+    assert linha["atual"] is False
+
+
+def test_datas_do_filho_nao_dependem_das_do_pai(gestor):
+    pai = _criar_grupo(gestor, "Pai", data_fim=(HOJE + timedelta(days=5)).isoformat())
+
+    resposta = gestor.client.post(
+        "/v1/grupos",
+        json={
+            "nome": "Filho",
+            "grupo_pai_id": pai,
+            "data_fim": (HOJE + timedelta(days=60)).isoformat(),
+        },
+    )
+
+    assert resposta.status_code == 201

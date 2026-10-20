@@ -1,6 +1,7 @@
 """Grupo de passageiros dentro de uma organização, com histórico de participação.
 
 O grupo pode ter datas. Sem `data_fim`, vale até o gestor encerrar ou apagar.
+Pode ter um pai (um nível só). Quem está num subgrupo conta como membro do pai.
 Cada passagem de uma pessoa pelo grupo é uma linha em `grupo_membro`. Quem sai
 ganha `data_fim`, e quem volta ganha uma linha nova.
 """
@@ -22,6 +23,11 @@ class Grupo(db.Model):
     id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     organizacao_id = db.Column(
         UUID(as_uuid=True), db.ForeignKey("organizacao.id", ondelete="CASCADE"), nullable=False
+    )
+    # Um nível só: o pai é um grupo raiz. O banco barra apagar pai que ainda tem filhos.
+    grupo_pai_id = db.Column(
+        UUID(as_uuid=True),
+        db.ForeignKey("grupo.id", ondelete="RESTRICT", name="fk_grupo_grupo_pai"),
     )
     nome = db.Column(db.String(100), nullable=False)
     descricao = db.Column(db.String(255))

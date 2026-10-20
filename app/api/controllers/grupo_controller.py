@@ -37,7 +37,7 @@ class GrupoListResource(Resource):
     )
     @jwt_required()
     def post(self) -> tuple[dict[str, Any], int]:
-        """(Gestor) Cria um grupo. Corpo: nome, descricao?, data_inicio?, data_fim?"""
+        """(Gestor) Cria um grupo. Corpo: nome, descricao?, data_inicio?, data_fim?, grupo_pai_id?"""
         payload = grupo_create_schema.load(request.get_json(silent=True) or {})
         grupo = grupo_service.criar_grupo(get_jwt_identity(), payload)
         return grupo_response_schema.dump(grupo), 201
@@ -56,7 +56,10 @@ class GrupoResource(Resource):
         grupo = grupo_service.atualizar_grupo(get_jwt_identity(), grupo_id, payload)
         return grupo_response_schema.dump(grupo), 200
 
-    @api.doc("apagar_grupo", responses={200: "Apagado", 404: "Não encontrado"})
+    @api.doc(
+        "apagar_grupo",
+        responses={200: "Apagado", 404: "Não encontrado", 409: "Tem subgrupos"},
+    )
     @jwt_required()
     def delete(self, grupo_id: str) -> tuple[dict[str, str], int]:
         """(Gestor) Apaga o grupo e o histórico de vínculos dele"""
@@ -69,7 +72,7 @@ class GrupoMembrosResource(Resource):
     @api.doc("listar_membros_do_grupo", responses={200: "Vínculos do grupo"})
     @jwt_required()
     def get(self, grupo_id: str) -> tuple[dict[str, Any], int]:
-        """(Gestor) Vínculos atuais e antigos, com as viagens de cada pessoa no período"""
+        """(Gestor) Vínculos do grupo e dos subgrupos, atuais e antigos, com as viagens no período"""
         membros = grupo_service.listar_membros(get_jwt_identity(), grupo_id)
         return {
             "items": membro_response_schema.dump(membros, many=True),

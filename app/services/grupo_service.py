@@ -26,6 +26,36 @@ def _grupo_da_organizacao(gestor, grupo_id: str) -> Grupo:
     return grupo
 
 
+def _tem_filhos(grupo: Grupo) -> bool:
+    if grupo.id is None:
+        return False
+    with db.session.no_autoflush:
+        filho = Grupo.query.filter(Grupo.grupo_pai_id == grupo.id).first()
+    return filho is not None
+
+
+def _pai_como_uuid(valor: str | None):
+    if valor is None:
+        return None
+    return validate_uuid(valor, "Grupo pai")
+
+
+def _validar_pai(grupo: Grupo) -> None:
+    """Um nível só: o pai é um grupo raiz da mesma organização, e quem tem filhos não tem pai."""
+    if grupo.grupo_pai_id is None:
+        return
+    if grupo.grupo_pai_id == grupo.id:
+        raise ValidationError("Um grupo não pode ser pai de si mesmo")
+
+    pai = db.session.get(Grupo, grupo.grupo_pai_id)
+    if pai is None or pai.organizacao_id != grupo.organizacao_id:
+        raise ValidationError("Grupo pai inválido")
+    if pai.grupo_pai_id is not None:
+        raise ValidationError("O grupo pai precisa ser um grupo raiz")
+    if _tem_filhos(grupo):
+        raise ValidationError("Um grupo com subgrupos não pode ter pai")
+
+
 def _validar_datas(data_inicio: date | None, data_fim: date | None) -> None:
     if data_inicio is not None and data_fim is not None and data_fim < data_inicio:
         raise ValidationError("A data de fim não pode ser anterior à data de início")
@@ -52,11 +82,13 @@ def criar_grupo(gestor_id: str, dados: dict[str, Any]) -> Grupo:
 
     grupo = Grupo(
         organizacao_id=gestor.organizacao_id,
+        grupo_pai_id=_pai_como_uuid(dados.get("grupo_pai_id")),
         nome=dados["nome"],
         descricao=dados.get("descricao"),
         data_inicio=dados.get("data_inicio"),
         data_fim=dados.get("data_fim"),
     )
+    _validar_pai(grupo)
     _validar_nome_livre(grupo)
 
     with transactional():
@@ -85,7 +117,10 @@ def atualizar_grupo(gestor_id: str, grupo_id: str, dados: dict[str, Any]) -> Gru
         for campo in CAMPOS_DO_GRUPO:
             if campo in dados:
                 setattr(grupo, campo, dados[campo])
+        if "grupo_pai_id" in dados:
+            grupo.grupo_pai_id = _pai_como_uuid(dados["grupo_pai_id"])
         _validar_datas(grupo.data_inicio, grupo.data_fim)
+        _validar_pai(grupo)
         _validar_nome_livre(grupo)
 
     audit_logger.log_user_action(
@@ -98,9 +133,11 @@ def atualizar_grupo(gestor_id: str, grupo_id: str, dados: dict[str, Any]) -> Gru
 
 
 def apagar_grupo(gestor_id: str, grupo_id: str) -> None:
-    """Apaga o grupo e, em cascata, o histórico de vínculos dele."""
+    """Apaga o grupo e, em cascata, o histórico de vínculos dele. Bloqueado se tiver subgrupos."""
     gestor = _get_gestor_or_403(gestor_id, "Apenas gestores podem apagar grupos")
     grupo = _grupo_da_organizacao(gestor, grupo_id)
+    if _tem_filhos(grupo):
+        raise ConflictError("Apague os subgrupos antes de apagar este grupo")
 
     with transactional():
         db.session.delete(grupo)
@@ -174,24 +211,31 @@ def remover_membro(gestor_id: str, grupo_id: str, usuario_id: str) -> None:
 
 
 def listar_membros(gestor_id: str, grupo_id: str) -> list[dict[str, Any]]:
-    """Todos os vínculos do grupo, atuais e antigos, com as viagens de cada um."""
+    """Vínculos do grupo e dos subgrupos dele, atuais e antigos, com as viagens de cada um."""
     gestor = _get_gestor_or_403(gestor_id, "Apenas gestores podem ver os membros")
     grupo = _grupo_da_organizacao(gestor, grupo_id)
 
-    # O período de um vínculo termina na saída da pessoa, no fim do grupo ou hoje, o que vier antes.
-    limite = date.today()
-    if grupo.data_fim is not None and grupo.data_fim < limite:
-        limite = grupo.data_fim
-    fim_do_periodo = func.least(func.coalesce(GrupoMembro.data_fim, limite), limite)
+    # Quem está num subgrupo conta como membro do pai.
+    grupo_ids = [grupo.id]
+    for filho in Grupo.query.filter(Grupo.grupo_pai_id == grupo.id).all():
+        grupo_ids.append(filho.id)
+
+    # O período de um vínculo termina na saída da pessoa, no fim do grupo dele ou hoje, o que vier antes.
+    hoje = date.today()
+    fim_do_periodo = func.least(
+        func.coalesce(GrupoMembro.data_fim, hoje), func.coalesce(Grupo.data_fim, hoje), hoje
+    )
 
     linhas = (
         db.session.query(
             GrupoMembro,
+            Grupo,
             User.nome,
             func.count(case((Viagem.status != StatusViagem.CANCELADA, Viagem.id))),
             func.count(case((Viagem.status == StatusViagem.FINALIZADA, Viagem.id))),
             func.count(case((AlunosConfirmados.embarcou.is_(True), Viagem.id))),
         )
+        .join(Grupo, Grupo.id == GrupoMembro.grupo_id)
         .join(User, User.id == GrupoMembro.usuario_id)
         .outerjoin(
             AlunosConfirmados,
@@ -204,21 +248,23 @@ def listar_membros(gestor_id: str, grupo_id: str) -> list[dict[str, Any]]:
             & (Viagem.data >= GrupoMembro.data_inicio)
             & (Viagem.data <= fim_do_periodo),
         )
-        .filter(GrupoMembro.grupo_id == grupo.id)
-        .group_by(GrupoMembro.id, User.nome)
+        .filter(GrupoMembro.grupo_id.in_(grupo_ids))
+        .group_by(GrupoMembro.id, Grupo.id, User.nome)
         .order_by(GrupoMembro.data_inicio.desc(), User.nome)
         .all()
     )
 
     membros: list[dict[str, Any]] = []
-    for vinculo, nome, confirmadas, finalizadas, com_presenca in linhas:
+    for vinculo, grupo_do_vinculo, nome, confirmadas, finalizadas, com_presenca in linhas:
         membros.append(
             {
+                "grupo_id": str(grupo_do_vinculo.id),
+                "grupo_nome": grupo_do_vinculo.nome,
                 "usuario_id": str(vinculo.usuario_id),
                 "nome": nome,
                 "data_inicio": vinculo.data_inicio,
                 "data_fim": vinculo.data_fim,
-                "atual": vinculo.data_fim is None and not grupo.encerrado,
+                "atual": vinculo.data_fim is None and not grupo_do_vinculo.encerrado,
                 "viagens_confirmadas": confirmadas,
                 "viagens_finalizadas": finalizadas,
                 "viagens_com_presenca": com_presenca,

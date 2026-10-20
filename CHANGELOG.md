@@ -28,7 +28,9 @@ All notable changes to this project will be documented in this file.
   with boarding recorded). Removing a member keeps the history, and rejoining creates a new
   membership. Endpoints under `/v1/grupos`. An invitation can list `grupo_ids`, and the person
   joins those groups when finishing the registration. Deleting an account closes the open
-  memberships.
+  memberships. A group can have a parent (one level): a member of the subgroup also counts as a
+  member of the parent, the parent report lists the subgroup memberships, and a group with
+  subgroups cannot be deleted.
 
 ### Removed
 - Passenger self-signup (`POST /v1/alunos/signup`), the guardian consent endpoints, the
