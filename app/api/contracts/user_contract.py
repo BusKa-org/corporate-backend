@@ -24,6 +24,9 @@ def register_models(api):
             "nome_pai": fields.String(description="Nome do pai (aluno)"),
             "nome_mae": fields.String(description="Nome da mãe (aluno)"),
             "cnh": fields.String(description="CNH (motorista)"),
+            "horario_inicio": fields.String(description="Início do horário de trabalho (HH:MM)"),
+            "horario_fim": fields.String(description="Fim do horário de trabalho (HH:MM)"),
+            "dias_trabalho": fields.List(fields.String, description="Dias de trabalho (SEG..DOM)"),
         },
     )
 
@@ -45,6 +48,21 @@ def register_models(api):
             "telefone": fields.String(description="Telefone"),
             "cnh": fields.String(required=True, description="CNH"),
             "salario": fields.Float(description="Salário"),
+            "horario_inicio": fields.String(description="Início do horário de trabalho (HH:MM)"),
+            "horario_fim": fields.String(description="Fim do horário de trabalho (HH:MM)"),
+            "dias_trabalho": fields.List(fields.String, description="Dias de trabalho (SEG..DOM)"),
+        },
+    )
+
+    motorista_update_request = api.model(
+        "MotoristaUpdateRequest",
+        {
+            "nome": fields.String(description="Nome completo"),
+            "telefone": fields.String(description="Telefone"),
+            "cnh": fields.String(description="CNH"),
+            "horario_inicio": fields.String(description="Início do horário de trabalho (HH:MM)"),
+            "horario_fim": fields.String(description="Fim do horário de trabalho (HH:MM)"),
+            "dias_trabalho": fields.List(fields.String, description="Dias de trabalho (SEG..DOM)"),
         },
     )
 
@@ -94,6 +112,7 @@ def register_models(api):
         "user_response": user_response,
         "user_list_response": user_list_response,
         "motorista_create_request": motorista_create_request,
+        "motorista_update_request": motorista_update_request,
         "change_password_request": change_password_request,
         "change_password_response": change_password_response,
         "fcm_token_response": fcm_token_response,

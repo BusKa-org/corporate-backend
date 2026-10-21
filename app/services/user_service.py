@@ -114,6 +114,31 @@ def update_user(user_id: str, data: dict[str, Any]) -> User:
         raise AppError(f"Erro ao atualizar usuário: {str(e)}", 500)
 
 
+def _aplicar_jornada(motorista: Motorista, data: dict[str, Any]) -> None:
+    """Copy working-hours fields present in `data` onto the driver and validate them."""
+    if "horario_inicio" in data:
+        motorista.horario_inicio = data["horario_inicio"]
+    if "horario_fim" in data:
+        motorista.horario_fim = data["horario_fim"]
+    if "dias_trabalho" in data:
+        dias = data["dias_trabalho"]
+        if dias is None:
+            motorista.dias_trabalho = None
+        else:
+            valores: list[str] = []
+            for dia in dias:
+                if dia.value not in valores:
+                    valores.append(dia.value)
+            motorista.dias_trabalho = valores
+
+    inicio = motorista.horario_inicio
+    fim = motorista.horario_fim
+    if (inicio is None) != (fim is None):
+        raise ValidationError("Informe o início e o fim do horário de trabalho")
+    if inicio is not None and inicio == fim:
+        raise ValidationError("Início e fim do horário de trabalho não podem ser iguais")
+
+
 def create_motorista(gestor_id: str, data: dict[str, Any]) -> Motorista:
     """Create a new driver (gestor only)."""
     gestor = _get_gestor_or_403(gestor_id, "Apenas gestores podem cadastrar motoristas")
@@ -143,6 +168,7 @@ def create_motorista(gestor_id: str, data: dict[str, Any]) -> Motorista:
             role=UserRole.MOTORISTA,
             cnh=cnh,
         )
+        _aplicar_jornada(new_motorista, data)
 
         db.session.add(new_motorista)
         db.session.commit()
@@ -154,6 +180,43 @@ def create_motorista(gestor_id: str, data: dict[str, Any]) -> Motorista:
         db.session.rollback()
         logger.error(f"Error creating motorista: {e}", exc_info=True)
         raise AppError(f"Erro ao criar motorista: {str(e)}", 500)
+
+
+def update_motorista(gestor_id: str, motorista_id: str, data: dict[str, Any]) -> Motorista:
+    """Gestor updates a driver of the same organizacao, including working hours."""
+    gestor = _get_gestor_or_403(gestor_id, "Apenas gestores podem editar motoristas")
+
+    user = _get_user_or_404(motorista_id)
+    if user.role != UserRole.MOTORISTA:
+        raise NotFoundError("Motorista não encontrado")
+    if user.organizacao_id != gestor.organizacao_id:
+        raise ForbiddenError("Proibido editar motoristas de outra organização")
+    motorista = cast(Motorista, user)
+
+    if nome := data.get("nome"):
+        motorista.nome = nome
+    if telefone := data.get("telefone"):
+        motorista.telefone = telefone
+    if cnh := data.get("cnh"):
+        existing = db.session.query(Motorista).filter_by(cnh=cnh).first()
+        if existing and existing.id != motorista.id:
+            raise ConflictError("CNH já cadastrada para outro motorista", field="cnh")
+        motorista.cnh = cnh
+
+    try:
+        _aplicar_jornada(motorista, data)
+    except ValidationError:
+        db.session.rollback()
+        raise
+
+    db.session.commit()
+    audit_logger.log_user_action(
+        action="update_motorista",
+        user_id=gestor_id,
+        resource_type="motorista",
+        resource_id=motorista_id,
+    )
+    return motorista
 
 
 def change_password(user_id: str, data: dict[str, Any]) -> None:
