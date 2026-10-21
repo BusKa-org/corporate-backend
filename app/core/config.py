@@ -65,7 +65,7 @@ class Settings:
             "MOTORISTA_DESCANSO_MINUTOS", default=30, min_val=1, max_val=1440
         )
         # Fuso usado para comparar o horário de trabalho do motorista com o relógio
-        self.TIMEZONE = os.getenv("TIMEZONE", "America/Sao_Paulo")
+        self.TIMEZONE = os.getenv("TIMEZONE", "America/Recife")
 
         # CORS settings
         self.CORS_ORIGINS = self._parse_cors_origins()
