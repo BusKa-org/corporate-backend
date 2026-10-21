@@ -1,18 +1,23 @@
 """Student (Aluno) service - profile management and gestor queries."""
 
 import logging
-from typing import Any, cast
+import os
+from typing import IO, Any, cast
+
+from flask import current_app
 
 from app.core.exceptions import (
     AppError,
     ForbiddenError,
     NotFoundError,
+    ValidationError,
 )
 from app.models.base import db
-from app.models.enum import UserStatus
+from app.models.enum import UserRole, UserStatus
 from app.models.geo import Endereco, Ponto
-from app.models.user import Aluno
-from app.services.user_service import _get_gestor_or_403
+from app.models.user import Aluno, User
+from app.services.user_service import _get_gestor_or_403, _get_user_or_404
+from app.utils.validators import validate_uuid
 
 logger = logging.getLogger(__name__)
 
@@ -133,3 +138,84 @@ def list_alunos_gestor(gestor_id: str, status: str | None = None) -> list[Aluno]
         except KeyError:
             pass
     return q.all()
+
+
+# Extensão do arquivo por tipo. O tipo vem dos primeiros bytes, não do nome nem do
+# Content-Type enviado pelo cliente.
+EXTENSOES_FOTO = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
+
+
+def _tipo_da_imagem(inicio: bytes) -> str | None:
+    if inicio.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if inicio.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if inicio[0:4] == b"RIFF" and inicio[8:12] == b"WEBP":
+        return "image/webp"
+    return None
+
+
+def _caminho_foto(aluno_id: str, extensao: str) -> str:
+    return os.path.join(current_app.config["FOTOS_ALUNO_DIR"], f"{aluno_id}.{extensao}")
+
+
+def apagar_foto(aluno_id: str) -> None:
+    """Remove o arquivo da foto do aluno, qualquer que seja a extensão."""
+    for extensao in EXTENSOES_FOTO.values():
+        caminho = _caminho_foto(aluno_id, extensao)
+        if os.path.exists(caminho):
+            os.remove(caminho)
+
+
+def salvar_foto(user_id: str, arquivo: IO[bytes]) -> Aluno:
+    """
+    Aluno envia a própria foto (usada na conferência do embarque, RF-17).
+
+    Raises: NotFoundError, ValidationError
+    """
+    aluno = db.session.get(Aluno, user_id)
+    if not aluno:
+        raise NotFoundError("Aluno não encontrado")
+
+    limite = current_app.config["FOTO_ALUNO_MAX_BYTES"]
+    conteudo = arquivo.read(limite + 1)
+    if len(conteudo) > limite:
+        raise ValidationError(f"A foto deve ter no máximo {limite // 1024} KB")
+
+    tipo = _tipo_da_imagem(conteudo[:12])
+    if tipo is None:
+        raise ValidationError("A foto deve ser JPEG, PNG ou WEBP")
+
+    os.makedirs(current_app.config["FOTOS_ALUNO_DIR"], exist_ok=True)
+    apagar_foto(str(aluno.id))
+    with open(_caminho_foto(str(aluno.id), EXTENSOES_FOTO[tipo]), "wb") as destino:
+        destino.write(conteudo)
+
+    aluno.foto_url = f"/v1/alunos/{aluno.id}/foto"
+    db.session.commit()
+    return aluno
+
+
+def buscar_foto(user_id: str, aluno_id: str) -> tuple[str, str]:
+    """
+    Caminho e tipo do arquivo da foto. Podem ver: o próprio aluno, e gestor ou
+    motorista da mesma organização.
+
+    Raises: NotFoundError, ForbiddenError
+    """
+    quem_pede: User = _get_user_or_404(user_id)
+    aluno = db.session.get(Aluno, validate_uuid(aluno_id, "Aluno ID"))
+    if not aluno:
+        raise NotFoundError("Aluno não encontrado")
+
+    if quem_pede.id != aluno.id:
+        if quem_pede.role not in (UserRole.GESTOR, UserRole.MOTORISTA):
+            raise ForbiddenError("Sem permissão para ver esta foto")
+        if quem_pede.organizacao_id != aluno.organizacao_id:
+            raise ForbiddenError("Aluno não pertence à sua organização")
+
+    for tipo, extensao in EXTENSOES_FOTO.items():
+        caminho = _caminho_foto(str(aluno.id), extensao)
+        if os.path.exists(caminho):
+            return caminho, tipo
+    raise NotFoundError("Aluno sem foto cadastrada")

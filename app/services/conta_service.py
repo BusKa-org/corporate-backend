@@ -25,6 +25,7 @@ from app.models.retencao_legal import RetencaoLegal
 from app.models.rota import RotaAluno
 from app.models.user import Aluno, User
 from app.models.viagem import AlunosConfirmados, Viagem
+from app.services.aluno_service import apagar_foto
 from app.services.consentimento_service import VERSAO_TERMO_VIGENTE
 from app.utils import audit_logger
 from app.utils.email_sender import send_email
@@ -144,6 +145,12 @@ def excluir_conta(user_id: str, email: str, senha: str) -> None:
             Consentimento(usuario_id=aluno_id, versao=VERSAO_TERMO_VIGENTE, acao=REVOGACAO)
         )
         _anonimizar(user)
+
+    # Depois do commit: se a transação falhar, a foto continua valendo.
+    try:
+        apagar_foto(str(aluno_id))
+    except OSError:
+        logger.exception("Falha ao apagar a foto do usuário %s", aluno_id)
 
     # Só o id, nunca o e-mail (o e-mail original não pode virar novo vestígio no log).
     audit_logger.log_user_action(
