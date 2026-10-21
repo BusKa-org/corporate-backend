@@ -339,6 +339,8 @@ def concluir_convite(token: str, dados: dict[str, Any]) -> Aluno:
             status=UserStatus.ACTIVE,
             signup_completed_at=_agora(),
             instituicao_id=instituicao.id,
+            necessidades_acessibilidade=dados.get("necessidades_acessibilidade") or [],
+            observacao_acessibilidade=_texto(dados, "observacao_acessibilidade"),
         )
         db.session.add(aluno)
         db.session.flush()

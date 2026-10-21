@@ -55,6 +55,12 @@ class Settings:
         # Link de download do app, incluído no e-mail de convite (opcional)
         self.APP_DOWNLOAD_URL = os.getenv("APP_DOWNLOAD_URL", "")
 
+        # Fotos dos alunos (RF-15/RF-17). Vazio = <instance_path>/fotos_aluno.
+        self.FOTOS_ALUNO_DIR = os.getenv("FOTOS_ALUNO_DIR", "")
+        self.FOTO_ALUNO_MAX_BYTES = self._get_int(
+            "FOTO_ALUNO_MAX_BYTES", default=5 * 1024 * 1024, min_val=1024
+        )
+
         # CORS settings
         self.CORS_ORIGINS = self._parse_cors_origins()
 
