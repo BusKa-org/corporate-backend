@@ -3,7 +3,9 @@
 import logging
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo
 
+from flask import current_app
 from sqlalchemy import select
 
 from app.core.exceptions import (
@@ -19,7 +21,7 @@ from app.models.base import db
 from app.models.enum import DiaDaSemana, SentidoViagem, StatusViagem, UserRole
 from app.models.geo import Ponto
 from app.models.rota import DiasOperacao, HorarioRota, Rota, RotaAluno, RotaPonto
-from app.models.user import Aluno, User
+from app.models.user import Aluno, Motorista, User
 from app.models.viagem import AlunosConfirmados, TelemetriaViagem, Viagem, ViagemPonto
 from app.services.notificacao_service import NotificacaoService
 from app.tasks.viagem_tasks import realizar_auto_checkin
@@ -320,6 +322,92 @@ def gerar_viagem(user_id: str, data_input: dict) -> Viagem:
         return nova_viagem
 
 
+def calcular_fim_descanso(
+    periodos: list[tuple[datetime, datetime | None]],
+    agora: datetime,
+    max_direcao: timedelta,
+    descanso: timedelta,
+) -> datetime | None:
+    """Return when the driver may drive again, or None if they may drive now.
+
+    `periodos` are (inicio, fim) of the driver's trips; fim=None means still driving.
+    Trips separated by a gap of at least `descanso` count as a rest and reset the
+    continuous driving time.
+    """
+    bloco_inicio: datetime | None = None
+    ultimo_fim: datetime | None = None
+    for inicio, fim in sorted(periodos, key=lambda p: p[0]):
+        if fim is None:
+            fim = agora
+        if ultimo_fim is None or inicio - ultimo_fim >= descanso:
+            bloco_inicio = inicio
+            ultimo_fim = fim
+        elif fim > ultimo_fim:
+            ultimo_fim = fim
+
+    if bloco_inicio is None or ultimo_fim is None:
+        return None
+    if agora - ultimo_fim >= descanso:
+        return None
+    if ultimo_fim - bloco_inicio < max_direcao:
+        return None
+    return ultimo_fim + descanso
+
+
+def _validar_jornada_motorista(motorista: Motorista) -> None:
+    """Block starting a trip outside the driver's working hours or during mandatory rest."""
+    fuso = ZoneInfo(current_app.config["TIMEZONE"])
+    agora = datetime.now(UTC)
+    agora_local = agora.astimezone(fuso)
+
+    if motorista.dias_trabalho:
+        dia = _get_dia_semana_enum(agora_local.date())
+        if dia.value not in motorista.dias_trabalho:
+            dias = ", ".join(motorista.dias_trabalho)
+            raise ForbiddenError(f"Hoje não é dia de trabalho do motorista (dias: {dias})")
+
+    inicio = motorista.horario_inicio
+    fim = motorista.horario_fim
+    if inicio is not None and fim is not None:
+        hora = agora_local.time()
+        if inicio < fim:
+            dentro = inicio <= hora < fim
+        else:
+            # Turno que atravessa a meia-noite, ex.: 22:00-06:00
+            dentro = hora >= inicio or hora < fim
+        if not dentro:
+            raise ForbiddenError(
+                "Fora do horário de trabalho do motorista "
+                f"({inicio.strftime('%H:%M')} às {fim.strftime('%H:%M')})"
+            )
+
+    horas_max = current_app.config["MOTORISTA_HORAS_MAX_DIRECAO"]
+    minutos_descanso = current_app.config["MOTORISTA_DESCANSO_MINUTOS"]
+    # Uma sequência de direção contínua maior que 24 h já teria sido bloqueada antes.
+    viagens = (
+        db.session.query(Viagem.inicio_real, Viagem.fim_real)
+        .filter(
+            Viagem.motorista_id == motorista.id,
+            Viagem.inicio_real.isnot(None),
+            Viagem.inicio_real >= agora - timedelta(hours=24),
+        )
+        .all()
+    )
+    periodos: list[tuple[datetime, datetime | None]] = []
+    for inicio_real, fim_real in viagens:
+        periodos.append((inicio_real, fim_real))
+
+    liberado_em = calcular_fim_descanso(
+        periodos, agora, timedelta(hours=horas_max), timedelta(minutes=minutos_descanso)
+    )
+    if liberado_em is not None:
+        horario = liberado_em.astimezone(fuso).strftime("%H:%M")
+        raise ForbiddenError(
+            f"Motorista atingiu {horas_max}h de direção contínua e precisa descansar "
+            f"{minutos_descanso} min. Poderá dirigir novamente às {horario}."
+        )
+
+
 def list_viagens_motorista(user_id: str) -> list[Viagem]:
     """List trips assigned to the driver."""
     return (
@@ -349,6 +437,8 @@ def controlar_viagem(user_id: str, viagem_id: str, data: dict[str, Any]) -> Viag
                 raise ValidationError(
                     f"Não é possível iniciar viagem com status {viagem.status.name}"
                 )
+            if viagem.motorista is not None:
+                _validar_jornada_motorista(viagem.motorista)
             viagem.status = StatusViagem.EM_ANDAMENTO
             viagem.inicio_real = datetime.now(UTC)
 
