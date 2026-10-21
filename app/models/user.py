@@ -1,7 +1,7 @@
 import uuid
 from datetime import date
 
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import ARRAY, UUID
 
 from .base import db
 from .enum import UserRole, UserStatus
@@ -54,6 +54,12 @@ class Motorista(User):
         UUID(as_uuid=True), db.ForeignKey("usuario.id", ondelete="CASCADE"), primary_key=True
     )
     cnh = db.Column(db.String(20), unique=True, nullable=False)
+
+    # Horário de trabalho definido pelo gestor. Nulo = sem restrição de horário/dia.
+    # Valores de DiaDaSemana ("SEG", "TER", ...).
+    horario_inicio = db.Column(db.Time, nullable=True)
+    horario_fim = db.Column(db.Time, nullable=True)
+    dias_trabalho = db.Column(ARRAY(db.String(3)), nullable=True)
 
     __mapper_args__ = {
         "polymorphic_identity": UserRole.MOTORISTA,
