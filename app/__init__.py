@@ -105,6 +105,9 @@ def create_app(
     app.config["MAIL_USE_TLS"] = settings.MAIL_USE_TLS
     app.config["FRONTEND_URL"] = settings.FRONTEND_URL
     app.config["APP_DOWNLOAD_URL"] = settings.APP_DOWNLOAD_URL
+    app.config["MOTORISTA_HORAS_MAX_DIRECAO"] = settings.MOTORISTA_HORAS_MAX_DIRECAO
+    app.config["MOTORISTA_DESCANSO_MINUTOS"] = settings.MOTORISTA_DESCANSO_MINUTOS
+    app.config["TIMEZONE"] = settings.TIMEZONE
 
     # Maximum request size (16MB)
     app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024

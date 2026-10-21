@@ -55,6 +55,18 @@ class Settings:
         # Link de download do app, incluído no e-mail de convite (opcional)
         self.APP_DOWNLOAD_URL = os.getenv("APP_DOWNLOAD_URL", "")
 
+        # Jornada do motorista. Padrão do CTB (Lei 9.503/97) art. 67-C §1º-A, incluído pela
+        # Lei 13.103/2015: no transporte de passageiros, 30 min de descanso a cada 4 h de
+        # direção (fracionamento permitido).
+        self.MOTORISTA_HORAS_MAX_DIRECAO = self._get_int(
+            "MOTORISTA_HORAS_MAX_DIRECAO", default=4, min_val=1, max_val=24
+        )
+        self.MOTORISTA_DESCANSO_MINUTOS = self._get_int(
+            "MOTORISTA_DESCANSO_MINUTOS", default=30, min_val=1, max_val=1440
+        )
+        # Fuso usado para comparar o horário de trabalho do motorista com o relógio
+        self.TIMEZONE = os.getenv("TIMEZONE", "America/Sao_Paulo")
+
         # CORS settings
         self.CORS_ORIGINS = self._parse_cors_origins()
 
