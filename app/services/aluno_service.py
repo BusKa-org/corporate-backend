@@ -35,6 +35,8 @@ def update_me(user_id: str, data: dict[str, Any]) -> Aluno:
             "matricula",
             "nome_responsavel",
             "cpf_responsavel",
+            "necessidades_acessibilidade",
+            "observacao_acessibilidade",
         ):
             if field in data:
                 setattr(aluno, field, data[field])
