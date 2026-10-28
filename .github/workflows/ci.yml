@@ -108,7 +108,7 @@ jobs:
           enable-cache: true
 
       - name: "Fetch buska-core"
-        uses: BusKa-org/buska-core/.github/actions/fetch-buska-core@main
+        uses: BusKa-org/buska-core/.github/actions/fetch-buska-core@v0.2.0
         with:
           app-client-id: ${{ secrets.BUSKA_CORE_APP_CLIENT_ID }}
           app-private-key: ${{ secrets.BUSKA_CORE_APP_PRIVATE_KEY }}
@@ -234,7 +234,7 @@ jobs:
           enable-cache: true
 
       - name: "Fetch buska-core"
-        uses: BusKa-org/buska-core/.github/actions/fetch-buska-core@main
+        uses: BusKa-org/buska-core/.github/actions/fetch-buska-core@v0.2.0
         with:
           app-client-id: ${{ secrets.BUSKA_CORE_APP_CLIENT_ID }}
           app-private-key: ${{ secrets.BUSKA_CORE_APP_PRIVATE_KEY }}
@@ -452,7 +452,7 @@ jobs:
           echo "EOF" >> "$GITHUB_OUTPUT"
 
       - name: "Fetch buska-core"
-        uses: BusKa-org/buska-core/.github/actions/fetch-buska-core@main
+        uses: BusKa-org/buska-core/.github/actions/fetch-buska-core@v0.2.0
         with:
           app-client-id: ${{ secrets.BUSKA_CORE_APP_CLIENT_ID }}
           app-private-key: ${{ secrets.BUSKA_CORE_APP_PRIVATE_KEY }}
@@ -630,8 +630,9 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           enable-cache: true
 
+      # Action ref is pinned; bump it together with .buska-core-version.
       - name: "Fetch buska-core"
-        uses: BusKa-org/buska-core/.github/actions/fetch-buska-core@main
+        uses: BusKa-org/buska-core/.github/actions/fetch-buska-core@v0.2.0
         with:
           app-client-id: ${{ secrets.BUSKA_CORE_APP_CLIENT_ID }}
           app-private-key: ${{ secrets.BUSKA_CORE_APP_PRIVATE_KEY }}

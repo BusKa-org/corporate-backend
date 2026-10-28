@@ -1,76 +1,30 @@
-from marshmallow import fields, validate
+from marshmallow import fields
 
 from app.schemas.common import BaseSchema
 from app.schemas.endereco_schema import EnderecoInputSchema
 from app.schemas.validators import (
-    validate_cpf,
     validate_optional_cpf,
     validate_optional_phone,
     validate_optional_string,
 )
 
 
-class AlunoProvisionAccountRequestSchema(BaseSchema):
-    """Gestor creates a minimal Aluno account (credentials + identity)."""
-
-    nome = fields.String(required=True, validate=validate.Length(min=1))
-    email = fields.Email(required=True, error_messages={"invalid": "Email inválido"})
-    password = fields.String(required=True, load_only=True, validate=validate.Length(min=1))
-    cpf = fields.String(required=True, validate=validate_cpf)
-    telefone = fields.String(load_default=None, allow_none=True, validate=validate_optional_phone)
-
-
-class AlunoSelfSignupRequestSchema(BaseSchema):
-    """Aluno self-signs up for an account."""
-
-    nome = fields.String(required=True, validate=validate.Length(min=1))
-    email = fields.Email(required=True, error_messages={"invalid": "Email inválido"})
-    password = fields.String(required=True, load_only=True, validate=validate.Length(min=1))
-    cpf = fields.String(required=True, validate=validate_cpf)
-    telefone = fields.String(load_default=None, allow_none=True, validate=validate_optional_phone)
-
-    matricula = fields.String(required=True, validate=validate.Length(min=1))
-    instituicao_id = fields.UUID(required=True)
-
-    # Date of birth — determines whether guardian consent is required
-    data_nascimento = fields.Date(required=True, format="%Y-%m-%d")
-
-    # Guardian (required when minor, optional for adults)
-    nome_responsavel = fields.String(
-        load_default=None, allow_none=True, validate=validate_optional_string
-    )
-    cpf_responsavel = fields.String(
-        load_default=None, allow_none=True, validate=validate_optional_cpf
-    )
-    email_responsavel = fields.Email(load_default=None, allow_none=True)
-
-    endereco_casa = fields.Nested(EnderecoInputSchema, required=True)
-
-
 class AlunoMeUpdateRequestSchema(BaseSchema):
-    """Aluno updates their profile (partial update)."""
+    """Aluno updates their profile (partial update).
 
-    nome = fields.String(load_default=None, allow_none=True, validate=validate_optional_string)
-    telefone = fields.String(load_default=None, allow_none=True, validate=validate_optional_phone)
+    Campo omitido não é tocado. Não há `load_default`: um default None faria o serviço
+    gravar None em todo campo que o cliente não enviou.
+    """
 
-    matricula = fields.String(load_default=None, allow_none=True, validate=validate_optional_string)
-    nome_responsavel = fields.String(
-        load_default=None, allow_none=True, validate=validate_optional_string
-    )
-    cpf_responsavel = fields.String(
-        load_default=None, allow_none=True, validate=validate_optional_cpf
-    )
+    # Nome e endereço não podem ser apagados. Os demais aceitam null para limpar o campo.
+    nome = fields.String(validate=validate_optional_string)
+    telefone = fields.String(allow_none=True, validate=validate_optional_phone)
 
-    endereco_casa = fields.Nested(EnderecoInputSchema, load_default=None, allow_none=True)
+    matricula = fields.String(allow_none=True, validate=validate_optional_string)
+    nome_responsavel = fields.String(allow_none=True, validate=validate_optional_string)
+    cpf_responsavel = fields.String(allow_none=True, validate=validate_optional_cpf)
 
-
-class AlunoGuardianConsentPublicSchema(BaseSchema):
-    """Public info returned to the guardian consent screen."""
-
-    nome = fields.String()
-    data_nascimento = fields.Date(dump_default=None)
-    is_minor = fields.Boolean()
-    guardian_consented_at = fields.DateTime(dump_default=None)
+    endereco_casa = fields.Nested(EnderecoInputSchema)
 
 
 class AlunoResponseSchema(BaseSchema):

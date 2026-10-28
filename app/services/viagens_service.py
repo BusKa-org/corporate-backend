@@ -13,6 +13,7 @@ from buska_core.exceptions import (
 )
 from buska_core.geo import haversine_distance_meters
 from buska_core.transaction import transactional
+from sqlalchemy import select
 
 from app.extensions import scheduler
 from app.models.base import db
@@ -166,6 +167,21 @@ def confirmar_presenca_aluno(
             horario = db.session.get(HorarioRota, viagem.horario_rota_id)
             if not horario:
                 raise NotFoundError("Horário da viagem não encontrado")
+
+            db.session.execute(select(User.id).where(User.id == aluno.usuario_id).with_for_update())
+            inscrito_em_outra = (
+                db.session.query(AlunosConfirmados)
+                .join(Viagem)
+                .filter(
+                    AlunosConfirmados.aluno_id == aluno.usuario_id,
+                    AlunosConfirmados.viagem_id != viagem.id,
+                    AlunosConfirmados.confirmacao.is_(True),
+                    Viagem.status == StatusViagem.EM_ANDAMENTO,
+                )
+                .first()
+            )
+            if inscrito_em_outra:
+                raise ConflictError("Você já está em outra viagem em andamento")
 
             # schema already enforces ponto_embarque_id presence on confirmacao=True
             ponto_valido = (
@@ -503,7 +519,6 @@ def atualizar_localizacao(user_id: str, viagem_id: str, data: dict) -> dict:
             job_id = f"checkin_{viagem.id}_{conf.aluno_id}"
 
             if not scheduler.get_job(job_id):
-
                 scheduler.add_job(
                     id=job_id,
                     func=realizar_auto_checkin,

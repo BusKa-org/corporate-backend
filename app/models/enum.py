@@ -48,6 +48,7 @@ class UserStatus(enum.Enum):
     PENDING_APPROVAL = "PENDING_APPROVAL"
     ACTIVE = "ACTIVE"
     DISABLED = "DISABLED"
+    DELETED = "DELETED"
 
 
 class TipoOcorrencia(enum.Enum):
