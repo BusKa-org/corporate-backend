@@ -1,4 +1,4 @@
-# MeBusKá Backend
+# BusKá Backend
 
 Flask API for on-demand corporate transport (DRT).
 
@@ -41,10 +41,13 @@ make install
 # 3. Start the database (in another terminal)
 docker compose -f infra/database.yml up -d
 
-# 4. Seed the database
-make initdb
+# 4. Create the database and apply migrations
+make db-create
 
-# 5. Run the server
+# 5. (Optional) Seed sample data
+make seed
+
+# 6. Run the server
 make run
 ```
 
@@ -69,9 +72,10 @@ curl -I http://localhost:5000/v1/auth/login | grep -E "X-Content-Type|X-Frame|X-
 ```bash
 make install        # Install dependencies
 make run            # Run the server (port 5000)
-make initdb         # Create and seed the database
-make deletedb       # Wipe the database
-make bdcon          # Connect to the database via psql
+make db-create      # Start the database and apply migrations
+make seed           # Seed sample data
+make db-reset       # Wipe the database
+make db-shell       # Connect to the database via psql
 ```
 
 ### Docker (Production)
@@ -156,7 +160,7 @@ The backend implements multiple layers of security:
 ### Authentication & Authorization
 - **JWT** with configurable expiration (default: 2 hours)
 - **RBAC** (Role-Based Access Control): ALUNO, MOTORISTA, GESTOR
-- **Tenant isolation** per Prefeitura (municipality)
+- **Tenant isolation** per Organizacao (organization)
 
 ### Protections in Place
 - ✅ **Security Headers**: CSP, XSS Protection, HSTS, etc.
