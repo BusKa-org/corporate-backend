@@ -7,6 +7,26 @@ resolution-markers = [
     "python_full_version < '3.13'",
 ]
 
+[manifest]
+constraints = [
+    { name = "anyio", specifier = ">=4.14.2" },
+    { name = "click", specifier = ">=8.3.3" },
+    { name = "cryptography", specifier = ">=50.0.0" },
+    { name = "h2", specifier = ">=4.4.1" },
+    { name = "hpack", specifier = ">=4.2.0" },
+    { name = "idna", specifier = ">=3.15" },
+    { name = "mako", specifier = ">=1.3.12" },
+    { name = "mistune", specifier = ">=3.3.0" },
+    { name = "msgpack", specifier = ">=1.2.1" },
+    { name = "pip", specifier = ">=26.2.0" },
+    { name = "pyasn1", specifier = ">=0.6.4" },
+    { name = "pygments", specifier = ">=2.20.0" },
+    { name = "pyjwt", specifier = ">=2.15.1" },
+    { name = "urllib3", specifier = ">=2.8.0" },
+    { name = "virtualenv", specifier = ">=21.14.5" },
+    { name = "werkzeug", specifier = ">=3.1.9" },
+]
+
 [[package]]
 name = "alembic"
 version = "1.18.4"
@@ -1225,9 +1245,6 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "alembic" },
-    { name = "anyio" },
-    { name = "click" },
-    { name = "cryptography" },
     { name = "firebase-admin" },
     { name = "flasgger" },
     { name = "flask" },
@@ -1238,22 +1255,12 @@ dependencies = [
     { name = "flask-sqlalchemy" },
     { name = "geoalchemy2" },
     { name = "gunicorn" },
-    { name = "h2" },
-    { name = "hpack" },
-    { name = "idna" },
-    { name = "mako" },
     { name = "marshmallow" },
-    { name = "mistune" },
-    { name = "msgpack" },
     { name = "psycopg2-binary" },
-    { name = "pyasn1" },
-    { name = "pyjwt" },
     { name = "python-dotenv" },
     { name = "python-json-logger" },
     { name = "requests" },
     { name = "sqlalchemy" },
-    { name = "urllib3" },
-    { name = "werkzeug" },
 ]
 
 [package.dev-dependencies]
@@ -1263,10 +1270,8 @@ dev = [
     { name = "factory-boy" },
     { name = "faker" },
     { name = "mypy" },
-    { name = "pip" },
     { name = "pip-audit" },
     { name = "pre-commit" },
-    { name = "pygments" },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "pytest-mock" },
@@ -1274,15 +1279,11 @@ dev = [
     { name = "requests" },
     { name = "ruff" },
     { name = "types-requests" },
-    { name = "virtualenv" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "alembic", specifier = ">=1.13.0" },
-    { name = "anyio", specifier = ">=4.14.2" },
-    { name = "click", specifier = ">=8.3.3" },
-    { name = "cryptography", specifier = ">=50.0.0" },
     { name = "firebase-admin", specifier = ">=7.2.0" },
     { name = "flasgger", specifier = ">=0.9.7.1" },
     { name = "flask", specifier = ">=3.1.2" },
@@ -1293,22 +1294,12 @@ requires-dist = [
     { name = "flask-sqlalchemy", specifier = ">=3.1.1" },
     { name = "geoalchemy2", specifier = ">=0.18.0" },
     { name = "gunicorn", specifier = ">=23.0.0" },
-    { name = "h2", specifier = ">=4.4.1" },
-    { name = "hpack", specifier = ">=4.2.0" },
-    { name = "idna", specifier = ">=3.15" },
-    { name = "mako", specifier = ">=1.3.12" },
     { name = "marshmallow", specifier = ">=3.20.1" },
-    { name = "mistune", specifier = ">=3.3.0" },
-    { name = "msgpack", specifier = ">=1.2.1" },
     { name = "psycopg2-binary", specifier = ">=2.9.11" },
-    { name = "pyasn1", specifier = ">=0.6.4" },
-    { name = "pyjwt", specifier = ">=2.15.1" },
     { name = "python-dotenv", specifier = ">=1.2.1" },
     { name = "python-json-logger", specifier = ">=2.0.7" },
     { name = "requests", specifier = ">=2.33.0" },
     { name = "sqlalchemy", specifier = ">=2.0.44" },
-    { name = "urllib3", specifier = ">=2.8.0" },
-    { name = "werkzeug", specifier = ">=3.1.9" },
 ]
 
 [package.metadata.requires-dev]
@@ -1318,10 +1309,8 @@ dev = [
     { name = "factory-boy", specifier = ">=3.3.0" },
     { name = "faker", specifier = ">=26.0.0" },
     { name = "mypy", specifier = ">=1.8.0" },
-    { name = "pip", specifier = ">=26.2.0" },
     { name = "pip-audit", specifier = ">=2.7.0" },
     { name = "pre-commit", specifier = ">=3.6.0" },
-    { name = "pygments", specifier = ">=2.20.0" },
     { name = "pytest", specifier = ">=9.0.3" },
     { name = "pytest-cov", specifier = ">=7.0.0" },
     { name = "pytest-mock", specifier = ">=3.14.0" },
@@ -1329,7 +1318,6 @@ dev = [
     { name = "requests", specifier = ">=2.33.0" },
     { name = "ruff", specifier = ">=0.2.0" },
     { name = "types-requests", specifier = ">=2.33.0.20260408" },
-    { name = "virtualenv", specifier = ">=21.14.5" },
 ]
 
 [[package]]
