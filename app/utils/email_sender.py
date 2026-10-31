@@ -38,12 +38,6 @@ def send_email(
     if body_html:
         msg.attach(MIMEText(body_html, "html", "utf-8"))
 
-    logger.info("Sending email to %s", to)
-    logger.info("Mail server: %s", mail_server)
-    logger.info("Mail port: %s", mail_port)
-    logger.info("Mail username: %s", mail_username)
-    logger.info("Mail use TLS: %s", mail_use_tls)
-
     try:
         with smtplib.SMTP(mail_server, mail_port) as server:
             if mail_use_tls:
@@ -51,8 +45,9 @@ def send_email(
             server.login(mail_username, mail_password)
             server.sendmail(mail_username, to, msg.as_string())
 
-        logger.info("Email sent to %s", to)
+        # O destinatário fica fora do log: e-mail é dado pessoal (LGPD).
+        logger.info("Email sent: %s", subject)
 
     except Exception:
-        logger.exception("Failed to send email to %s", to)
+        logger.exception("Failed to send email: %s", subject)
         raise
