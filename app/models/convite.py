@@ -69,3 +69,5 @@ class Convite(db.Model):
 
     created_at = db.Column(db.DateTime(timezone=True), server_default=db.func.now(), nullable=False)
     concluido_em = db.Column(db.DateTime(timezone=True))
+
+    grupos = db.relationship("Grupo", secondary="convite_grupo", lazy="selectin")
