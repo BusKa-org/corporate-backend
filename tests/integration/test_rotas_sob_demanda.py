@@ -89,3 +89,24 @@ def test_leitura_retorna_tipo_e_parametros(gestor):
     itens = gestor.client.get("/v1/rotas/").get_json()["items"]
     item = next(i for i in itens if i["id"] == rota_id)
     assert {k: item[k] for k in esperado} == esperado
+
+
+def test_update_recusa_troca_de_tipo(gestor, rota_sob_demanda, _db):
+    r = gestor.client.put(f"/v1/rotas/{rota_sob_demanda.id}", json={"tipo": "FIXA"})
+
+    assert r.status_code == 400
+    assert "não pode ser alterado" in r.get_json()["error"]["message"]
+    _db.session.refresh(rota_sob_demanda)
+    assert rota_sob_demanda.tipo == TipoViagem.SOB_DEMANDA
+
+
+def test_update_com_o_mesmo_tipo_e_aceito(gestor, rota_sob_demanda):
+    r = gestor.client.put(f"/v1/rotas/{rota_sob_demanda.id}", json={"tipo": "SOB_DEMANDA"})
+
+    assert r.status_code == 200, r.get_data(as_text=True)
+
+
+def test_update_com_tipo_invalido_e_400(gestor, rota_sob_demanda):
+    r = gestor.client.put(f"/v1/rotas/{rota_sob_demanda.id}", json={"tipo": "EXPRESSA"})
+
+    assert r.status_code == 400
