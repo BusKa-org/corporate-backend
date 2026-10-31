@@ -349,18 +349,39 @@ limit that was hit) and a `Retry-After` header in seconds. Every limited
 response also carries `X-RateLimit-Limit`, `X-RateLimit-Remaining` and
 `X-RateLimit-Reset`.
 
-Counting key: the JWT identity when the request has a valid token, otherwise
-the connection IP (`request.remote_addr`). The app has no `ProxyFix`, so
-`X-Forwarded-For` is ignored; behind a reverse proxy every client would share
-the proxy's IP, so add `ProxyFix` before putting one in front. Each route
-counts on its own.
+Counting key depends on the route:
+
+- Login and the other public auth routes count **per e-mail**, never per IP:
+  campus Wi-Fi and mobile carrier NAT put many students behind one IP, so a
+  per-IP limit blocked whole classes and let one person lock everyone out. The
+  key is the `email` from the JSON body, trimmed and lowercased, for
+  `POST /v1/auth/login`, `POST /v1/auth/forgot-password`,
+  `POST /v1/convites/pin` and `POST /v1/convites/pin/validar`. A body without
+  a valid e-mail (missing, not a string, no `@`, over 254 chars, not JSON)
+  counts in one shared `sem-email` bucket; those requests fail validation
+  anyway. Known trade-off: anyone can use up a victim's e-mail bucket and block
+  that one user's login for up to a minute.
+- `POST /v1/auth/reset-password`: the body's e-mail if it has one, otherwise
+  the reset `token` (JSON or form). `GET /v1/auth/reset-password` and
+  `GET`/`POST /v1/convites/aceite/<token>`: the token. No token: one shared
+  `sem-token` bucket.
+- Every other route (`change-password`, realtime and the default limit): the JWT
+  identity when the request has a valid token, otherwise the connection IP
+  (`request.remote_addr`). IP is only left as the key for anonymous routes with
+  no e-mail or token. The app has no `ProxyFix`, so `X-Forwarded-For` is
+  ignored; behind a reverse proxy every client would share the proxy's IP, so
+  add `ProxyFix` before putting one in front.
+
+Each route and each HTTP method counts on its own (`GET` and `POST` on the
+same path have separate counters). CORS preflight (`OPTIONS`) is never
+counted, and CORS exposes `Retry-After` and `X-RateLimit-*` to the browser.
 
 | Setting | Default | Routes |
 |---|---|---|
 | `RATELIMIT_SENSITIVE` | `5 per minute` | `POST /v1/convites/pin/validar`, `POST /v1/auth/reset-password`, `POST /v1/users/change-password` |
 | `RATELIMIT_AUTH` | `10 per minute` | `POST /v1/auth/login`, `POST /v1/auth/forgot-password`, `GET /v1/auth/reset-password`, `GET`/`POST /v1/convites/aceite/<token>`, `POST /v1/convites/pin` |
 | `RATELIMIT_REALTIME` | `120 per minute` | `GET`/`POST /v1/viagens/<id>/localizacao`, `POST /v1/viagens/<id>/localizacao-aluno`, `POST /v1/telemetria/ingestao`, `POST /v1/embarque/viagens/<id>/` `roteiro/avancar`, `checkin`, `confirmacao`, `recusa`, `manual`, `sincronizacao` |
-| `RATELIMIT_DEFAULT` | `200 per hour` | every other route |
+| `RATELIMIT_DEFAULT` | `2000 per hour` | every other route |
 | (none) | | `/health`, `/ready` (probes are never limited) |
 
 Other settings: `RATELIMIT_ENABLED` (default `true`; the test suite turns it off)
@@ -368,7 +389,8 @@ and `RATELIMIT_STORAGE_URI` (default `memory://`).
 
 Storage: with `memory://` each gunicorn worker keeps its own counters, so the
 real limit is N times the setting with N workers. Production must use Redis
-(`redis://redis:6379/0` in `docker-compose.prod.yml`); with `FLASK_ENV=production`
+(`redis://redis:6379/0` in `docker-compose.prod.yml`, no persistence: counters are
+ephemeral, so a restart just resets them); with `FLASK_ENV=production`
 and the limiter on, `memory://` makes the app refuse to start. If Redis goes
 down at request time the API keeps answering: each worker falls back to
 in-memory counters (logged as a warning by `flask-limiter`) and goes back to
