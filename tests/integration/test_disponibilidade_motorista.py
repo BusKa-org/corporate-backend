@@ -23,7 +23,7 @@ def test_em_rota_nao_pode_trabalhar(_db, motorista):
 
 def test_em_descanso_informa_quando_fica_livre(_db, motorista):
     agora = datetime.now(UTC)
-    motorista.user.status_motorista = StatusMotorista.EM_DESCANSO
+    motorista.user.status_motorista = StatusMotorista.EM_DESCANSO_OBRIGATORIO
     motorista.user.descanso_ate = agora + timedelta(minutes=5)
 
     pode, motivo, livre = disponibilidade_motorista(motorista.user, agora)
@@ -35,7 +35,7 @@ def test_em_descanso_informa_quando_fica_livre(_db, motorista):
 
 def test_descanso_termina_exatamente_em_descanso_ate(_db, motorista):
     agora = datetime.now(UTC)
-    motorista.user.status_motorista = StatusMotorista.EM_DESCANSO
+    motorista.user.status_motorista = StatusMotorista.EM_DESCANSO_OBRIGATORIO
     motorista.user.descanso_ate = agora
 
     assert disponibilidade_motorista(motorista.user, agora) == (True, None, None)

@@ -6,7 +6,7 @@ description: |
   Marca uma viagem como **finalizada**.  
   Disponível apenas para usuários com o papel **motorista**.  
   Requer um **JWT token** válido no cabeçalho `Authorization`.
-  Ao finalizar, o motorista volta a `ATIVO`, ou passa a `EM_DESCANSO` com `descanso_ate`
+  Ao finalizar, o motorista volta a `ATIVO`, ou passa a `EM_DESCANSO_OBRIGATORIO` com `descanso_ate`
   se atingiu o tempo máximo de direção contínua. Cancelar uma viagem já iniciada faz o mesmo.
 operationId: finalizarViagem
 security:

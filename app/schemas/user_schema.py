@@ -113,7 +113,7 @@ class UserResponseSchema(BaseSchema):
 
     def get_descanso_ate(self, obj):
         # Só mostra enquanto o descanso vale, para nunca exibir um descanso vencido
-        if self.get_status_motorista(obj) != "EM_DESCANSO":
+        if self.get_status_motorista(obj) != "EM_DESCANSO_OBRIGATORIO":
             return None
         return obj.descanso_ate.isoformat()
 

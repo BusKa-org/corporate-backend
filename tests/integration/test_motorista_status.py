@@ -86,7 +86,7 @@ def test_finalizar_apos_horas_max_entra_em_descanso(app, _db, motorista, horario
     m = _recarregar(_db, motorista.user.id)
     _db.session.refresh(viagem)
     descanso = timedelta(minutes=app.config["MOTORISTA_DESCANSO_MINUTOS"])
-    assert m.status_motorista == StatusMotorista.EM_DESCANSO
+    assert m.status_motorista == StatusMotorista.EM_DESCANSO_OBRIGATORIO
     assert m.descanso_ate == viagem.fim_real + descanso
 
 
@@ -94,7 +94,7 @@ def test_iniciar_em_descanso_antes_do_fim_e_bloqueado_com_horario(
     app, _db, motorista, viagem_futura_agendada_com_motorista
 ):
     descanso_ate = datetime.now(UTC) + timedelta(minutes=20)
-    motorista.user.status_motorista = StatusMotorista.EM_DESCANSO
+    motorista.user.status_motorista = StatusMotorista.EM_DESCANSO_OBRIGATORIO
     motorista.user.descanso_ate = descanso_ate
     _db.session.commit()
 
@@ -103,13 +103,13 @@ def test_iniciar_em_descanso_antes_do_fim_e_bloqueado_com_horario(
     assert r.status_code == 403
     horario = descanso_ate.astimezone(ZoneInfo(app.config["TIMEZONE"])).strftime("%H:%M")
     assert f"Poderá dirigir novamente às {horario}" in r.get_json()["error"]["message"]
-    assert _recarregar(_db, motorista.user.id).status_motorista == StatusMotorista.EM_DESCANSO
+    assert _recarregar(_db, motorista.user.id).status_motorista == StatusMotorista.EM_DESCANSO_OBRIGATORIO
 
 
 def test_iniciar_apos_fim_do_descanso_e_permitido(
     _db, motorista, viagem_futura_agendada_com_motorista
 ):
-    motorista.user.status_motorista = StatusMotorista.EM_DESCANSO
+    motorista.user.status_motorista = StatusMotorista.EM_DESCANSO_OBRIGATORIO
     motorista.user.descanso_ate = datetime.now(UTC) - timedelta(seconds=1)
     _db.session.commit()
 
@@ -122,7 +122,7 @@ def test_iniciar_apos_fim_do_descanso_e_permitido(
 
 
 def test_leitura_mostra_ativo_quando_descanso_venceu(_db, gestor, motorista):
-    motorista.user.status_motorista = StatusMotorista.EM_DESCANSO
+    motorista.user.status_motorista = StatusMotorista.EM_DESCANSO_OBRIGATORIO
     motorista.user.descanso_ate = datetime.now(UTC) - timedelta(minutes=1)
     _db.session.commit()
 
@@ -134,13 +134,13 @@ def test_leitura_mostra_ativo_quando_descanso_venceu(_db, gestor, motorista):
 
 def test_leitura_mostra_descanso_enquanto_vale(_db, gestor, motorista):
     descanso_ate = datetime.now(UTC) + timedelta(minutes=10)
-    motorista.user.status_motorista = StatusMotorista.EM_DESCANSO
+    motorista.user.status_motorista = StatusMotorista.EM_DESCANSO_OBRIGATORIO
     motorista.user.descanso_ate = descanso_ate
     _db.session.commit()
 
     body = _dados_motorista(gestor, motorista.user.id)
 
-    assert body["status_motorista"] == "EM_DESCANSO"
+    assert body["status_motorista"] == "EM_DESCANSO_OBRIGATORIO"
     assert datetime.fromisoformat(body["descanso_ate"]) == descanso_ate
 
 
@@ -158,7 +158,7 @@ def test_cancelar_viagem_iniciada_atualiza_status(_db, gestor, motorista, horari
     m = _recarregar(_db, motorista.user.id)
     _db.session.refresh(viagem)
     assert viagem.fim_real is not None
-    assert m.status_motorista == StatusMotorista.EM_DESCANSO
+    assert m.status_motorista == StatusMotorista.EM_DESCANSO_OBRIGATORIO
     assert m.descanso_ate is not None
 
 
@@ -214,7 +214,7 @@ def test_gestor_nao_altera_status_por_patch(_db, gestor, motorista):
         f"/v1/users/motoristas/{motorista.user.id}",
         json={
             "nome": "Novo Nome",
-            "status_motorista": "EM_DESCANSO",
+            "status_motorista": "EM_DESCANSO_OBRIGATORIO",
             "descanso_ate": "2030-01-01T00:00:00+00:00",
         },
     )

@@ -25,10 +25,10 @@ All notable changes to this project will be documented in this file.
   (`POST /v1/convites/pin`, `POST /v1/convites/pin/validar`) instead of using the link.
 - Driver working hours and state: the gestor sets `horario_inicio`, `horario_fim` and
   `dias_trabalho` (`PATCH /v1/users/motoristas/<id>`). Each driver has a system-driven
-  `status_motorista` (`ATIVO`, `EM_ROTA`, `EM_DESCANSO`) and `descanso_ate`, shown in the user
+  `status_motorista` (`ATIVO`, `EM_ROTA`, `EM_DESCANSO_OBRIGATORIO`) and `descanso_ate`, shown in the user
   responses. Starting a trip needs `ATIVO`, working hours and no pending rest (403; 409 if
   already `EM_ROTA`) and sets `EM_ROTA`. Finishing or cancelling a started trip sets
-  `EM_DESCANSO` when the max continuous driving time was reached, otherwise `ATIVO`.
+  `EM_DESCANSO_OBRIGATORIO` when the max continuous driving time was reached, otherwise `ATIVO`.
   New settings `MOTORISTA_HORAS_MAX_DIRECAO`, `MOTORISTA_DESCANSO_MINUTOS` and `TIMEZONE`.
 
 ### Removed

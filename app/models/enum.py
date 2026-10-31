@@ -67,4 +67,4 @@ class StatusOcorrencia(enum.Enum):
 class StatusMotorista(enum.Enum):
     ATIVO = "ATIVO"
     EM_ROTA = "EM_ROTA"
-    EM_DESCANSO = "EM_DESCANSO"
+    EM_DESCANSO_OBRIGATORIO = "EM_DESCANSO_OBRIGATORIO"

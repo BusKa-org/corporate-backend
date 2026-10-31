@@ -26,7 +26,7 @@ def upgrade() -> None:
     )
 
     status_motorista = postgresql.ENUM(
-        "ATIVO", "EM_ROTA", "EM_DESCANSO", name="status_motorista", create_type=False
+        "ATIVO", "EM_ROTA", "EM_DESCANSO_OBRIGATORIO", name="status_motorista", create_type=False
     )
     status_motorista.create(op.get_bind(), checkfirst=True)
     op.add_column(

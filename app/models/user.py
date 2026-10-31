@@ -76,7 +76,7 @@ class Motorista(User):
 
     def status_atual(self, agora: datetime) -> StatusMotorista:
         """Status considering that a rest whose `descanso_ate` has passed is over."""
-        if self.status_motorista == StatusMotorista.EM_DESCANSO:
+        if self.status_motorista == StatusMotorista.EM_DESCANSO_OBRIGATORIO:
             if self.descanso_ate is None or self.descanso_ate <= agora:
                 return StatusMotorista.ATIVO
         return self.status_motorista

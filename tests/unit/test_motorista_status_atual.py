@@ -16,15 +16,15 @@ def test_ativo_e_em_rota_nao_mudam():
 
 
 def test_descanso_vale_ate_descanso_ate():
-    m = _motorista(StatusMotorista.EM_DESCANSO, AGORA + timedelta(seconds=1))
-    assert m.status_atual(AGORA) == StatusMotorista.EM_DESCANSO
+    m = _motorista(StatusMotorista.EM_DESCANSO_OBRIGATORIO, AGORA + timedelta(seconds=1))
+    assert m.status_atual(AGORA) == StatusMotorista.EM_DESCANSO_OBRIGATORIO
 
 
 def test_descanso_termina_exatamente_em_descanso_ate():
-    m = _motorista(StatusMotorista.EM_DESCANSO, AGORA)
+    m = _motorista(StatusMotorista.EM_DESCANSO_OBRIGATORIO, AGORA)
     assert m.status_atual(AGORA) == StatusMotorista.ATIVO
 
 
 def test_descanso_sem_data_conta_como_ativo():
-    m = _motorista(StatusMotorista.EM_DESCANSO)
+    m = _motorista(StatusMotorista.EM_DESCANSO_OBRIGATORIO)
     assert m.status_atual(AGORA) == StatusMotorista.ATIVO

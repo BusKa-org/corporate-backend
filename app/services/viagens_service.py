@@ -428,7 +428,7 @@ def disponibilidade_motorista(
             return False, motivo, None
 
     liberado_em = None
-    if motorista.status_atual(agora) == StatusMotorista.EM_DESCANSO:
+    if motorista.status_atual(agora) == StatusMotorista.EM_DESCANSO_OBRIGATORIO:
         liberado_em = motorista.descanso_ate
     else:
         # Recalcula pelo histórico também: cobre viagens anteriores ao status existir.
@@ -462,7 +462,7 @@ def _atualizar_status_apos_viagem(motorista: Motorista, agora: datetime) -> None
         motorista.status_motorista = StatusMotorista.ATIVO
         motorista.descanso_ate = None
     else:
-        motorista.status_motorista = StatusMotorista.EM_DESCANSO
+        motorista.status_motorista = StatusMotorista.EM_DESCANSO_OBRIGATORIO
         motorista.descanso_ate = descanso_ate
 
 

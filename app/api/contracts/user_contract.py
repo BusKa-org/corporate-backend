@@ -28,10 +28,10 @@ def register_models(api):
             "horario_fim": fields.String(description="Fim do horário de trabalho (HH:MM)"),
             "dias_trabalho": fields.List(fields.String, description="Dias de trabalho (SEG..DOM)"),
             "status_motorista": fields.String(
-                description="Estado do motorista, definido pelo sistema (ATIVO, EM_ROTA, EM_DESCANSO)"
+                description="Estado do motorista, definido pelo sistema (ATIVO, EM_ROTA, EM_DESCANSO_OBRIGATORIO)"
             ),
             "descanso_ate": fields.DateTime(
-                description="Fim do descanso obrigatório (só quando EM_DESCANSO)"
+                description="Fim do descanso obrigatório (só quando EM_DESCANSO_OBRIGATORIO)"
             ),
         },
     )
