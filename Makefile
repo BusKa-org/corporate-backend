@@ -72,7 +72,7 @@ db-reset:
 	$(DOCKER) -f infra/database.yml rm -f
 	$(DOCKER) -f infra/database.yml up -d db
 	@echo "Waiting for database to be ready..."
-	@until docker exec buska_db psql -U buska_user -d buska_db -c "SELECT 1" > /dev/null 2>&1; do \
+	@until docker exec mebuska_corporate_db psql -U $${DB_USER:-buska_user} -d $${DB_NAME:-buska_db} -c "SELECT 1" > /dev/null 2>&1; do \
 		echo "  still waiting..."; sleep 2; \
 	done
 	@echo "Database is ready."
