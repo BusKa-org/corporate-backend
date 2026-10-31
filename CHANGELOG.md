@@ -124,6 +124,15 @@ All notable changes to this project will be documented in this file.
   worked. The invitation row is now locked, so the second request sees the 60-second interval
   between PINs and sends nothing: one valid PIN, one e-mail. Asking again after the interval
   still sends a new PIN.
+- Invitation PIN brute force: every new PIN reset the 5-try counter and a new PIN could be asked
+  every 60 seconds, so anyone who knew an invited e-mail got about 50,000 guesses over the 7 days
+  of the invitation (about 5% odds of creating the account). Wrong guesses now also add up per
+  invitation (`convite.pin_erros_total`, migration `d2e3f4a5b6c7`), across every PIN. At
+  `CONVITE_PIN_MAX_ERROS_TOTAL` (new setting, default 20) the invitation stops taking PINs:
+  `POST /v1/convites/pin` sends nothing and `POST /v1/convites/pin/validar` refuses even the
+  right PIN, with the same answers as always. A `convite_pin_bloqueado` security event is
+  logged. The gestor's resend (`POST /v1/convites/<id>/reenviar`) resets the count; the e-mailed
+  link keeps working meanwhile.
 - `DELETE /v1/users/me` cancels the student's active ride request with the same rules as
   `DELETE /v1/viagens/<id>/solicitacao` (the segment is given back, a trip left with nobody is
   cancelled). Before, the request kept its seat and could become a passenger with a boarding

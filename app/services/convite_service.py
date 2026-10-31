@@ -62,6 +62,7 @@ def _renovar(convite: Convite) -> None:
     convite.enviado_em = None
     _limpar_pin(convite)
     convite.pin_enviado_em = None
+    convite.pin_erros_total = 0
 
 
 def _limpar_pin(convite: Convite) -> None:
@@ -393,6 +394,11 @@ def _convite_pendente_do_email(email_bruto: str, travar: bool = False) -> Convit
     return convite
 
 
+def _pin_bloqueado(convite: Convite) -> bool:
+    """Erros somados de todos os PINs do convite chegaram no limite; só o reenvio pelo gestor libera."""
+    return convite.pin_erros_total >= current_app.config["CONVITE_PIN_MAX_ERROS_TOTAL"]
+
+
 def solicitar_pin(email_bruto: str) -> None:
     """Envia um PIN ao e-mail habilitado. Nunca revela se o e-mail está habilitado.
 
@@ -401,7 +407,7 @@ def solicitar_pin(email_bruto: str) -> None:
     então fica um PIN válido e um e-mail só.
     """
     convite = _convite_pendente_do_email(email_bruto, travar=True)
-    if convite is None:
+    if convite is None or _pin_bloqueado(convite):
         return
 
     agora = _agora()
@@ -442,14 +448,25 @@ def validar_pin(email_bruto: str, pin: str) -> str:
     convite = _convite_pendente_do_email(email_bruto, travar=True)
     if convite is None or convite.pin_hash is None or convite.pin_expira_em is None:
         raise erro
+    if _pin_bloqueado(convite):
+        raise erro
     if convite.pin_expira_em <= _agora():
         raise erro
 
     if not hmac.compare_digest(convite.pin_hash, _hash_do_pin(convite, pin.strip())):
         convite.pin_tentativas += 1
-        if convite.pin_tentativas >= PIN_MAX_TENTATIVAS:
+        # Não zera com PIN novo: sem isso, um PIN por minuto dá 5 palpites/minuto por 7 dias.
+        convite.pin_erros_total += 1
+        bloqueou = _pin_bloqueado(convite)
+        if convite.pin_tentativas >= PIN_MAX_TENTATIVAS or bloqueou:
             _limpar_pin(convite)
         db.session.commit()
+        if bloqueou:
+            audit_logger.log_security_event(
+                event_type="convite_pin_bloqueado",
+                severity="medium",
+                details={"convite_id": str(convite.id), "erros": convite.pin_erros_total},
+            )
         raise erro
 
     _limpar_pin(convite)  # uso único

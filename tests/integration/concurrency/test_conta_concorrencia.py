@@ -96,8 +96,27 @@ def test_palpites_de_pin_em_paralelo_nao_furam_o_limite_de_tentativas(app, _db, 
     _db.session.expire_all()
     recarregado = _db.session.get(Convite, convite.id)
     assert recarregado.pin_hash is None
+    assert recarregado.pin_erros_total == 5
     # E o PIN certo também não vale mais.
     assert _validar_pin(app, convite.email, "123456")().status_code == 400
+
+
+def test_palpites_em_paralelo_contam_cada_um_no_total_do_convite(app, _db, convite, monkeypatch):
+    """Faltando 2 erros para o limite do convite, dez palpites juntos param exatamente nele."""
+    monkeypatch.setitem(app.config, "CONVITE_PIN_MAX_ERROS_TOTAL", 20)
+    convite.pin_erros_total = 18
+    _com_pin(_db, convite, "123456")
+
+    tarefas = []
+    for palpite in range(10):
+        tarefas.append(_validar_pin(app, convite.email, f"{palpite:06d}"))
+    respostas = ao_mesmo_tempo(app, tarefas)
+
+    assert status_de(respostas) == [400] * 10
+    _db.session.expire_all()
+    recarregado = _db.session.get(Convite, convite.id)
+    assert recarregado.pin_erros_total == 20
+    assert recarregado.pin_hash is None
 
 
 def test_pin_certo_enviado_duas_vezes_vale_uma_vez(app, _db, convite):

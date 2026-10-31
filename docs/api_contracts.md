@@ -352,6 +352,21 @@ da lista ou texto acima do limite: 400. Itens repetidos são guardados uma vez s
 em que vieram. Aparecem para o gestor (`GET /v1/alunos/<id>`) e para o motorista na lista
 de passageiros da viagem. A exclusão da conta apaga os dois campos.
 
+## PIN do convite
+
+`POST /v1/convites/pin` manda um PIN de 6 dígitos, válido por 10 minutos, ao e-mail de um
+convite pendente; um PIN novo só sai 60 segundos depois do anterior.
+`POST /v1/convites/pin/validar` devolve o token do convite quando o PIN confere.
+
+- Cada PIN aceita 5 erros; no quinto ele deixa de valer.
+- Os erros também somam por convite, em todos os PINs, e um PIN novo não zera essa soma. Ao
+  chegar em `CONVITE_PIN_MAX_ERROS_TOTAL` (padrão 20), o convite para de aceitar PIN: o pedido
+  não envia nada e a validação recusa até o PIN certo. O link do e-mail do convite continua
+  valendo. O gestor libera o PIN reenviando o convite (`POST /v1/convites/<id>/reenviar`),
+  que também troca o token.
+- As respostas nunca revelam o estado: o pedido sempre responde 200 com a mesma mensagem e a
+  validação sempre falha com 400 `PIN inválido ou expirado`.
+
 ## Rate limit
 
 Every route is limited by Flask-Limiter. Over the limit, the API answers `429`
