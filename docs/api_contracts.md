@@ -13,6 +13,10 @@ Aluno envia a própria foto, usada pelo motorista na conferência do embarque (R
 - Tipo decidido pelos primeiros bytes, não pelo nome nem pelo `Content-Type`: JPEG, PNG
   ou WEBP. Outro tipo, arquivo corrompido ou acima de `FOTO_ALUNO_MAX_BYTES`
   (padrão 5 MB): 400.
+- Largura x altura acima de `FOTO_ALUNO_MAX_PIXELS` (padrão 25 milhões): 400, com a
+  mensagem "A foto deve ter no máximo N megapixels". As dimensões vêm do cabeçalho (IHDR
+  no PNG, SOFn no JPEG, VP8X/VP8/VP8L no WEBP); sem dimensões ou com dimensão 0: 400.
+  A conferência acontece antes de gravar, então a foto anterior fica.
 - Metadados são removidos antes de gravar: EXIF/GPS, XMP e comentários (JPEG), `eXIf`,
   `tEXt`, `zTXt`, `iTXt` e `tIME` (PNG), `EXIF` e `XMP ` (WEBP). O perfil de cor fica.
 - A foto nova substitui a anterior. Se a gravação falhar (500), a anterior continua.
