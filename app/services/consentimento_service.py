@@ -3,10 +3,10 @@
 from functools import wraps
 from typing import Any
 
+from buska_core.exceptions import ConflictError, ForbiddenError, ValidationError
+from buska_core.transaction import transactional
 from flask_jwt_extended import get_jwt_identity
 
-from app.core.exceptions import ConflictError, ForbiddenError, ValidationError
-from app.core.transaction import transactional
 from app.models.base import db
 from app.models.consentimento import ACEITE, REVOGACAO, Consentimento
 from app.utils import audit_logger
@@ -45,7 +45,7 @@ def aceitar(user_id: str, versao: str) -> dict[str, Any]:
             f"Versão do termo inválida. A versão vigente é {VERSAO_TERMO_VIGENTE}."
         )
 
-    with transactional():
+    with transactional(db.session):
         db.session.add(Consentimento(usuario_id=user_id, versao=versao, acao=ACEITE))
 
     audit_logger.log_user_action(
@@ -58,7 +58,7 @@ def revogar(user_id: str) -> dict[str, Any]:
     if consentimento_pendente(user_id):
         raise ConflictError("Não há consentimento vigente para revogar")
 
-    with transactional():
+    with transactional(db.session):
         db.session.add(
             Consentimento(usuario_id=user_id, versao=VERSAO_TERMO_VIGENTE, acao=REVOGACAO)
         )

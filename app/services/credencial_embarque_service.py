@@ -7,8 +7,9 @@ ou valida a credencial correspondente. Não decide quem embarca.
 import secrets
 from datetime import UTC, datetime, timedelta
 
-from app.core.exceptions import ForbiddenError, NotFoundError, ValidationError
-from app.core.transaction import transactional
+from buska_core.exceptions import ForbiddenError, NotFoundError, ValidationError
+from buska_core.transaction import transactional
+
 from app.models.base import db
 from app.models.credencial_embarque import CredencialEmbarque
 from app.models.enum import StatusViagem, UserRole
@@ -24,7 +25,7 @@ def gerar_credencial(viagem_id: str, aluno_id: str, ponto_embarque_id: str) -> C
 
     Raises: NotFoundError, ValidationError, ConflictError (via transactional())
     """
-    with transactional():
+    with transactional(db.session):
         viagem = db.session.get(Viagem, viagem_id)
         if not viagem:
             raise NotFoundError("Viagem não encontrada")

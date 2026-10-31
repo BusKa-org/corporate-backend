@@ -7,11 +7,13 @@ import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from buska_core.exceptions import ConflictError, NotFoundError, ValidationError
+from buska_core.notifications import send_email
+from buska_core.transaction import transactional
+from buska_core.validation import validate_email, validate_password, validate_uuid
 from flask import current_app
 from werkzeug.security import generate_password_hash
 
-from app.core.exceptions import ConflictError, NotFoundError, ValidationError
-from app.core.transaction import transactional
 from app.models.base import db
 from app.models.convite import (
     CANCELADO,
@@ -26,15 +28,7 @@ from app.models.enum import UserRole, UserStatus
 from app.models.geo import Instituicao
 from app.models.user import Aluno, User
 from app.services.user_service import _get_gestor_or_403
-from app.utils import (
-    audit_logger,
-    validate_cpf,
-    validate_email,
-    validate_password,
-    validate_phone,
-    validate_uuid,
-)
-from app.utils.email_sender import send_email
+from app.utils import audit_logger, validate_cpf, validate_phone
 
 logger = logging.getLogger(__name__)
 
@@ -183,7 +177,7 @@ def criar_convites(gestor_id: str, itens: list[dict[str, Any]]) -> list[dict[str
     resultados: list[dict[str, str]] = []
     # ponytail: uma transação para o lote. Se dois gestores convidarem o mesmo e-mail no mesmo
     # instante, o índice único derruba o lote inteiro com conflito. Savepoint por linha se doer.
-    with transactional():
+    with transactional(db.session):
         for item in itens:
             resultados.append(_processar_item(gestor, item))
 
@@ -224,7 +218,7 @@ def reenviar_convite(gestor_id: str, convite_id: str) -> Convite:
     if convite.estado != PENDENTE:
         raise ConflictError("Só convites pendentes podem ser reenviados")
 
-    with transactional():
+    with transactional(db.session):
         _renovar(convite)
 
     audit_logger.log_user_action(
@@ -242,7 +236,7 @@ def cancelar_convite(gestor_id: str, convite_id: str) -> None:
     if convite.estado != PENDENTE:
         raise ConflictError("Só convites pendentes podem ser cancelados")
 
-    with transactional():
+    with transactional(db.session):
         convite.estado = CANCELADO
 
     audit_logger.log_user_action(
@@ -327,7 +321,7 @@ def concluir_convite(token: str, dados: dict[str, Any]) -> Aluno:
     if convite.instituicao_id and instituicao.id != convite.instituicao_id:
         alterados.append("instituicao_id")
 
-    with transactional():
+    with transactional(db.session):
         aluno = Aluno(
             organizacao_id=convite.organizacao_id,
             nome=nome,

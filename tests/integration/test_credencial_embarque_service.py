@@ -3,8 +3,8 @@
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from buska_core.exceptions import ConflictError, NotFoundError, ValidationError
 
-from app.core.exceptions import ConflictError, NotFoundError, ValidationError
 from app.models.enum import StatusViagem
 from app.services import credencial_embarque_service
 from tests.factories.credencial_embarque_factory import CredencialEmbarqueFactory

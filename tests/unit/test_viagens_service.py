@@ -38,7 +38,7 @@ def test_atualizar_localizacao_dispara_notificacao(app):
                 mock_aluno_confirmado
             ]
 
-            func_path = "app.services.viagens_service.calcular_distancia_metros"
+            func_path = "app.services.viagens_service.haversine_distance_meters"
 
             try:
                 with patch(func_path, return_value=300):

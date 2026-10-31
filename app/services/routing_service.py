@@ -9,9 +9,8 @@ import logging
 from typing import Any
 
 import requests
+from buska_core.exceptions import AppError, ValidationError
 from requests.exceptions import ConnectionError, Timeout
-
-from app.core.exceptions import AppError, ValidationError
 
 logger = logging.getLogger(__name__)
 

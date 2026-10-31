@@ -3,11 +3,12 @@
 import logging
 from typing import Any, cast
 
-from app.core.exceptions import (
+from buska_core.exceptions import (
     AppError,
     ForbiddenError,
     NotFoundError,
 )
+
 from app.models.base import db
 from app.models.enum import UserStatus
 from app.models.geo import Endereco, Ponto

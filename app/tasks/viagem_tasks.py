@@ -3,11 +3,12 @@
 import logging
 from datetime import UTC, datetime, timedelta
 
+from buska_core.geo import haversine_distance_meters
+
 from app.extensions import scheduler
 from app.models.base import db
 from app.models.viagem import AlunosConfirmados, Viagem
 from app.services.notificacao_service import NotificacaoService
-from app.utils.geo_utils import calcular_distancia_metros
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +40,7 @@ def realizar_auto_checkin(viagem_id: str, aluno_id: str, tentativa: int) -> None
         DISTANCIA_EMBARQUE = 50
 
         if conf.aluno_lat and viagem.motorista_lat:
-            distancia = calcular_distancia_metros(
+            distancia = haversine_distance_meters(
                 viagem.motorista_lat, viagem.motorista_lon, conf.aluno_lat, conf.aluno_lon
             )
 

@@ -9,9 +9,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY pyproject.toml ./
+COPY vendor/ ./vendor/
 COPY app/ ./app/
 
+# buska-core isn't on any package index; vendor/ is populated by the
+# "Fetch buska-core" CI step before `docker build` runs (fetch logic lives
+# in BusKa-org/buska-core/.github/actions/fetch-buska-core, see
+# .github/workflows/ci.yml's build job). Installing it first means the
+# `pip install -e .` below is satisfied locally and never hits the network
+# for it.
 RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir vendor/*.whl && \
     pip install --no-cache-dir -e .
 
 FROM python:3.12-slim

@@ -7,7 +7,8 @@ from typing import Any
 
 from marshmallow import ValidationError as MarshmallowValidationError
 
-from app.utils.security import SecurityConfig
+# Matches buska_core.validation.validate_password's default min_length.
+MIN_PASSWORD_LENGTH = 8
 
 
 def validate_optional_string(value: str | None, field_name: str = "Texto") -> str | None:
@@ -253,9 +254,9 @@ def validate_password(value: str, field_name: str = "Senha") -> str:
     """
     value = value.strip()
 
-    if len(value) < SecurityConfig.MIN_PASSWORD_LENGTH:
+    if len(value) < MIN_PASSWORD_LENGTH:
         raise MarshmallowValidationError(
-            f"{field_name} deve ter no mínimo {SecurityConfig.MIN_PASSWORD_LENGTH} caracteres"
+            f"{field_name} deve ter no mínimo {MIN_PASSWORD_LENGTH} caracteres"
         )
 
     return value

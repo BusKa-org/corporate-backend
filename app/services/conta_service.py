@@ -10,10 +10,11 @@ import logging
 import secrets
 from datetime import UTC, datetime, timedelta
 
+from buska_core.exceptions import ConflictError, ForbiddenError, NotFoundError, UnauthorizedError
+from buska_core.notifications import send_email
+from buska_core.transaction import transactional
 from werkzeug.security import check_password_hash
 
-from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError, UnauthorizedError
-from app.core.transaction import transactional
 from app.models.base import db
 from app.models.consentimento import REVOGACAO, Consentimento
 from app.models.credencial_embarque import CredencialEmbarque
@@ -27,7 +28,6 @@ from app.models.user import Aluno, User
 from app.models.viagem import AlunosConfirmados, Viagem
 from app.services.consentimento_service import VERSAO_TERMO_VIGENTE
 from app.utils import audit_logger
-from app.utils.email_sender import send_email
 
 logger = logging.getLogger(__name__)
 
@@ -129,7 +129,7 @@ def excluir_conta(user_id: str, email: str, senha: str) -> None:
     email_original = user.email
     aluno_id = user.id
 
-    with transactional():
+    with transactional(db.session):
         _apagar_ponto_casa(user)
         _apagar_dados_sem_valor_estatistico(aluno_id)
         db.session.add(

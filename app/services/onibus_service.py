@@ -3,13 +3,14 @@
 import logging
 from typing import Any
 
-from app.core.exceptions import (
+from buska_core.exceptions import (
     AppError,
     ConflictError,
     ForbiddenError,
     NotFoundError,
     ValidationError,
 )
+
 from app.models.base import db
 from app.models.enum import UserRole
 from app.models.onibus import Onibus

@@ -1,11 +1,11 @@
 from typing import Any
 
+from buska_core.exceptions import ValidationError
 from flask import request
 from flask_jwt_extended import jwt_required
 from flask_restx import Namespace, Resource
 
 from app.api.contracts import routing_contract
-from app.core.exceptions import ValidationError
 from app.services import routing_service
 
 api = Namespace("routing", description="Roteamento e Cálculo de Rotas")

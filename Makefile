@@ -15,7 +15,7 @@ DOCKER := $(shell \
 # Development
 # ==========================================
 
-.PHONY: run dev install install-dev
+.PHONY: run dev install install-dev fetch-buska-core
 
 PYTHON := $(shell \
 	if [ -n "$$VIRTUAL_ENV" ]; then \
@@ -27,7 +27,20 @@ PYTHON := $(shell \
 	fi \
 )
 
-install:
+# buska-core isn't on any package index (see BusKa-org/buska-core's
+# README). Skips the download if vendor/ is already populated — rm -rf
+# vendor/ to force a re-fetch after bumping .buska-core-version. Requires
+# `gh auth login` once.
+fetch-buska-core:
+	@if ls vendor/buska_core-*.whl >/dev/null 2>&1; then \
+		echo "buska-core wheel already in vendor/, skipping."; \
+	else \
+		mkdir -p vendor; \
+		gh release download "$$(cat .buska-core-version)" \
+			--repo BusKa-org/buska-core --pattern "*.whl" --dir vendor --clobber; \
+	fi
+
+install: fetch-buska-core
 	@if [ -n "$$VIRTUAL_ENV" ]; then \
 		pip install -e .; \
 	else \
@@ -51,7 +64,7 @@ scheduler:
 
 dev: run  # Alias for run
 
-install-dev:
+install-dev: fetch-buska-core
 	uv sync --extra dev
 	uv run pre-commit install
 
@@ -196,6 +209,7 @@ help:
 	@echo "  run / dev       Start the development server"
 	@echo "  install         Install production dependencies"
 	@echo "  install-dev     Install dev dependencies + pre-commit hooks"
+	@echo "  fetch-buska-core  Download the pinned buska-core wheel into vendor/"
 	@echo ""
 	@echo "Database:"
 	@echo "  db-up           Start database container"
@@ -241,7 +255,7 @@ help:
 # docker-down NÃO usa --volumes: banco é preservado entre deploys.
 # Use docker-clean apenas para reset total (apaga dados).
 
-docker-build:
+docker-build: fetch-buska-core
 	docker build -t mebuska-corporate:latest .
 
 docker-up:
@@ -258,7 +272,7 @@ docker-init-db:
 docker-logs:
 	docker compose -f docker-compose.prod.yml logs -f
 
-docker-rebuild:
+docker-rebuild: fetch-buska-core
 	docker compose -f docker-compose.prod.yml down
 	docker build -t mebuska-corporate:latest .
 	docker compose -f docker-compose.prod.yml up -d
