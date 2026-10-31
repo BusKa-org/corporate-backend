@@ -704,7 +704,7 @@ def _aplicar_evento(
         return "ja_aplicado" if resultado is None else "aplicado"
 
     if tipo == "RECUSA":
-        ocorrencia_id = uuid.uuid5(uuid.NAMESPACE_OID, str(evento.get("evento_id")))
+        ocorrencia_id = _id_do_evento(viagem, evento)
         if db.session.get(Ocorrencia, ocorrencia_id):
             return "ja_aplicado"
         credencial = _credencial_do_qr(
@@ -761,6 +761,14 @@ def _aplicar_evento(
     raise ValidationError(f"Tipo de evento desconhecido: {tipo}")
 
 
+def _id_do_evento(viagem: Viagem, evento: dict[str, Any]) -> uuid.UUID:
+    """Id estável do registro gravado pelo evento, para o reenvio da fila não duplicar.
+
+    Leva a viagem: o `evento_id` é do app e só é único dentro da fila da viagem.
+    """
+    return uuid.uuid5(uuid.NAMESPACE_OID, f"{viagem.id}:{evento.get('evento_id')}")
+
+
 def _aplicar_posicao(viagem: Viagem, evento: dict[str, Any], momento: datetime) -> str:
     latitude, longitude = evento.get("latitude"), evento.get("longitude")
     if latitude is None or longitude is None:
@@ -772,7 +780,7 @@ def _aplicar_posicao(viagem: Viagem, evento: dict[str, Any], momento: datetime) 
         key_share=True
     ).populate_existing().one()
 
-    rastro_id = uuid.uuid5(uuid.NAMESPACE_OID, str(evento.get("evento_id")))
+    rastro_id = _id_do_evento(viagem, evento)
     if db.session.get(TelemetriaViagem, rastro_id):
         return "ja_aplicado"
 
