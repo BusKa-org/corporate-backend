@@ -374,21 +374,33 @@ def _hash_do_pin(convite: Convite, pin: str) -> str:
     return hashlib.sha256(f"{convite.token}:{pin}".encode()).hexdigest()
 
 
-def _convite_pendente_do_email(email_bruto: str) -> Convite | None:
-    """Convite pendente e dentro da validade para o e-mail, ou None."""
+def _convite_pendente_do_email(email_bruto: str, travar: bool = False) -> Convite | None:
+    """Convite pendente e dentro da validade para o e-mail, ou None.
+
+    Com `travar`, a linha fica presa até o commit: palpites de PIN simultâneos
+    entram em fila e cada um conta uma tentativa, e pedidos de PIN simultâneos geram um só.
+    """
     try:
         email = validate_email(email_bruto)
     except ValidationError:
         return None
-    convite = Convite.query.filter_by(email=email, estado=PENDENTE).first()
+    consulta = Convite.query.filter_by(email=email, estado=PENDENTE)
+    if travar:
+        consulta = consulta.with_for_update(key_share=True).populate_existing()
+    convite = consulta.first()
     if convite is None or convite.expira_em <= _agora():
         return None
     return convite
 
 
 def solicitar_pin(email_bruto: str) -> None:
-    """Envia um PIN ao e-mail habilitado. Nunca revela se o e-mail está habilitado."""
-    convite = _convite_pendente_do_email(email_bruto)
+    """Envia um PIN ao e-mail habilitado. Nunca revela se o e-mail está habilitado.
+
+    Um novo PIN só sai depois de PIN_INTERVALO_SEGUNDOS do anterior. O lock faz dois pedidos
+    simultâneos verem esse intervalo: o segundo encontra o PIN recém-gravado e não envia nada,
+    então fica um PIN válido e um e-mail só.
+    """
+    convite = _convite_pendente_do_email(email_bruto, travar=True)
     if convite is None:
         return
 
@@ -427,7 +439,7 @@ def validar_pin(email_bruto: str, pin: str) -> str:
     """Confere o PIN e devolve o token do convite, que abre a tela de completar o cadastro."""
     erro = ValidationError("PIN inválido ou expirado")
 
-    convite = _convite_pendente_do_email(email_bruto)
+    convite = _convite_pendente_do_email(email_bruto, travar=True)
     if convite is None or convite.pin_hash is None or convite.pin_expira_em is None:
         raise erro
     if convite.pin_expira_em <= _agora():

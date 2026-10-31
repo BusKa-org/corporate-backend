@@ -111,6 +111,47 @@ All notable changes to this project will be documented in this file.
   Invitations replace all of them: nobody signs up on their own.
 
 ### Fixed
+- After `DELETE /v1/users/me` the old JWT kept working for up to 2 hours. Every authenticated
+  request now loads the user and returns 401 `TOKEN_REVOKED` when the user no longer exists or
+  has a status login refuses (`DELETED`, `DISABLED`, `PENDING_APPROVAL`). The rate limiter
+  counts such a token by IP. `POST /v1/viagens/<id>/declaracao` also checks, after its locks,
+  that the student account is active (403), so a deleted student cannot join a trip in the buffer.
+- `PUT /v1/viagens/<id>/confirmacao`: a double tap on the first attendance confirmation of a
+  fixed-route trip returned 409 (primary key) for the second tap. The student row is now locked
+  before reading the confirmation, so the second tap gets 200 with the same result. Confirming
+  while already in another trip en route still returns 409.
+- `POST /v1/convites/pin` sent twice at the same time e-mailed two PINs and only the second one
+  worked. The invitation row is now locked, so the second request sees the 60-second interval
+  between PINs and sends nothing: one valid PIN, one e-mail. Asking again after the interval
+  still sends a new PIN.
+- `DELETE /v1/users/me` cancels the student's active ride request with the same rules as
+  `DELETE /v1/viagens/<id>/solicitacao` (the segment is given back, a trip left with nobody is
+  cancelled). Before, the request kept its seat and could become a passenger with a boarding
+  credential at buffer close. With an on-demand trip already en route it returns 409, and a
+  deleted account can no longer request rides.
+- `POST /v1/auth/reset-password`: the same link used twice at the same time changed the
+  password twice (or failed with 500). The token row is locked, so the second use gets 400.
+- `PUT /v1/alunos/me/foto`: a PNG and a JPEG uploaded at the same time could delete each
+  other and leave the student with no photo file. Uploads of the same student now run one at a time.
+- `DELETE /v1/users/me` sent twice at the same time returned 500 for one of them; the account
+  row is now locked and the second request gets 401.
+- `POST /v1/convites/pin/validar` locks the invitation. Parallel wrong guesses were counted as
+  one attempt (the 5-attempt limit could be bypassed) and the right PIN could be used twice.
+- `POST /v1/embarque/viagens/<id>/sincronizacao`: the same offline queue sent twice at the
+  same time answered `recusado`/`CONFLICT` for `RECUSA` and `POSICAO` events instead of
+  `ja_aplicado`. The duplicate check now runs after the row lock.
+- `POST /v1/viagens/<id>/declaracao` reloads the trip after taking its lock, so a declaration
+  that waited for the buffer close job sees the new status (400) instead of a stale one (404).
+- The buffer close job locks the trips it closes. Before, a cancellation running at the same
+  time could still turn the student into a confirmed passenger with a boarding credential.
+- `DELETE /v1/viagens/<id>/solicitacao` now locks the vehicle and the trip. Before, cancelling
+  the last request while another student joined left that student in a cancelled trip, and
+  cancelling while the driver started the route overwrote the open buffer with `CANCELADA`.
+- A ride request and `POST /v1/viagens/<id>/iniciar-percurso` at the same time deadlocked
+  and one of them returned 500. The serialization locks on vehicle, student and trip are now
+  `FOR NO KEY UPDATE`, which does not block the foreign key checks of the other request.
+- `POST /v1/rotas/<id>/solicitacoes`: a student requesting two routes served by different
+  vehicles at the same time ended up with two active requests. The student row is now locked.
 - `PUT /v1/rotas/<id>` with a different `tipo` returns 400 instead of 200 doing nothing; the
   route type can't be changed (send the current one or leave it out).
 - `PUT /v1/viagens/<id>/cancelar` checks that the trip belongs to the gestor's

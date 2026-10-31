@@ -3,6 +3,10 @@
 The Swagger UI at `/docs` (and `/openapi.json`) is the full reference. This file
 documents the rules that don't fit in Swagger descriptions. Errors use the standard body `{"error": {"code", "message"}}`.
 
+Any authenticated endpoint returns 401 `TOKEN_REVOKED` when the token's user no longer exists
+or has a status that login refuses (`DELETED`, `DISABLED`, `PENDING_APPROVAL`). A deleted or
+deactivated account loses access at once, without waiting for the token to expire.
+
 ## On-demand trip lifecycle (RF-05, RF-10 to RF-19)
 
 Trip states for `SOB_DEMANDA` routes:
@@ -107,7 +111,8 @@ request, plus `ponto_embarque_id`, `ponto_destino_id`, `declarada_em`).
 | Status | When |
 |---|---|
 | 400 | trip not in `BUFFER_ABERTO`; buffer over; stop not in the circuit; origin not before destination; same stop twice |
-| 403 | no consent; not a student; other organization |
+| 401 | token of a deleted or inactive account (`TOKEN_REVOKED`) |
+| 403 | no consent; not a student; other organization; account not active |
 | 404 | trip not found |
 | 409 | no seat on the requested segments |
 

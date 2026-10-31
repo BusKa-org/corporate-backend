@@ -6,6 +6,7 @@ import tempfile
 from typing import IO, Any, cast
 
 from flask import current_app
+from sqlalchemy import select
 
 from app.core.exceptions import (
     AppError,
@@ -186,6 +187,9 @@ def salvar_foto(user_id: str, arquivo: IO[bytes]) -> Aluno:
 
     Raises: NotFoundError, ValidationError
     """
+    # Trava o aluno até o commit: dois envios simultâneos (PNG e JPEG) apagariam
+    # o arquivo um do outro e a foto sumiria.
+    db.session.execute(select(User.id).where(User.id == user_id).with_for_update(key_share=True))
     aluno = db.session.get(Aluno, user_id)
     if not aluno:
         raise NotFoundError("Aluno não encontrado")

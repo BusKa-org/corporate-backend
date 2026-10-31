@@ -164,7 +164,14 @@ def confirmar_presenca_aluno(
         if not horario:
             raise NotFoundError("Horário da viagem não encontrado")
 
-        registro = db.session.get(AlunosConfirmados, (viagem.id, aluno.usuario_id))
+        # Trava o aluno antes de ler o registro: um duplo toque espera o primeiro e encontra o
+        # registro já criado (200 com o mesmo resultado) em vez de bater na chave primária (409).
+        db.session.execute(
+            select(User.id).where(User.id == aluno.usuario_id).with_for_update(key_share=True)
+        )
+        registro = db.session.get(
+            AlunosConfirmados, (viagem.id, aluno.usuario_id), populate_existing=True
+        )
 
         if not registro:
             inscricao = db.session.get(RotaAluno, (horario.rota_id, aluno.usuario_id))
@@ -181,7 +188,6 @@ def confirmar_presenca_aluno(
             db.session.add(registro)
 
         if confirmacao:
-            db.session.execute(select(User.id).where(User.id == aluno.usuario_id).with_for_update())
             inscrito_em_outra = (
                 db.session.query(AlunosConfirmados)
                 .join(Viagem)

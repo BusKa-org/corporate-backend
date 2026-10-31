@@ -3,21 +3,29 @@
 import re
 from datetime import UTC, date, datetime, timedelta
 
+import pytest
+from flask_jwt_extended import create_access_token
+
+from app.core.exceptions import ForbiddenError
 from app.models.consentimento import REVOGACAO, Consentimento
 from app.models.credencial_embarque import CredencialEmbarque
-from app.models.enum import StatusViagem, UserStatus
+from app.models.enum import StatusSolicitacao, StatusViagem, UserStatus
 from app.models.geo import Endereco, Ponto
 from app.models.notificacao import Notificacao
 from app.models.retencao_legal import RetencaoLegal
 from app.models.user import Aluno
-from app.models.viagem import AlunosConfirmados
-from app.services import conta_service
+from app.models.viagem import AlunosConfirmados, SolicitacaoViagem, Viagem
+from app.services import buffer_service, conta_service, solicitacoes_service
 from app.services.consentimento_service import VERSAO_TERMO_VIGENTE
 from app.tasks.retencao_tasks import job_anonimizar_retencoes
 from tests.factories.credencial_embarque_factory import CredencialEmbarqueFactory
 from tests.factories.geo_factory import PontoFactory
 from tests.factories.user_factory import AlunoFactory
-from tests.factories.viagem_factory import AlunosConfirmadosFactory, ViagemFactory
+from tests.factories.viagem_factory import (
+    AlunosConfirmadosFactory,
+    SolicitacaoViagemFactory,
+    ViagemFactory,
+)
 from tests.helpers.auth import login_and_get_headers
 
 SENHA = "StrongPass123!"
@@ -138,6 +146,122 @@ def test_excluir_conta_bloqueia_com_viagem_em_andamento(
     response = _excluir(aluno, aluno.user.email, SENHA)
     assert response.status_code == 409
     assert aluno.user.status != UserStatus.DELETED
+
+
+def test_excluir_conta_cancela_solicitacao_e_viagem_sem_mais_ninguem(
+    aluno, motorista, viagem_solicitada, relogio, _db
+):
+    response = _excluir(aluno, aluno.user.email, SENHA)
+    assert response.status_code == 200, response.get_data(as_text=True)
+
+    _db.session.expire_all()
+    solicitacao = SolicitacaoViagem.query.filter_by(viagem_id=viagem_solicitada.id).one()
+    assert solicitacao.status == StatusSolicitacao.CANCELADA
+    # Mesmo efeito do cancelamento normal: a viagem sem ninguém é cancelada e o motorista avisado.
+    assert _db.session.get(Viagem, viagem_solicitada.id).status == StatusViagem.CANCELADA
+    assert Notificacao.query.filter_by(usuario_id=motorista.user.id).count() == 1
+
+
+def test_excluir_conta_no_buffer_devolve_o_trecho_e_nao_vira_passageiro(
+    aluno, viagem_solicitada, relogio, _db
+):
+    viagem_solicitada.status = StatusViagem.BUFFER_ABERTO
+    viagem_solicitada.buffer_fim = relogio.agora
+    solicitacao = SolicitacaoViagem.query.filter_by(viagem_id=viagem_solicitada.id).one()
+    ponto_embarque = PontoFactory(organizacao_id=aluno.user.organizacao_id)
+    _db.session.add(ponto_embarque)
+    _db.session.flush()
+    solicitacao.ponto_embarque_id = ponto_embarque.id
+    _db.session.commit()
+
+    response = _excluir(aluno, aluno.user.email, SENHA)
+    assert response.status_code == 200, response.get_data(as_text=True)
+    _db.session.expire_all()
+    assert _db.session.get(SolicitacaoViagem, solicitacao.id).status == StatusSolicitacao.CANCELADA
+    assert _db.session.get(Viagem, viagem_solicitada.id).status == StatusViagem.BUFFER_ABERTO
+
+    # O fechamento do buffer não transforma o aluno excluído em passageiro com credencial.
+    buffer_service.fechar_buffers_expirados()
+    assert AlunosConfirmados.query.filter_by(aluno_id=aluno.user.id).count() == 0
+    assert CredencialEmbarque.query.filter_by(aluno_id=aluno.user.id).count() == 0
+
+
+def test_excluir_conta_bloqueia_com_solicitacao_em_rota(aluno, viagem_solicitada, relogio, _db):
+    viagem_solicitada.status = StatusViagem.EM_ANDAMENTO
+    _db.session.commit()
+
+    response = _excluir(aluno, aluno.user.email, SENHA)
+    assert response.status_code == 409
+    _db.session.expire_all()
+    solicitacao = SolicitacaoViagem.query.filter_by(viagem_id=viagem_solicitada.id).one()
+    assert solicitacao.status == StatusSolicitacao.ATIVA
+
+
+def test_token_da_conta_excluida_para_de_valer(
+    aluno, rota_sob_demanda, janela, relogio, viagem_buffer_aberto, pontos_circuito
+):
+    assert _excluir(aluno, aluno.user.email, SENHA).status_code == 200
+
+    p1, p2, _, _ = pontos_circuito
+    respostas = [
+        aluno.client.get("/v1/users/me"),
+        aluno.client.post(f"/v1/rotas/{rota_sob_demanda.id}/solicitacoes"),
+        aluno.client.post(
+            f"/v1/viagens/{viagem_buffer_aberto.id}/declaracao",
+            json={"ponto_origem_id": str(p1.id), "ponto_destino_id": str(p2.id)},
+        ),
+    ]
+    for response in respostas:
+        assert response.status_code == 401, response.get_data(as_text=True)
+        assert response.get_json()["error"]["code"] == "TOKEN_REVOKED"
+
+
+@pytest.mark.parametrize(
+    "status,aceito",
+    [
+        (UserStatus.DISABLED, False),
+        (UserStatus.PENDING_APPROVAL, False),
+        (UserStatus.DELETED, False),
+        # O login aceita: é com esse token que o passageiro termina o cadastro.
+        (UserStatus.PENDING_SIGNUP, True),
+        (UserStatus.ACTIVE, True),
+    ],
+)
+def test_token_segue_o_que_o_login_aceita(aluno, _db, status, aceito):
+    aluno.user.status = status
+    _db.session.commit()
+
+    response = aluno.client.get("/v1/users/me")
+    assert (response.status_code != 401) == aceito, response.get_data(as_text=True)
+
+
+def test_token_de_usuario_que_nao_existe_mais(client, app):
+    with app.app_context():
+        token = create_access_token(identity=VIAGEM_INEXISTENTE)
+    response = client.get("/v1/users/me", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 401
+
+
+def test_aluno_excluido_nao_declara_mesmo_sem_a_checagem_do_token(
+    aluno, viagem_buffer_aberto, pontos_circuito, _db
+):
+    """Defesa em profundidade: o serviço recusa mesmo que o token passasse."""
+    _db.session.add(
+        SolicitacaoViagemFactory(viagem_id=viagem_buffer_aberto.id, aluno_id=aluno.user.id)
+    )
+    aluno.user.status = UserStatus.DELETED
+    _db.session.commit()
+    p1, p2, _, _ = pontos_circuito
+
+    with pytest.raises(ForbiddenError):
+        solicitacoes_service.declarar_trajeto(
+            str(aluno.user.id),
+            str(viagem_buffer_aberto.id),
+            {"ponto_origem_id": str(p1.id), "ponto_destino_id": str(p2.id)},
+        )
+    _db.session.expire_all()
+    solicitacao = SolicitacaoViagem.query.filter_by(aluno_id=aluno.user.id).one()
+    assert solicitacao.ponto_embarque_id is None
 
 
 def test_excluir_conta_anonimiza_e_preserva_historico(
