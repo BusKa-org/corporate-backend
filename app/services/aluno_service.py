@@ -14,10 +14,10 @@ from app.core.exceptions import (
     ValidationError,
 )
 from app.models.base import db
-from app.models.enum import StatusViagem, UserRole, UserStatus
+from app.models.enum import StatusSolicitacao, StatusViagem, UserRole, UserStatus
 from app.models.geo import Endereco, Ponto
 from app.models.user import Aluno, User
-from app.models.viagem import AlunosConfirmados, Viagem
+from app.models.viagem import AlunosConfirmados, SolicitacaoViagem, Viagem
 from app.services.user_service import _get_gestor_or_403, _get_user_or_404
 from app.utils.imagem import dimensoes, remover_metadados
 from app.utils.validators import validate_uuid
@@ -239,27 +239,34 @@ def salvar_foto(user_id: str, arquivo: IO[bytes]) -> Aluno:
 
 
 def _e_passageiro_do_motorista(aluno_id, motorista_id) -> bool:
-    registro = (
+    passageiro = (
         db.session.query(AlunosConfirmados)
         .join(Viagem, Viagem.id == AlunosConfirmados.viagem_id)
         .filter(
             AlunosConfirmados.aluno_id == aluno_id,
             AlunosConfirmados.confirmacao.is_(True),
             Viagem.motorista_id == motorista_id,
-            # BUFFER_ABERTO e EM_ROTA são as rodadas sob demanda ainda abertas. Lá,
-            # `confirmacao` só é True para quem teve o trajeto confirmado (CONFIRMADO).
-            Viagem.status.in_(
-                [
-                    StatusViagem.AGENDADA,
-                    StatusViagem.EM_ANDAMENTO,
-                    StatusViagem.BUFFER_ABERTO,
-                    StatusViagem.EM_ROTA,
-                ]
-            ),
+            Viagem.status.in_([StatusViagem.AGENDADA, StatusViagem.EM_ANDAMENTO]),
         )
         .first()
     )
-    return registro is not None
+    if passageiro is not None:
+        return True
+
+    # Sob demanda, durante o buffer, o passageiro é quem já teve o trajeto aceito.
+    trajeto_aceito = (
+        db.session.query(SolicitacaoViagem)
+        .join(Viagem, Viagem.id == SolicitacaoViagem.viagem_id)
+        .filter(
+            SolicitacaoViagem.aluno_id == aluno_id,
+            SolicitacaoViagem.status == StatusSolicitacao.ATIVA,
+            SolicitacaoViagem.ponto_embarque_id.isnot(None),
+            Viagem.motorista_id == motorista_id,
+            Viagem.status == StatusViagem.BUFFER_ABERTO,
+        )
+        .first()
+    )
+    return trajeto_aceito is not None
 
 
 def buscar_foto(user_id: str, aluno_id: str) -> tuple[str, str]:

@@ -12,7 +12,7 @@ from marshmallow import ValidationError as MarshmallowValidationError
 from app.core.exceptions import ForbiddenError
 from app.models.enum import StatusSolicitacao, StatusViagem
 from app.models.onibus import Onibus
-from app.models.viagem import AlunosConfirmados, Viagem, ViagemPonto
+from app.models.viagem import AlunosConfirmados, SolicitacaoViagem, Viagem, ViagemPonto
 from app.services.dashboard_service import exportar_indicadores_csv, indicadores_periodo
 from tests.factories.geo_factory import PontoFactory
 from tests.factories.organizacao_factory import OrganizacaoFactory
@@ -37,14 +37,25 @@ def _viagem(_db, **kwargs):
     return v
 
 
-def _solicitacao(_db, viagem, aluno, status, ponto_embarque=None, embarcou=False):
+def _negada(_db, viagem, aluno, ponto_embarque):
+    linha = SolicitacaoViagem(
+        viagem_id=viagem.id,
+        aluno_id=aluno.id,
+        status=StatusSolicitacao.NEGADA,
+        ponto_embarque_id=ponto_embarque.id,
+    )
+    _db.session.add(linha)
+    return linha
+
+
+def _embarcado(_db, viagem, aluno, ponto_embarque):
     linha = AlunosConfirmados(
         viagem_id=viagem.id,
         aluno_id=aluno.id,
-        status=status,
-        ponto_embarque_id=ponto_embarque.id if ponto_embarque else None,
-        embarcou=embarcou,
-        embarcado_em=datetime(2026, 3, 10, 7, 5, tzinfo=UTC) if embarcou else None,
+        confirmacao=True,
+        ponto_embarque_id=ponto_embarque.id,
+        embarcou=True,
+        embarcado_em=datetime(2026, 3, 10, 7, 5, tzinfo=UTC),
     )
     _db.session.add(linha)
     return linha
@@ -107,21 +118,21 @@ def cenario(_db, organizacao, gestor, motorista):
     _db.session.flush()
 
     for aluno in alunos[:3]:
-        _solicitacao(_db, v1, aluno, StatusSolicitacao.CONFIRMADO, pontos[0], embarcou=True)
-    _solicitacao(_db, v1, alunos[3], StatusSolicitacao.NEGADO, pontos[0])
-    _solicitacao(_db, v1, alunos[4], StatusSolicitacao.NEGADO, pontos[0])
-    _solicitacao(_db, v1, alunos[5], StatusSolicitacao.NEGADO, pontos[1])
+        _embarcado(_db, v1, aluno, pontos[0])
+    _negada(_db, v1, alunos[3], pontos[0])
+    _negada(_db, v1, alunos[4], pontos[0])
+    _negada(_db, v1, alunos[5], pontos[1])
 
     for aluno in alunos[:2]:
-        _solicitacao(_db, v2, aluno, StatusSolicitacao.CONFIRMADO, pontos[0], embarcou=True)
-    _solicitacao(_db, v2, alunos[3], StatusSolicitacao.NEGADO, pontos[0])
+        _embarcado(_db, v2, aluno, pontos[0])
+    _negada(_db, v2, alunos[3], pontos[0])
 
-    _solicitacao(_db, v3, alunos[0], StatusSolicitacao.NEGADO, pontos[0])
-    _solicitacao(_db, v6, alunos[0], StatusSolicitacao.CONFIRMADO, pontos[0], embarcou=True)
+    _negada(_db, v3, alunos[0], pontos[0])
+    _embarcado(_db, v6, alunos[0], pontos[0])
 
     for fora in (v4, v5):
-        _solicitacao(_db, fora, alunos[0], StatusSolicitacao.CONFIRMADO, pontos[0], embarcou=True)
-        _solicitacao(_db, fora, alunos[1], StatusSolicitacao.NEGADO, pontos[1])
+        _embarcado(_db, fora, alunos[0], pontos[0])
+        _negada(_db, fora, alunos[1], pontos[1])
 
     # Trechos: v1 anda P1->P2 em 10 min e P2->P3 em 15 min; v2 anda P1->P2 em
     # 20 min e não registra chegada em P3. Média de P1->P2 = 15 min.
@@ -160,10 +171,8 @@ def cenario(_db, organizacao, gestor, motorista):
     alunos_outros = [AlunoFactory(organizacao_id=outra.id) for _ in range(2)]
     _db.session.add_all(alunos_outros)
     _db.session.flush()
-    _solicitacao(_db, v7, alunos_outros[0], StatusSolicitacao.NEGADO, ponto_outro)
-    _solicitacao(
-        _db, v7, alunos_outros[1], StatusSolicitacao.CONFIRMADO, ponto_outro, embarcou=True
-    )
+    _negada(_db, v7, alunos_outros[0], ponto_outro)
+    _embarcado(_db, v7, alunos_outros[1], ponto_outro)
 
     _db.session.commit()
     return {"pontos": pontos, "alunos": alunos, "outra_organizacao": outra}

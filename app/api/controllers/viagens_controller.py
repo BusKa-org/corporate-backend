@@ -4,20 +4,22 @@ from flask import request
 from flask_jwt_extended import get_jwt_identity, jwt_required
 from flask_restx import Namespace, Resource
 
-from app.api.contracts import credencial_embarque_contract, ponto_contract, viagem_contract
+from app.api.contracts import (
+    credencial_embarque_contract,
+    ponto_contract,
+    solicitacao_contract,
+    viagem_contract,
+)
 from app.api.contracts.viagem_parsers import parsers
 from app.core.exceptions import ValidationError
 from app.schemas.credencial_embarque_schema import CredencialEmbarqueResponseSchema
 from app.schemas.ponto_schema import (
     PontoFlatListResponseSchema,
 )
+from app.schemas.solicitacao_schema import SolicitacaoResponseSchema
 from app.schemas.viagem_schema import (
-    CancelamentoResponseSchema,
-    DeclaracaoResponseSchema,
     DeclaracaoTrajetoRequestSchema,
     MessageResponseSchema,
-    RodadaAtivaResponseSchema,
-    RodadaResponseSchema,
     ViagemAcaoRequestSchema,
     ViagemAgendaAlunoListResponseSchema,
     ViagemAlunoConfirmacaoResponseSchema,
@@ -27,13 +29,19 @@ from app.schemas.viagem_schema import (
     ViagemListResponseSchema,
     ViagemResponseSchema,
 )
-from app.services import credencial_embarque_service, viagens_service
+from app.services import (
+    buffer_service,
+    credencial_embarque_service,
+    solicitacoes_service,
+    viagens_service,
+)
 from app.services.consentimento_service import exige_consentimento
 
 api = Namespace("viagens", description="Execução de Viagens")
 
 ponto_models = ponto_contract.register_models(api)
 credencial_embarque_models = credencial_embarque_contract.register_models(api)
+solicitacao_models = solicitacao_contract.register_models(api)
 
 # API contracts (Swagger documentation)
 models = viagem_contract.register_models(api)
@@ -55,59 +63,9 @@ viagem_agenda_aluno_list_response_schema = ViagemAgendaAlunoListResponseSchema()
 
 ponto_flat_list_response_schema = PontoFlatListResponseSchema()
 credencial_embarque_response_schema = CredencialEmbarqueResponseSchema()
+solicitacao_response_schema = SolicitacaoResponseSchema()
 
 declaracao_trajeto_request_schema = DeclaracaoTrajetoRequestSchema()
-declaracao_response_schema = DeclaracaoResponseSchema()
-rodada_response_schema = RodadaResponseSchema()
-rodada_ativa_response_schema = RodadaAtivaResponseSchema()
-cancelamento_response_schema = CancelamentoResponseSchema()
-
-
-# ==========================================
-# Rodada sob demanda — RF-10 a RF-13 e RF-19
-# ==========================================
-
-
-@api.route("/solicitar")
-class ViagemSolicitarResource(Resource):
-    @api.doc(
-        "solicitar_viagem",
-        responses={
-            201: "Solicitação registrada",
-            400: "Fora da janela de disponibilidade",
-            403: "Sem consentimento vigente",
-        },
-    )
-    @api.response(201, "Solicitação registrada", models["rodada_response"])
-    @jwt_required()
-    def post(self) -> tuple[dict[str, Any], int]:
-        """(Aluno) Solicita o veículo dentro da janela de disponibilidade"""
-        rodada = viagens_service.solicitar_viagem(get_jwt_identity())
-        return rodada_response_schema.dump(rodada), 201
-
-
-@api.route("/rodada-ativa")
-class ViagemRodadaAtivaResource(Resource):
-    @api.doc("get_rodada_ativa")
-    @api.response(200, "Success", models["rodada_ativa_response"])
-    @jwt_required()
-    def get(self) -> tuple[dict[str, Any], int]:
-        """(Aluno) Rodada em andamento e contagem regressiva do buffer"""
-        return (
-            rodada_ativa_response_schema.dump(viagens_service.rodada_ativa(get_jwt_identity())),
-            200,
-        )
-
-
-@api.route("/<string:id>/iniciar-percurso")
-class ViagemIniciarPercursoResource(Resource):
-    @api.doc("iniciar_percurso", responses={200: "Buffer aberto", 400: "Rodada não solicitada"})
-    @api.response(200, "Buffer aberto", models["rodada_response"])
-    @jwt_required()
-    def post(self, id: str) -> tuple[dict[str, Any], int]:
-        """(Motorista) Inicia o percurso e abre a janela de buffer"""
-        rodada = viagens_service.iniciar_percurso(get_jwt_identity(), id)
-        return rodada_response_schema.dump(rodada), 200
 
 
 @api.route("/<string:id>/declaracao")
@@ -115,27 +73,20 @@ class ViagemDeclaracaoResource(Resource):
     @api.doc(
         "declarar_trajeto",
         responses={
-            201: "Embarque confirmado",
-            400: "Rodada não aceita declarações",
-            409: "Indisponibilidade momentânea",
+            200: "Trajeto aceito",
+            400: "Viagem fora do buffer ou pontos inválidos",
+            409: "Sem lugar no trecho",
         },
     )
     @api.expect(models["declaracao_trajeto_request"])
-    @api.response(201, "Embarque confirmado", models["declaracao_response"])
+    @api.response(200, "Trajeto aceito", solicitacao_models["solicitacao_response"])
     @jwt_required()
+    @exige_consentimento
     def post(self, id: str) -> tuple[dict[str, Any], int]:
-        """(Aluno) Declara origem e destino durante o buffer"""
+        """(Aluno) Declara origem e destino durante o buffer (RF-13/RF-14)"""
         payload = declaracao_trajeto_request_schema.load(request.get_json(silent=True) or {})
-        registro = viagens_service.declarar_trajeto(get_jwt_identity(), id, payload)
-        return declaracao_response_schema.dump(registro), 201
-
-    @api.doc("cancelar_solicitacao", responses={200: "Cancelada", 404: "Sem solicitação"})
-    @api.response(200, "Cancelada", models["cancelamento_response"])
-    @jwt_required()
-    def delete(self, id: str) -> tuple[dict[str, Any], int]:
-        """(Aluno) Cancela a solicitação da rodada"""
-        resultado = viagens_service.cancelar_solicitacao(get_jwt_identity(), id)
-        return cancelamento_response_schema.dump(resultado), 200
+        solicitacao = solicitacoes_service.declarar_trajeto(get_jwt_identity(), id, payload)
+        return solicitacao_response_schema.dump(solicitacao), 200
 
 
 @api.route("/aluno/agenda")
@@ -233,11 +184,8 @@ class ViagemListResource(Resource):
         user_id = get_jwt_identity()
         data = request.get_json(silent=True) or {}
         payload = viagem_create_request_schema.load(data)
-        result = viagens_service.gerar_viagem(user_id, payload)
-
-        # gerar_viagem returns {message,id,dia}. If you want to return ViagemResponseSchema instead,
-        # change service to return the Viagem ORM instance. For now, keep it consistent with existing behavior.
-        return result, 201
+        viagem = viagens_service.gerar_viagem(user_id, payload)
+        return viagem_response_schema.dump(viagem), 201
 
 
 @api.route("/minhas")
@@ -328,3 +276,27 @@ class ViagemLocalizacaoAluno(Resource):
         )
 
         return resultado, 200
+
+
+@api.route("/<string:id>/solicitacao")
+class ViagemSolicitacaoResource(Resource):
+    @api.doc("cancelar_solicitacao")
+    @api.response(200, "Success", solicitacao_models["solicitacao_response"])
+    @jwt_required()
+    def delete(self, id: str) -> tuple[dict[str, Any], int]:
+        """(Aluno) Cancela a própria solicitação. Depois do início do percurso vira desistência."""
+        user_id = get_jwt_identity()
+        solicitacao = solicitacoes_service.cancelar_solicitacao(user_id, id)
+        return solicitacao_response_schema.dump(solicitacao), 200
+
+
+@api.route("/<string:id>/iniciar-percurso")
+class ViagemIniciarPercursoResource(Resource):
+    @api.doc("iniciar_percurso")
+    @api.response(200, "Success", models["viagem_response"])
+    @jwt_required()
+    def post(self, id: str) -> tuple[dict[str, Any], int]:
+        """(Motorista) Inicia o percurso sob demanda e abre a janela de buffer (RF-11)"""
+        user_id = get_jwt_identity()
+        viagem = buffer_service.iniciar_percurso(user_id, id)
+        return viagem_response_schema.dump(viagem), 200

@@ -20,7 +20,14 @@ ENV_OBRIGATORIAS = [
     "MAIL_SERVER",
 ]
 
-JOBS_ESPERADOS = {"job_24h", "job_10min", "job_rodadas", "job_convites", "job_retencao"}
+JOBS_ESPERADOS = {
+    "job_24h",
+    "job_10min",
+    "job_convites",
+    "job_retencao",
+    "job_fechar_buffers",
+    "job_prazo_inicio",
+}
 
 
 @pytest.fixture()
@@ -28,6 +35,8 @@ def scheduler_app():
     """App mínima e isolada: init_scheduler só usa app.logger e app.debug."""
     app = Flask("scheduler_test")
     app.config["SCHEDULER_API_ENABLED"] = False
+    app.config["JOB_BUFFER_INTERVALO_SEGUNDOS"] = 30
+    app.config["JOB_PRAZO_INICIO_INTERVALO_SEGUNDOS"] = 60
     return app
 
 

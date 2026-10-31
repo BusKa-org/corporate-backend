@@ -5,9 +5,9 @@ import os
 
 import pytest
 
-from app.models.enum import StatusSolicitacao, StatusViagem
+from app.models.enum import StatusViagem
 from app.models.user import Aluno
-from tests.factories.viagem_factory import AlunosConfirmadosFactory
+from tests.factories.viagem_factory import AlunosConfirmadosFactory, SolicitacaoViagemFactory
 from tests.helpers import imagens
 
 SENHA = "StrongPass123!"
@@ -117,41 +117,28 @@ def test_motorista_nao_ve_foto_de_quem_nao_confirmou(
     assert motorista.client.get(f"/v1/alunos/{aluno.user.id}/foto").status_code == 403
 
 
-@pytest.mark.parametrize("status", [StatusViagem.BUFFER_ABERTO, StatusViagem.EM_ROTA])
-def test_motorista_ve_foto_de_confirmado_na_rodada_sob_demanda(
-    aluno, motorista, viagem_futura_agendada_com_motorista, _db, status
-):
+def test_motorista_ve_foto_de_trajeto_aceito_no_buffer(aluno, motorista, viagem_buffer_aberto, _db):
     assert _enviar(aluno, PNG).status_code == 200
-    viagem = viagem_futura_agendada_com_motorista
     _db.session.add(
-        AlunosConfirmadosFactory(
-            viagem_id=viagem.id,
+        SolicitacaoViagemFactory(
+            viagem_id=viagem_buffer_aberto.id,
             aluno_id=aluno.user.id,
-            confirmacao=True,
-            status=StatusSolicitacao.CONFIRMADO,
+            ponto_embarque_id=viagem_buffer_aberto.rota.pontos_padrao[0].ponto_id,
+            ponto_destino_id=viagem_buffer_aberto.rota.pontos_padrao[1].ponto_id,
         )
     )
-    viagem.status = status
     _db.session.commit()
 
     assert motorista.client.get(f"/v1/alunos/{aluno.user.id}/foto").status_code == 200
 
 
-@pytest.mark.parametrize("status", [StatusViagem.BUFFER_ABERTO, StatusViagem.EM_ROTA])
-def test_motorista_nao_ve_foto_de_interessado_na_rodada_sob_demanda(
-    aluno, motorista, viagem_futura_agendada_com_motorista, _db, status
+def test_motorista_nao_ve_foto_de_interessado_sem_trajeto(
+    aluno, motorista, viagem_buffer_aberto, _db
 ):
     assert _enviar(aluno, PNG).status_code == 200
-    viagem = viagem_futura_agendada_com_motorista
     _db.session.add(
-        AlunosConfirmadosFactory(
-            viagem_id=viagem.id,
-            aluno_id=aluno.user.id,
-            confirmacao=False,
-            status=StatusSolicitacao.INTERESSADO,
-        )
+        SolicitacaoViagemFactory(viagem_id=viagem_buffer_aberto.id, aluno_id=aluno.user.id)
     )
-    viagem.status = status
     _db.session.commit()
 
     assert motorista.client.get(f"/v1/alunos/{aluno.user.id}/foto").status_code == 403

@@ -1,6 +1,7 @@
 import logging
 import os
 import re
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +55,23 @@ class Settings:
 
         # Link de download do app, incluído no e-mail de convite (opcional)
         self.APP_DOWNLOAD_URL = os.getenv("APP_DOWNLOAD_URL", "")
+
+        # Fuso das janelas de disponibilidade (RF-05): a hora local que o gestor cadastra
+        self.FUSO_HORARIO = os.getenv("FUSO_HORARIO", "America/Fortaleza")
+        try:
+            ZoneInfo(self.FUSO_HORARIO)
+        except (ZoneInfoNotFoundError, ValueError):
+            self._errors.append(f"FUSO_HORARIO is not a valid IANA timezone: '{self.FUSO_HORARIO}'")
+            self.FUSO_HORARIO = "UTC"
+
+        # Intervalos dos jobs de viagem sob demanda: fechar buffer expirado e
+        # avisar o gestor quando o motorista estoura o prazo de início (RF-11)
+        self.JOB_BUFFER_INTERVALO_SEGUNDOS = self._get_int(
+            "JOB_BUFFER_INTERVALO_SEGUNDOS", default=30, min_val=5, max_val=3600
+        )
+        self.JOB_PRAZO_INICIO_INTERVALO_SEGUNDOS = self._get_int(
+            "JOB_PRAZO_INICIO_INTERVALO_SEGUNDOS", default=60, min_val=5, max_val=3600
+        )
 
         # Jornada do motorista. Padrão do CTB (Lei 9.503/97) art. 67-C §1º-A, incluído pela
         # Lei 13.103/2015: no transporte de passageiros, 30 min de descanso a cada 4 h de

@@ -1,182 +1,156 @@
-"""RF-05 — janelas de disponibilidade do veículo."""
-
-from datetime import date, datetime, time, timedelta
-
 import pytest
 
-from app.models.enum import DiaDaSemana, UserStatus
-from app.models.janela import JanelaDisponibilidade
-from app.services import janela_service
+from app.models.enum import UserStatus
+from app.models.onibus import JanelaDisponibilidade
+from tests.factories.onibus_factory import OnibusFactory
+from tests.factories.user_factory import MotoristaFactory
 
 
-def _payload(circuito, motorista, **overrides):
-    dados = {
-        "rota_id": str(circuito.id),
-        "motorista_id": str(motorista.user.id),
-        "dia": "SEG",
-        "hora_inicio": "07:00",
-        "hora_fim": "12:00",
-        "buffer_minutos": 5,
-    }
-    dados.update(overrides)
-    return dados
+def _payload(motorista_id, dia="SEG", inicio="08:00", fim="12:00"):
+    return {"motorista_id": str(motorista_id), "dia": dia, "hora_inicio": inicio, "hora_fim": fim}
 
 
-@pytest.mark.integration
-def test_criar_janela_requer_autenticacao(client, circuito, motorista):
-    r = client.post("/v1/janelas/", json=_payload(circuito, motorista))
-    assert r.status_code in (401, 422)
+def _url(onibus_id):
+    return f"/v1/onibus/{onibus_id}/janelas"
 
 
-@pytest.mark.integration
-def test_aluno_nao_gerencia_janelas(aluno, circuito, motorista):
-    r = aluno.client.post("/v1/janelas/", json=_payload(circuito, motorista))
-    assert r.status_code == 403
+@pytest.fixture()
+def outro_onibus(_db, organizacao):
+    o = OnibusFactory(organizacao_id=organizacao.id)
+    _db.session.add(o)
+    _db.session.commit()
+    return o
 
 
-@pytest.mark.integration
-def test_gestor_cria_e_lista_janela(gestor, circuito, motorista, _db):
-    r = gestor.client.post("/v1/janelas/", json=_payload(circuito, motorista))
+@pytest.fixture()
+def outro_motorista(_db, organizacao):
+    m = MotoristaFactory(organizacao_id=organizacao.id)
+    _db.session.add(m)
+    _db.session.commit()
+    return m
+
+
+def test_cria_janela(gestor, onibus, motorista):
+    r = gestor.client.post(_url(onibus.id), json=_payload(motorista.user.id))
+    assert r.status_code == 201, r.get_data(as_text=True)
+    body = r.get_json()
+    assert body["onibus_id"] == str(onibus.id)
+    assert body["motorista_id"] == str(motorista.user.id)
+    assert body["motorista_nome"] == motorista.user.nome
+    assert (body["dia"], body["hora_inicio"], body["hora_fim"]) == ("SEG", "08:00", "12:00")
+    assert body["created_at"]
+
+
+@pytest.mark.parametrize("inicio,fim", [("10:00", "10:00"), ("10:00", "09:00")])
+def test_fim_nao_posterior_ao_inicio_e_rejeitado(gestor, onibus, motorista, inicio, fim):
+    r = gestor.client.post(
+        _url(onibus.id), json=_payload(motorista.user.id, inicio=inicio, fim=fim)
+    )
+    assert r.status_code == 400
+    assert "posterior" in r.get_json()["error"]["message"]
+
+
+def test_sobreposicao_no_mesmo_veiculo_e_dia(gestor, onibus, janela, outro_motorista):
+    r = gestor.client.post(
+        _url(onibus.id), json=_payload(outro_motorista.id, inicio="11:00", fim="13:00")
+    )
+    assert r.status_code == 409
+
+
+def test_mesmo_horario_em_outro_dia_e_permitido(gestor, onibus, motorista, janela):
+    r = gestor.client.post(_url(onibus.id), json=_payload(motorista.user.id, dia="TER"))
     assert r.status_code == 201, r.get_data(as_text=True)
 
-    body = r.get_json() or {}
-    assert body["dia"] == "SEG"
-    assert body["buffer_minutos"] == 5
-    assert body["motorista_nome"] == motorista.user.nome
 
-    listagem = gestor.client.get("/v1/janelas/").get_json() or {}
-    assert listagem["total"] == 1
-
-
-@pytest.mark.integration
-def test_janela_sobreposta_no_mesmo_dia_e_recusada(gestor, circuito, motorista):
-    assert gestor.client.post("/v1/janelas/", json=_payload(circuito, motorista)).status_code == 201
-
-    conflito = gestor.client.post(
-        "/v1/janelas/",
-        json=_payload(circuito, motorista, hora_inicio="11:00", hora_fim="15:00"),
+def test_janelas_encostadas_sao_permitidas(gestor, onibus, motorista, janela):
+    r = gestor.client.post(
+        _url(onibus.id), json=_payload(motorista.user.id, inicio="12:00", fim="14:00")
     )
-    assert conflito.status_code == 409, conflito.get_data(as_text=True)
+    assert r.status_code == 201, r.get_data(as_text=True)
 
 
-@pytest.mark.integration
-def test_janela_encostada_na_anterior_e_aceita(gestor, circuito, motorista):
-    """Fim às 12:00 e início às 12:00 não é sobreposição."""
-    assert gestor.client.post("/v1/janelas/", json=_payload(circuito, motorista)).status_code == 201
-
-    seguinte = gestor.client.post(
-        "/v1/janelas/",
-        json=_payload(circuito, motorista, hora_inicio="12:00", hora_fim="18:00"),
+def test_motorista_sobreposto_em_dois_veiculos(gestor, outro_onibus, motorista, janela):
+    r = gestor.client.post(
+        _url(outro_onibus.id), json=_payload(motorista.user.id, inicio="09:00", fim="10:00")
     )
-    assert seguinte.status_code == 201, seguinte.get_data(as_text=True)
+    assert r.status_code == 409
 
 
-@pytest.mark.integration
-def test_janela_em_outro_dia_nao_conflita(gestor, circuito, motorista):
-    assert gestor.client.post("/v1/janelas/", json=_payload(circuito, motorista)).status_code == 201
-    outra = gestor.client.post("/v1/janelas/", json=_payload(circuito, motorista, dia="TER"))
-    assert outra.status_code == 201
-
-
-@pytest.mark.integration
-def test_janela_com_motorista_inativo_e_recusada(gestor, circuito, motorista, _db):
-    motorista.user.status = UserStatus.DISABLED
+def test_motorista_inativo_e_rejeitado(gestor, onibus, _db, organizacao):
+    m = MotoristaFactory(organizacao_id=organizacao.id, status=UserStatus.DISABLED)
+    _db.session.add(m)
     _db.session.commit()
-
-    r = gestor.client.post("/v1/janelas/", json=_payload(circuito, motorista))
+    r = gestor.client.post(_url(onibus.id), json=_payload(m.id))
     assert r.status_code == 400
-    assert "ativo" in (r.get_json() or {})["error"]["message"]
+    assert r.get_json()["error"]["message"] == "Motorista sem cadastro ativo"
 
 
-@pytest.mark.integration
-def test_janela_com_motorista_de_outra_organizacao_e_recusada(gestor, circuito, other_motorista):
-    r = gestor.client.post("/v1/janelas/", json=_payload(circuito, other_motorista))
+def test_motorista_inexistente(gestor, onibus):
+    r = gestor.client.post(_url(onibus.id), json=_payload("00000000-0000-0000-0000-000000000000"))
     assert r.status_code == 404
 
 
-@pytest.mark.integration
-def test_hora_fim_precisa_ser_maior_que_inicio(gestor, circuito, motorista):
-    r = gestor.client.post(
-        "/v1/janelas/",
-        json=_payload(circuito, motorista, hora_inicio="12:00", hora_fim="08:00"),
-    )
+def test_motorista_de_outra_organizacao_e_rejeitado(gestor, onibus, other_motorista):
+    r = gestor.client.post(_url(onibus.id), json=_payload(other_motorista.user.id))
     assert r.status_code == 400
 
 
-@pytest.mark.integration
-def test_gestor_atualiza_e_remove_janela(gestor, circuito, motorista, _db):
-    criada = gestor.client.post("/v1/janelas/", json=_payload(circuito, motorista)).get_json()
+def test_veiculo_de_outra_organizacao(other_gestor, onibus, other_motorista):
+    r = other_gestor.client.post(_url(onibus.id), json=_payload(other_motorista.user.id))
+    assert r.status_code == 403
 
-    atualizada = gestor.client.patch(
-        f"/v1/janelas/{criada['id']}", json={"buffer_minutos": 9, "ativo": False}
+
+def test_veiculo_inexistente(gestor, motorista):
+    r = gestor.client.post(
+        _url("00000000-0000-0000-0000-000000000000"), json=_payload(motorista.user.id)
     )
-    assert atualizada.status_code == 200
-    assert (atualizada.get_json() or {})["buffer_minutos"] == 9
-
-    removida = gestor.client.delete(f"/v1/janelas/{criada['id']}")
-    assert removida.status_code == 200
-    assert _db.session.get(JanelaDisponibilidade, criada["id"]) is None
+    assert r.status_code == 404
 
 
-@pytest.mark.integration
-def test_gestor_de_outra_organizacao_nao_enxerga_a_janela(
-    gestor, other_gestor, circuito, motorista
-):
-    criada = gestor.client.post("/v1/janelas/", json=_payload(circuito, motorista)).get_json()
-
-    assert (other_gestor.client.get("/v1/janelas/").get_json() or {})["total"] == 0
-    assert other_gestor.client.delete(f"/v1/janelas/{criada['id']}").status_code == 404
+@pytest.mark.parametrize("ator", ["aluno", "motorista"])
+def test_nao_gestor_nao_cria(request, ator, onibus, motorista):
+    actor = request.getfixturevalue(ator)
+    r = actor.client.post(_url(onibus.id), json=_payload(motorista.user.id))
+    assert r.status_code == 403
 
 
-@pytest.mark.integration
-def test_aluno_ve_a_janela_vigente(aluno, janela_hoje):
-    r = aluno.client.get("/v1/janelas/vigente")
+def test_lista_ordenada_por_dia_e_hora(gestor, aluno, onibus, motorista):
+    criadas = [("DOM", "08:00", "09:00"), ("SEG", "14:00", "15:00"), ("QUA", "08:00", "09:00")]
+    criadas.append(("SEG", "08:00", "09:00"))
+    for dia, inicio, fim in criadas:
+        r = gestor.client.post(
+            _url(onibus.id), json=_payload(motorista.user.id, dia=dia, inicio=inicio, fim=fim)
+        )
+        assert r.status_code == 201, r.get_data(as_text=True)
+
+    r = aluno.client.get(_url(onibus.id))
     assert r.status_code == 200, r.get_data(as_text=True)
-
-    body = r.get_json() or {}
-    assert body["em_operacao"] is True
-    assert body["janela"]["id"] == str(janela_hoje.id)
-    assert len(body["horarios_hoje"]) == 1
-
-
-@pytest.mark.integration
-def test_aluno_fora_da_janela_recebe_os_horarios_do_dia(aluno, janela_hoje, _db):
-    """Fora do horário a resposta ainda informa quando o veículo opera."""
-    agora = janela_service.agora_local()
-    janela_hoje.hora_inicio = time(0, 0)
-    janela_hoje.hora_fim = time(0, 1)
-    if agora.time() <= time(0, 1):
-        janela_hoje.hora_inicio = time(23, 58)
-        janela_hoje.hora_fim = time(23, 59)
-    _db.session.commit()
-
-    body = aluno.client.get("/v1/janelas/vigente").get_json() or {}
-    assert body["em_operacao"] is False
-    assert body["janela"] is None
-    assert len(body["horarios_hoje"]) == 1
+    body = r.get_json()
+    assert body["total"] == 4
+    ordem = [(item["dia"], item["hora_inicio"]) for item in body["items"]]
+    assert ordem == [("SEG", "08:00"), ("SEG", "14:00"), ("QUA", "08:00"), ("DOM", "08:00")]
 
 
-@pytest.mark.integration
-def test_janela_vigente_ignora_janela_desativada(_db, organizacao, janela_hoje):
-    assert janela_service.janela_vigente(organizacao.id) is not None
-
-    janela_hoje.ativo = False
-    _db.session.commit()
-
-    assert janela_service.janela_vigente(organizacao.id) is None
+def test_lista_de_outra_organizacao_e_proibida(other_gestor, onibus, janela):
+    r = other_gestor.client.get(_url(onibus.id))
+    assert r.status_code == 403
 
 
-@pytest.mark.integration
-def test_dia_da_semana_acompanha_o_weekday():
-    # 2026-08-03 é uma segunda-feira.
-    segunda = date(2026, 8, 3)
-    assert janela_service.dia_da_semana(segunda) == DiaDaSemana.SEG
-    assert janela_service.dia_da_semana(segunda + timedelta(days=6)) == DiaDaSemana.DOM
+def test_remove_janela(gestor, onibus, janela, _db):
+    r = gestor.client.delete(f"{_url(onibus.id)}/{janela.id}")
+    assert r.status_code == 200, r.get_data(as_text=True)
+    assert r.get_json()["message"]
+    _db.session.expire_all()
+    assert _db.session.get(JanelaDisponibilidade, janela.id) is None
 
 
-@pytest.mark.integration
-def test_janela_de_outro_dia_nao_esta_vigente(_db, organizacao, janela_hoje):
-    janela_hoje.dia = janela_service.dia_da_semana(datetime.now().date() + timedelta(days=1))
-    _db.session.commit()
+def test_remove_janela_de_outro_veiculo_e_404(gestor, outro_onibus, janela):
+    r = gestor.client.delete(f"{_url(outro_onibus.id)}/{janela.id}")
+    assert r.status_code == 404
 
-    assert janela_service.janela_vigente(organizacao.id) is None
+
+@pytest.mark.parametrize("ator", ["aluno", "motorista"])
+def test_nao_gestor_nao_remove(request, ator, onibus, janela):
+    actor = request.getfixturevalue(ator)
+    r = actor.client.delete(f"{_url(onibus.id)}/{janela.id}")
+    assert r.status_code == 403

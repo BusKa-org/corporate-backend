@@ -43,13 +43,22 @@ def register_models(api):
         {
             "id": fields.String(description="UUID"),
             "data": fields.String(description="Data"),
-            "horario_saida": fields.String(description="Horário"),
-            "sentido": fields.String(description="Sentido"),
-            "status": fields.String(description="AGENDADA, EM_ANDAMENTO, FINALIZADA"),
+            "horario_inicio": fields.String(
+                description="Horário de saída (HH:MM:SS); null em viagem sob demanda"
+            ),
+            "tipo": fields.String(description="Sentido (IDA/VOLTA); null em viagem sob demanda"),
+            "status": fields.String(
+                description="AGENDADA, SOLICITADA, BUFFER_ABERTO, EM_ANDAMENTO, FINALIZADA, CANCELADA"
+            ),
             "rota_id": fields.String(description="UUID da rota"),
             "rota_nome": fields.String(description="Nome da rota"),
-            "motorista_id": fields.String(description="UUID do motorista"),
-            "veiculo_id": fields.String(description="UUID do veículo"),
+            "inicio_real": fields.DateTime(description="Início real da viagem"),
+            "horario_fim": fields.DateTime(description="Fim real da viagem"),
+            "buffer_fim": fields.DateTime(
+                description="Fim do buffer de embarque (sob demanda, BUFFER_ABERTO)"
+            ),
+            "motorista_nome": fields.String(description="Nome do motorista"),
+            "veiculo_placa": fields.String(description="Placa do veículo"),
         },
     )
 
@@ -72,10 +81,11 @@ def register_models(api):
             "viagem_id": fields.String(description="UUID da viagem"),
             "data": fields.String(description="Data"),
             "dia_semana": fields.String(description="Dia da semana"),
-            "horario_saida": fields.String(description="Horário"),
-            "sentido": fields.String(description="Sentido"),
+            "horario_saida": fields.String(description="Horário; null em viagem sob demanda"),
+            "sentido": fields.String(description="Sentido; null em viagem sob demanda"),
             "rota_id": fields.String(description="UUID da rota"),
             "rota_nome": fields.String(description="Nome da rota"),
+            "status_viagem": fields.String(description="Status da viagem"),
             "status_confirmacao": fields.Boolean(description="Confirmado"),
             "ponto_embarque_id": fields.String(description="UUID do ponto de embarque"),
         },
@@ -97,7 +107,7 @@ def register_models(api):
         },
     )
 
-    # ----- Rodada sob demanda (RF-10 a RF-13, RF-19) -----
+    # ----- Declaração de trajeto sob demanda (RF-13) -----
 
     declaracao_trajeto_request = api.model(
         "DeclaracaoTrajetoRequest",
@@ -111,54 +121,8 @@ def register_models(api):
         },
     )
 
-    rodada_response = api.model(
-        "RodadaResponse",
-        {
-            "viagem_id": fields.String(description="UUID da rodada"),
-            "status": fields.String(description="OCIOSA, SOLICITADA, BUFFER_ABERTO, EM_ROTA"),
-            "buffer_expira_em": fields.DateTime(description="Fim da contagem regressiva"),
-            "segundos_restantes": fields.Integer(description="Tempo restante do buffer"),
-            "minha_situacao": fields.String(description="INTERESSADO, CONFIRMADO, NEGADO"),
-            "motorista_notificado": fields.Boolean(
-                description="Esta solicitação chamou o motorista"
-            ),
-        },
-    )
-
-    rodada_ativa_response = api.model(
-        "RodadaAtivaResponse",
-        {
-            "em_operacao": fields.Boolean(description="Dentro da janela de disponibilidade"),
-            "rodada": fields.Nested(rodada_response, allow_null=True),
-        },
-    )
-
-    declaracao_response = api.model(
-        "DeclaracaoResponse",
-        {
-            "viagem_id": fields.String(description="UUID da rodada"),
-            "aluno_id": fields.String(description="UUID do aluno"),
-            "status": fields.String(description="CONFIRMADO ou NEGADO"),
-            "ponto_embarque_id": fields.String(description="UUID do ponto de embarque"),
-            "ponto_destino_id": fields.String(description="UUID do ponto de desembarque"),
-            "declarado_em": fields.DateTime(description="Momento da declaração"),
-        },
-    )
-
-    cancelamento_response = api.model(
-        "CancelamentoResponse",
-        {
-            "message": fields.String(description="Resultado do cancelamento"),
-            "vaga_liberada": fields.Boolean(description="A vaga voltou para a rodada"),
-        },
-    )
-
     return {
         "declaracao_trajeto_request": declaracao_trajeto_request,
-        "declaracao_response": declaracao_response,
-        "rodada_response": rodada_response,
-        "rodada_ativa_response": rodada_ativa_response,
-        "cancelamento_response": cancelamento_response,
         "viagem_create_request": viagem_create_request,
         "viagem_confirmacao_request": viagem_confirmacao_request,
         "viagem_acao_request": viagem_acao_request,

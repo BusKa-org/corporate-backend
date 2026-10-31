@@ -107,7 +107,7 @@ Each produces working, testable software on its own. See
 
 | Plan | Scope | Requirements | Status |
 |---|---|---|---|
-| 2. Trip lifecycle | `OCIOSA→SOLICITADA→BUFFER_ABERTO→EM_ROTA→FINALIZADA`, availability windows, ride request, buffer timer, broadcast, cancellation | RF-05, 10, 11, 12, 19 | **Done** |
+| 2. Trip lifecycle | `SOLICITADA→BUFFER_ABERTO→EM_ANDAMENTO→FINALIZADA` ("ociosa" = no active trip), vehicle availability windows, ride request, buffer timer, broadcast, cancellation | RF-05, 10, 11, 12, 19 | **Done** (PR #7, replaced dev's first version) |
 | 3. Capacity engine | Segment load vector, `PicoTrecho` validation, origin/destination declaration, ordered circuit stops | RF-04, 13, 14 | **Done** |
 | 4. Boarding | Dynamic QR credential, driver itinerary, validation with manual fallback, offline sync | RF-15, 16, 17, 18 | **Done** (photo descoped) |
 | 5. LGPD | Versioned consent capture, account deletion with history anonymisation | RF-09, 20 | **Done** |
@@ -123,16 +123,18 @@ asserts all five still work.
 ### Two decisions taken during implementation
 
 **The load vector lives in Postgres, not Redis.** RF-14 names Redis. The vector
-is instead derived from the `CONFIRMADO` rows, with concurrent declarations
+is instead derived from the `ATIVA` ride requests with a declared route, with concurrent declarations
 serialising on a `SELECT … FOR UPDATE` of the trip row. It is exact,
 transactional, and adds no infrastructure; the ceiling is serialisation per
 trip. `tests/integration/test_capacidade_concorrencia.py` proves the lock holds
 under two real connections — and was verified failing with the lock removed,
 because a sequential test would pass either way.
 
-**`AlunosConfirmados` is the ride-request row**, rather than a new
-`SolicitacaoViagem` table. It was already `(viagem_id, aluno_id)` carrying
-origin and destination stops, which is the exact shape RF-13/RF-14 need.
+**`SolicitacaoViagem` is the ride-request row** (PR #7), carrying the declared
+origin and destination. dev first reused `AlunosConfirmados` for it; that was
+replaced. `AlunosConfirmados` is now only the passenger list: the buffer close
+creates one row per declared request, and boarding (RF-15 to RF-18) reads it,
+the same as for fixed trips.
 
 ### How the parallel run actually went
 
@@ -152,14 +154,13 @@ of them ran git commands.
 The five call sites now branch on whether the trip is a DRT round (`rota_id`)
 or an inherited scheduled trip (`horario_rota_id`):
 
-- `confirmar_presenca_aluno` — a DRT round rejects and points at `/declaracao`;
+- `confirmar_presenca_aluno` — an on-demand trip rejects and points at the ride request;
   the scheduled path keeps the enrollment gate, which is its only authorisation
 - `_popular_dados_da_viagem` — roster-based passenger pre-population removed;
-  rows are created per trip by confirmation or declaration
-- `viagem_schema.get_total_alunos` — DRT counts the round's rows, legacy counts
-  the roster
-- `notificacao_service.notificar_por_gestor` — the `viagem_id` branch targets by
-  `StatusSolicitacao` so `INTERESSADO` students are reached
+  rows are created per trip by confirmation or at the buffer close
+- `viagem_schema.get_total_alunos` — counts the route roster (PR #7's rule)
+- `notificacao_service.notificar_por_gestor` — the `viagem_id` branch also reaches
+  the `ATIVA` ride requests
 
 **Two readers deliberately still use the roster**, documented in code:
 `notificar_por_gestor`'s `rota_id` branch (route-level broadcast only means
@@ -239,9 +240,9 @@ at the end — which is the argument for the CI check, not against the spec.
 ### 8. `StatusViagem` carries two lifecycles
 
 **Severity: medium — deliberate, needs a business decision.** The enum holds the
-four DRT states *and* the inherited `AGENDADA`/`EM_ANDAMENTO` scheduled flow,
-which still has live controllers, services and tests. Every function that serves
-both branches on `rota_id` vs `horario_rota_id`. That branching is the price of
+on-demand states (`SOLICITADA`, `BUFFER_ABERTO`) *and* the inherited `AGENDADA`
+scheduled flow, which still has live controllers, services and tests; `EM_ANDAMENTO`
+is shared. Functions that serve both branch on `Rota.tipo` or `horario_rota_id`. That branching is the price of
 keeping the municipal flow alive in the corporate product.
 
 Retiring the scheduled flow would delete that branching, `RotaAluno`, and a

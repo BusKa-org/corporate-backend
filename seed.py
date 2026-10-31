@@ -27,17 +27,17 @@ from app.models.enum import (
     StatusSolicitacao,
     StatusViagem,
     TipoInstituicao,
+    TipoViagem,
     UserRole,
     UserStatus,
 )
 from app.models.geo import Instituicao, Ponto
-from app.models.janela import JanelaDisponibilidade
-from app.models.onibus import Onibus
+from app.models.onibus import JanelaDisponibilidade, Onibus
 from app.models.organizacao import Organizacao
 from app.models.rota import Rota, RotaPonto
 from app.models.telemetria import TelemetriaVeiculo
 from app.models.user import Aluno, Gestor, Motorista
-from app.models.viagem import AlunosConfirmados, Viagem, ViagemPonto
+from app.models.viagem import AlunosConfirmados, SolicitacaoViagem, Viagem, ViagemPonto
 from app.services.consentimento_service import VERSAO_TERMO_VIGENTE
 
 app = create_app()
@@ -183,6 +183,9 @@ def _frota_e_circuito(org, motorista, pontos) -> tuple[Onibus, Rota]:
     rota = Rota(
         organizacao_id=org.id,
         nome="Circuito Demonstração",
+        tipo=TipoViagem.SOB_DEMANDA,
+        buffer_minutos=5,
+        prazo_inicio_minutos=10,
         motorista_padrao_id=motorista.usuario_id,
         veiculo_padrao_id=veiculo.id,
     )
@@ -202,15 +205,11 @@ def _janelas(org, rota, motorista, veiculo) -> None:
         for inicio, fim in ((time(7, 0), time(12, 0)), (time(13, 0), time(18, 0))):
             db.session.add(
                 JanelaDisponibilidade(
-                    organizacao_id=org.id,
-                    rota_id=rota.id,
+                    onibus_id=veiculo.id,
                     motorista_id=motorista.usuario_id,
-                    veiculo_id=veiculo.id,
                     dia=dia,
                     hora_inicio=inicio,
                     hora_fim=fim,
-                    buffer_minutos=5,
-                    ativo=True,
                 )
             )
     db.session.flush()
@@ -252,38 +251,44 @@ def _historico(org, rota, motorista, veiculo, pontos, alunos) -> int:
             )
 
         # A cada duas rodadas, o primeiro da lista é recusado no gargalo em vez
-        # de embarcar. Ele não pode aparecer nos dois papéis: a linha da rodada
-        # tem chave (viagem, aluno).
+        # de embarcar, então não aparece também como passageiro.
         houve_negacao = dias_atras % 2 == 0 and bool(ativos)
         confirmados = ativos[1:] if houve_negacao else ativos
 
         for indice, aluno in enumerate(confirmados):
             origem, destino = pontos[0], pontos[2 if indice % 2 else 3]
             db.session.add(
+                SolicitacaoViagem(
+                    viagem_id=viagem.id,
+                    aluno_id=aluno.usuario_id,
+                    status=StatusSolicitacao.ATIVA,
+                    ponto_embarque_id=origem.id,
+                    ponto_destino_id=destino.id,
+                    declarada_em=datetime.combine(dia, time(7, 55), tzinfo=UTC),
+                )
+            )
+            db.session.add(
                 AlunosConfirmados(
                     viagem_id=viagem.id,
                     aluno_id=aluno.usuario_id,
-                    status=StatusSolicitacao.CONFIRMADO,
                     confirmacao=True,
                     ponto_embarque_id=origem.id,
                     ponto_destino_id=destino.id,
                     embarcou=True,
                     embarcado_em=datetime.combine(dia, time(8, 5), tzinfo=UTC),
-                    declarado_em=datetime.combine(dia, time(7, 55), tzinfo=UTC),
                 )
             )
 
         # Sempre no mesmo ponto, para o estrangulamento aparecer no relatório.
         if houve_negacao:
             db.session.add(
-                AlunosConfirmados(
+                SolicitacaoViagem(
                     viagem_id=viagem.id,
                     aluno_id=ativos[0].usuario_id,
-                    status=StatusSolicitacao.NEGADO,
-                    confirmacao=False,
+                    status=StatusSolicitacao.NEGADA,
                     ponto_embarque_id=pontos[1].id,
                     ponto_destino_id=pontos[3].id,
-                    declarado_em=datetime.combine(dia, time(7, 58), tzinfo=UTC),
+                    declarada_em=datetime.combine(dia, time(7, 58), tzinfo=UTC),
                 )
             )
 
@@ -302,20 +307,6 @@ def _historico(org, rota, motorista, veiculo, pontos, alunos) -> int:
 
     db.session.flush()
     return rodadas
-
-
-def _rodada_ociosa(rota, motorista, veiculo) -> None:
-    """A rodada de hoje, esperando a primeira solicitação (RF-10)."""
-    db.session.add(
-        Viagem(
-            data=date.today(),
-            rota_id=rota.id,
-            motorista_id=motorista.usuario_id,
-            veiculo_id=veiculo.id,
-            status=StatusViagem.OCIOSA,
-        )
-    )
-    db.session.flush()
 
 
 def seed_demo_data() -> None:
@@ -347,8 +338,7 @@ def seed_demo_data() -> None:
     print(f"Frota: {veiculo.placa} ({veiculo.capacidade} lugares); janelas seg-sex, manhã e tarde")
 
     rodadas = _historico(org, rota, motorista, veiculo, pontos, alunos)
-    _rodada_ociosa(rota, motorista, veiculo)
-    print(f"Histórico: {rodadas} rodadas finalizadas + a rodada ociosa de hoje")
+    print(f"Histórico: {rodadas} rodadas finalizadas")
 
     db.session.commit()
 

@@ -25,7 +25,6 @@ from .api.controllers.convite_controller import api as convites_ns
 from .api.controllers.dashboard_controller import api as dashboard_ns
 from .api.controllers.embarque_controller import api as embarque_ns
 from .api.controllers.instituicao_controller import api as inst_ns
-from .api.controllers.janelas_controller import api as janelas_ns
 from .api.controllers.notificacao_controller import api as notificacoes_ns
 from .api.controllers.ocorrencia_controller import api as ocorrencias_ns
 from .api.controllers.onibus_controller import api as onibus_ns
@@ -108,6 +107,9 @@ def create_app(
     app.config["MAIL_USE_TLS"] = settings.MAIL_USE_TLS
     app.config["FRONTEND_URL"] = settings.FRONTEND_URL
     app.config["APP_DOWNLOAD_URL"] = settings.APP_DOWNLOAD_URL
+    app.config["FUSO_HORARIO"] = settings.FUSO_HORARIO
+    app.config["JOB_BUFFER_INTERVALO_SEGUNDOS"] = settings.JOB_BUFFER_INTERVALO_SEGUNDOS
+    app.config["JOB_PRAZO_INICIO_INTERVALO_SEGUNDOS"] = settings.JOB_PRAZO_INICIO_INTERVALO_SEGUNDOS
     app.config["MOTORISTA_HORAS_MAX_DIRECAO"] = settings.MOTORISTA_HORAS_MAX_DIRECAO
     app.config["MOTORISTA_DESCANSO_MINUTOS"] = settings.MOTORISTA_DESCANSO_MINUTOS
     app.config["TIMEZONE"] = settings.TIMEZONE
@@ -226,7 +228,6 @@ Inclua o header: `Authorization: Bearer <seu_token>`
     api.add_namespace(alunos_ns, path="/v1/alunos")
     api.add_namespace(ocorrencias_ns, path="/v1/ocorrencias")
     api.add_namespace(dashboard_ns, path="/v1/dashboard")
-    api.add_namespace(janelas_ns, path="/v1/janelas")
     api.add_namespace(consentimento_ns, path="/v1/consentimento")
     api.add_namespace(embarque_ns, path="/v1/embarque")
     api.add_namespace(telemetria_ns, path="/v1/telemetria")

@@ -50,7 +50,9 @@ def test_gestor_de_outra_organizacao_nao_remove_ponto(other_gestor, circuito, po
     assert r.status_code == 403
 
 
-def test_viagem_ativa_bloqueia_remocao_do_ponto(gestor, circuito, pontos_circuito, viagem_ociosa):
+def test_viagem_ativa_bloqueia_remocao_do_ponto(
+    gestor, circuito, pontos_circuito, viagem_buffer_aberto
+):
     """Fluxo secundário 1: a alteração espera a viagem em curso terminar."""
     r = gestor.client.delete(f"/v1/rotas/{circuito.id}/pontos/{pontos_circuito[0].id}")
     assert r.status_code == 409
@@ -59,7 +61,7 @@ def test_viagem_ativa_bloqueia_remocao_do_ponto(gestor, circuito, pontos_circuit
 
 
 def test_viagem_ativa_bloqueia_resequenciar_o_circuito(
-    gestor, circuito, pontos_circuito, viagem_ociosa
+    gestor, circuito, pontos_circuito, viagem_buffer_aberto
 ):
     payload = {"pontos": [{"ponto_id": str(pontos_circuito[0].id), "ordem": 1}]}
     r = gestor.client.post(f"/v1/rotas/{circuito.id}/pontos", json=payload)
@@ -68,12 +70,12 @@ def test_viagem_ativa_bloqueia_resequenciar_o_circuito(
     assert _ordens(gestor.client, circuito.id) == [1, 2, 3, 4]
 
 
-def test_viagem_ativa_bloqueia_edicao_do_ponto(gestor, pontos_circuito, viagem_ociosa):
+def test_viagem_ativa_bloqueia_edicao_do_ponto(gestor, pontos_circuito, viagem_buffer_aberto):
     r = gestor.client.put(f"/v1/pontos/{pontos_circuito[0].id}", json={"apelido": "Novo apelido"})
     assert r.status_code == 409
 
 
-def test_viagem_ativa_bloqueia_exclusao_do_ponto(gestor, pontos_circuito, viagem_ociosa):
+def test_viagem_ativa_bloqueia_exclusao_do_ponto(gestor, pontos_circuito, viagem_buffer_aberto):
     r = gestor.client.delete(f"/v1/pontos/{pontos_circuito[0].id}")
     assert r.status_code == 409
 

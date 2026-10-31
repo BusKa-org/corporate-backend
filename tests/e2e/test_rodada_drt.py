@@ -1,21 +1,20 @@
-"""A rodada sob demanda de ponta a ponta, pela API — RF-09 a RF-19.
+"""A viagem sob demanda de ponta a ponta, pela API — RF-09 a RF-19.
 
 Cada plano testou o seu pedaço. Estes testes cobrem o que nenhum deles podia
-cobrir sozinho: a rodada inteira atravessando consentimento, janela, buffer,
-capacidade, consolidação e embarque, sempre por HTTP e com JWT de verdade.
+cobrir sozinho: a viagem inteira atravessando consentimento, janela, buffer,
+capacidade, fechamento do buffer e embarque, sempre por HTTP e com JWT de verdade.
 
-O relógio é a única coisa manipulada — esperar o buffer expirar de verdade
-tornaria a suíte lenta sem provar nada a mais.
+O relógio é a única coisa manipulada (fixture `relogio`): esperar o buffer
+expirar de verdade tornaria a suíte lenta sem provar nada a mais.
 """
-
-from datetime import UTC, datetime, timedelta
 
 import pytest
 from flask_jwt_extended import create_access_token
 
 from app.models.enum import StatusSolicitacao, StatusViagem
-from app.models.viagem import AlunosConfirmados, Viagem
-from app.tasks.viagem_tasks import consolidar_buffers_expirados
+from app.models.notificacao import Notificacao
+from app.models.viagem import AlunosConfirmados, SolicitacaoViagem, Viagem
+from app.services import buffer_service
 from tests.conftest import AuthenticatedClient
 from tests.factories.user_factory import AlunoFactory
 
@@ -59,65 +58,66 @@ def condutor(client, app, motorista):
     return _ator(client, app, motorista.user)
 
 
-def _expirar_buffer(_db, viagem_id):
-    """Empurra o fim do buffer para trás e roda a consolidação."""
-    viagem = _db.session.get(Viagem, viagem_id)
-    viagem.buffer_expira_em = datetime.now(UTC) - timedelta(seconds=1)
-    _db.session.commit()
-    return consolidar_buffers_expirados()
+@pytest.fixture()
+def operacao(circuito, janela, relogio):
+    """Rota sob demanda com circuito de 4 pontos, numa segunda às 10h dentro da janela."""
+    return circuito
+
+
+def _trajeto(origem, destino):
+    return {"ponto_origem_id": str(origem.id), "ponto_destino_id": str(destino.id)}
+
+
+def _expirar_buffer(relogio):
+    """Passa o relógio do fim do buffer (5 min na rota) e roda o job."""
+    relogio.avancar(minutes=6)
+    return buffer_service.fechar_buffers_expirados()
 
 
 @pytest.mark.e2e
 def test_rodada_completa_da_solicitacao_ao_embarque(
-    app, _db, janela_hoje, pontos_circuito, van, passageiros, condutor
+    _db, operacao, pontos_circuito, van, passageiros, condutor, motorista, relogio
 ):
     """RF-10 -> RF-17: chamar o veículo, abrir o buffer, declarar, embarcar."""
     p1, p2, p3, p4 = pontos_circuito
     ana, bruno, carla, _ = passageiros
 
     # RF-10 — a primeira solicitação não despacha o veículo, só avisa o motorista.
-    r = ana.post("/v1/viagens/solicitar")
+    r = ana.post(f"/v1/rotas/{operacao.id}/solicitacoes")
     assert r.status_code == 201, r.get_data(as_text=True)
-    rodada = r.get_json()
-    viagem_id = rodada["viagem_id"]
-    assert rodada["status"] == StatusViagem.SOLICITADA.value
-    assert rodada["motorista_notificado"] is True
+    viagem_id = r.get_json()["viagem_id"]
+    assert r.get_json()["viagem"]["status"] == StatusViagem.SOLICITADA.value
+    assert Notificacao.query.filter_by(usuario_id=motorista.user.id).count() == 1
 
-    # RF-10 fluxo secundário 1 — o segundo entra na mesma rodada, sem re-notificar.
-    r = bruno.post("/v1/viagens/solicitar")
+    # RF-10 fluxo secundário 1 — o segundo entra na mesma viagem, sem re-notificar.
+    r = bruno.post(f"/v1/rotas/{operacao.id}/solicitacoes")
     assert r.status_code == 201
     assert r.get_json()["viagem_id"] == viagem_id
-    assert r.get_json()["motorista_notificado"] is False
+    assert Notificacao.query.filter_by(usuario_id=motorista.user.id).count() == 1
 
     # RF-11 — o motorista abre a janela de buffer.
     r = condutor.post(f"/v1/viagens/{viagem_id}/iniciar-percurso")
     assert r.status_code == 200, r.get_data(as_text=True)
     assert r.get_json()["status"] == StatusViagem.BUFFER_ABERTO.value
 
-    # RF-12 — quem está sem push enxerga a rodada e a contagem regressiva.
-    ativa = carla.get("/v1/viagens/rodada-ativa").get_json()
-    assert ativa["em_operacao"] is True
-    assert ativa["rodada"]["viagem_id"] == viagem_id
+    # RF-12 — quem está sem push enxerga a viagem e a contagem regressiva.
+    ativa = carla.get(f"/v1/rotas/{operacao.id}/viagem-ativa").get_json()
+    assert ativa["viagem"]["id"] == viagem_id
+    assert ativa["viagem"]["segundos_restantes_buffer"] > 0
 
     # RF-13/RF-14 — trajetos sobrepostos e disjuntos, todos cabem no veículo.
-    for ator, origem, destino in (
-        (ana, p1, p3),
-        (bruno, p2, p4),
-        (carla, p3, p4),
-    ):
-        r = ator.post(
-            f"/v1/viagens/{viagem_id}/declaracao",
-            json={"ponto_origem_id": str(origem.id), "ponto_destino_id": str(destino.id)},
-        )
-        assert r.status_code == 201, r.get_data(as_text=True)
-        assert r.get_json()["status"] == StatusSolicitacao.CONFIRMADO.value
+    # A Carla só recebeu o aviso: declarar já a coloca na viagem.
+    for ator, origem, destino in ((ana, p1, p3), (bruno, p2, p4), (carla, p3, p4)):
+        r = ator.post(f"/v1/viagens/{viagem_id}/declaracao", json=_trajeto(origem, destino))
+        assert r.status_code == 200, r.get_data(as_text=True)
+        assert r.get_json()["status"] == StatusSolicitacao.ATIVA.value
 
-    # RF-15 — o buffer vence e a rodada é consolidada.
-    assert _expirar_buffer(_db, viagem_id) == 1
+    # RF-15 — o buffer vence e quem declarou vira passageiro.
+    assert _expirar_buffer(relogio) == 1
     viagem = _db.session.get(Viagem, viagem_id)
-    assert viagem.status == StatusViagem.EM_ROTA
+    assert viagem.status == StatusViagem.EM_ANDAMENTO
 
-    # Cada confirmado recebe a sua credencial, e ninguém vê a do outro.
+    # Cada passageiro recebe a sua credencial, e ninguém vê a do outro.
     token_ana = ana.get(f"/v1/viagens/{viagem_id}/credencial-embarque").get_json()["token"]
     assert token_ana
     token_bruno = bruno.get(f"/v1/viagens/{viagem_id}/credencial-embarque").get_json()["token"]
@@ -132,10 +132,7 @@ def test_rodada_completa_da_solicitacao_ao_embarque(
     assert paradas[4]["desembarcam"] == 2  # Bruno e Carla
 
     # RF-17 — o motorista valida a credencial no ponto correto.
-    r = condutor.post(
-        f"/v1/embarque/viagens/{viagem_id}/validacao",
-        json={"qr_token": token_ana},
-    )
+    r = condutor.post(f"/v1/embarque/viagens/{viagem_id}/validacao", json={"qr_token": token_ana})
     assert r.status_code == 200, r.get_data(as_text=True)
 
     _db.session.expire_all()
@@ -145,74 +142,67 @@ def test_rodada_completa_da_solicitacao_ao_embarque(
     assert embarcados == 1
 
     # A mesma credencial não embarca duas vezes.
-    r = condutor.post(
-        f"/v1/embarque/viagens/{viagem_id}/validacao",
-        json={"qr_token": token_ana},
-    )
+    r = condutor.post(f"/v1/embarque/viagens/{viagem_id}/validacao", json={"qr_token": token_ana})
     assert r.status_code == 409
 
 
 @pytest.mark.e2e
-def test_rodada_sem_nenhuma_confirmacao_volta_a_ociosa(
-    app, _db, janela_hoje, van, passageiros, condutor
+def test_buffer_sem_nenhum_trajeto_cancela_a_viagem(
+    _db, operacao, van, passageiros, condutor, relogio
 ):
     """RF-15 fluxo secundário 1: ninguém declarou trajeto, a van não sai."""
     ana = passageiros[0]
 
-    viagem_id = ana.post("/v1/viagens/solicitar").get_json()["viagem_id"]
+    viagem_id = ana.post(f"/v1/rotas/{operacao.id}/solicitacoes").get_json()["viagem_id"]
     condutor.post(f"/v1/viagens/{viagem_id}/iniciar-percurso")
 
-    # Ninguém declarou origem/destino durante o buffer.
-    assert _expirar_buffer(_db, viagem_id) == 1
+    assert _expirar_buffer(relogio) == 1
 
     viagem = _db.session.get(Viagem, viagem_id)
-    assert viagem.status == StatusViagem.OCIOSA
-    assert viagem.buffer_expira_em is None
+    assert viagem.status == StatusViagem.CANCELADA
+    assert viagem.inicio_real is None
 
-    # E o interesse solto não fica pendurado para a próxima rodada.
-    interessados = (
-        _db.session.query(AlunosConfirmados)
-        .filter_by(viagem_id=viagem.id, status=StatusSolicitacao.INTERESSADO)
-        .count()
-    )
-    assert interessados == 0
+    # E o interesse solto não fica pendurado para a próxima viagem.
+    ativas = SolicitacaoViagem.query.filter_by(
+        viagem_id=viagem.id, status=StatusSolicitacao.ATIVA
+    ).count()
+    assert ativas == 0
 
 
 @pytest.mark.e2e
 def test_cancelar_no_buffer_devolve_a_vaga_para_quem_tinha_sido_negado(
-    app, _db, janela_hoje, pontos_circuito, onibus, passageiros, condutor
+    _db, operacao, pontos_circuito, onibus, passageiros, condutor
 ):
-    """RF-19 + RF-14: a vaga liberada volta a ser oferecível na mesma rodada."""
+    """RF-19 + RF-14: a vaga liberada volta a ser oferecível na mesma viagem."""
     onibus.capacidade = 1
     _db.session.commit()
 
     p1, p2, _, _ = pontos_circuito
     ana, bruno, *_ = passageiros
 
-    viagem_id = ana.post("/v1/viagens/solicitar").get_json()["viagem_id"]
+    viagem_id = ana.post(f"/v1/rotas/{operacao.id}/solicitacoes").get_json()["viagem_id"]
     condutor.post(f"/v1/viagens/{viagem_id}/iniciar-percurso")
 
-    trajeto = {"ponto_origem_id": str(p1.id), "ponto_destino_id": str(p2.id)}
-
-    assert ana.post(f"/v1/viagens/{viagem_id}/declaracao", json=trajeto).status_code == 201
+    trajeto = _trajeto(p1, p2)
+    assert ana.post(f"/v1/viagens/{viagem_id}/declaracao", json=trajeto).status_code == 200
     # Único assento ocupado: o Bruno é recusado.
     assert bruno.post(f"/v1/viagens/{viagem_id}/declaracao", json=trajeto).status_code == 409
 
     # Ana desiste durante o buffer e a vaga volta a existir.
-    r = ana.delete(f"/v1/viagens/{viagem_id}/declaracao")
+    r = ana.delete(f"/v1/viagens/{viagem_id}/solicitacao")
     assert r.status_code == 200, r.get_data(as_text=True)
-    assert r.get_json()["vaga_liberada"] is True
+    assert r.get_json()["status"] == StatusSolicitacao.CANCELADA.value
 
-    assert bruno.post(f"/v1/viagens/{viagem_id}/declaracao", json=trajeto).status_code == 201
+    assert bruno.post(f"/v1/viagens/{viagem_id}/declaracao", json=trajeto).status_code == 200
 
 
 @pytest.mark.e2e
-def test_sem_consentimento_nao_solicita(client, app, _db, janela_hoje, van, organizacao):
+def test_sem_consentimento_nao_solicita(client, app, _db, operacao, van, organizacao):
     """RF-09: sem aceite do termo, o fluxo nem começa."""
     aluno = AlunoFactory(organizacao_id=organizacao.id)
     _db.session.add(aluno)
     _db.session.commit()
 
-    r = _ator(client, app, aluno).post("/v1/viagens/solicitar")
+    r = _ator(client, app, aluno).post(f"/v1/rotas/{operacao.id}/solicitacoes")
     assert r.status_code == 403, r.get_data(as_text=True)
     assert _db.session.query(Viagem).count() == 0, "nada pode ser criado sem consentimento"

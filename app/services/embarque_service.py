@@ -18,13 +18,7 @@ from app.core.exceptions import AppError, ForbiddenError, NotFoundError, Validat
 from app.core.transaction import transactional
 from app.models.base import db
 from app.models.credencial_embarque import CredencialEmbarque
-from app.models.enum import (
-    StatusOcorrencia,
-    StatusSolicitacao,
-    StatusViagem,
-    TipoOcorrencia,
-    UserRole,
-)
+from app.models.enum import StatusOcorrencia, StatusViagem, TipoOcorrencia, UserRole
 from app.models.ocorrencia import Ocorrencia
 from app.models.user import User
 from app.models.viagem import AlunosConfirmados, TelemetriaViagem, Viagem, ViagemPonto
@@ -35,7 +29,7 @@ logger = logging.getLogger(__name__)
 IdLike = str | uuid.UUID
 
 # Estados em que o veículo já saiu e o motorista opera o roteiro.
-EM_PERCURSO = (StatusViagem.EM_ROTA, StatusViagem.EM_ANDAMENTO)
+EM_PERCURSO = (StatusViagem.EM_ANDAMENTO,)
 # A sincronização (RF-18) também aceita a viagem já encerrada: a fila offline
 # pode chegar depois que o motorista finalizou o percurso.
 SINCRONIZAVEL = EM_PERCURSO + (StatusViagem.FINALIZADA,)
@@ -89,11 +83,7 @@ def _viagem_do_motorista(user_id: IdLike, viagem_id: IdLike, estados: tuple) -> 
 
 def _embarques(viagem: Viagem) -> list[AlunosConfirmados]:
     """Quem o motorista espera embarcar: confirmados que não desistiram (RF-19)."""
-    return [
-        c
-        for c in viagem.alunos_confirmados
-        if c.status == StatusSolicitacao.CONFIRMADO and c.confirmacao
-    ]
+    return [c for c in viagem.alunos_confirmados if c.confirmacao]
 
 
 def _ponto_atual(viagem: Viagem) -> ViagemPonto | None:
@@ -262,7 +252,7 @@ def _conferir(registro: AlunosConfirmados, ponto_esperado: uuid.UUID | None) -> 
     `ponto_esperado` nulo dispensa a conferência de ponto: é o caso do evento
     offline que não informa em qual parada o motorista estava.
     """
-    if registro.status != StatusSolicitacao.CONFIRMADO or not registro.confirmacao:
+    if not registro.confirmacao:
         raise EmbarqueRecusado(
             "Passageiro não consta na lista de embarque desta viagem", "PASSAGEIRO_NAO_PREVISTO"
         )

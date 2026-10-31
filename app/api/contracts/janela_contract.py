@@ -4,19 +4,19 @@ from flask_restx import fields
 
 
 def register_models(api):
-    """Register availability-window models with the API namespace."""
+    """Register janela models with the API namespace."""
 
-    janela_request = api.model(
-        "JanelaRequest",
+    janela_create_request = api.model(
+        "JanelaCreateRequest",
         {
-            "rota_id": fields.String(required=True, description="UUID do circuito"),
             "motorista_id": fields.String(required=True, description="UUID do motorista"),
-            "veiculo_id": fields.String(description="UUID do veículo (opcional)"),
-            "dia": fields.String(required=True, description="SEG, TER, QUA, QUI, SEX, SAB, DOM"),
-            "hora_inicio": fields.String(required=True, description="HH:MM"),
-            "hora_fim": fields.String(required=True, description="HH:MM"),
-            "buffer_minutos": fields.Integer(description="N minutos do buffer (RF-11)"),
-            "ativo": fields.Boolean(description="Janela ativa"),
+            "dia": fields.String(
+                required=True,
+                enum=["SEG", "TER", "QUA", "QUI", "SEX", "SAB", "DOM"],
+                description="Dia da semana",
+            ),
+            "hora_inicio": fields.String(required=True, description="Início (HH:MM, hora local)"),
+            "hora_fim": fields.String(required=True, description="Fim (HH:MM, exclusivo)"),
         },
     )
 
@@ -24,16 +24,13 @@ def register_models(api):
         "JanelaResponse",
         {
             "id": fields.String(description="UUID da janela"),
-            "rota_id": fields.String(description="UUID do circuito"),
-            "rota_nome": fields.String(description="Nome do circuito"),
+            "onibus_id": fields.String(description="UUID do ônibus"),
             "motorista_id": fields.String(description="UUID do motorista"),
             "motorista_nome": fields.String(description="Nome do motorista"),
-            "veiculo_id": fields.String(description="UUID do veículo"),
             "dia": fields.String(description="Dia da semana"),
-            "hora_inicio": fields.String(description="Início da operação"),
-            "hora_fim": fields.String(description="Fim da operação"),
-            "buffer_minutos": fields.Integer(description="N minutos do buffer"),
-            "ativo": fields.Boolean(description="Janela ativa"),
+            "hora_inicio": fields.String(description="Início (HH:MM)"),
+            "hora_fim": fields.String(description="Fim (HH:MM)"),
+            "created_at": fields.DateTime(description="Data de criação"),
         },
     )
 
@@ -45,24 +42,8 @@ def register_models(api):
         },
     )
 
-    janela_vigente_response = api.model(
-        "JanelaVigenteResponse",
-        {
-            "em_operacao": fields.Boolean(description="Há janela em vigor agora"),
-            "janela": fields.Nested(janela_response, allow_null=True),
-            "horarios_hoje": fields.List(fields.Nested(janela_response)),
-        },
-    )
-
-    message_response = api.model(
-        "JanelaMessageResponse",
-        {"message": fields.String(description="Mensagem de confirmação")},
-    )
-
     return {
-        "janela_request": janela_request,
+        "janela_create_request": janela_create_request,
         "janela_response": janela_response,
         "janela_list_response": janela_list_response,
-        "janela_vigente_response": janela_vigente_response,
-        "message_response": message_response,
     }

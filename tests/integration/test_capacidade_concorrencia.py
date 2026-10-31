@@ -6,30 +6,33 @@ em conexões separadas, disputando o último assento.
 """
 
 import threading
-from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from app.core.exceptions import ConflictError
-from app.models.enum import StatusSolicitacao, StatusViagem
-from app.models.viagem import AlunosConfirmados
+from app.models.enum import StatusSolicitacao
+from app.models.viagem import SolicitacaoViagem
 from app.services.capacidade_service import validar_e_reservar
 from tests.factories.user_factory import AlunoFactory
+from tests.factories.viagem_factory import SolicitacaoViagemFactory
 
 
 @pytest.fixture()
-def rodada_com_um_assento(_db, viagem_ociosa, onibus):
+def rodada_com_um_assento(_db, viagem_buffer_aberto, onibus):
     onibus.capacidade = 1
-    viagem_ociosa.status = StatusViagem.BUFFER_ABERTO
-    viagem_ociosa.buffer_expira_em = datetime.now(UTC) + timedelta(minutes=5)
     _db.session.commit()
-    return viagem_ociosa
+    return viagem_buffer_aberto
 
 
 @pytest.fixture()
-def dois_alunos(_db, organizacao):
+def dois_alunos(_db, organizacao, rodada_com_um_assento):
     dupla = [AlunoFactory(organizacao_id=organizacao.id) for _ in range(2)]
     _db.session.add_all(dupla)
+    _db.session.flush()
+    for aluno in dupla:
+        _db.session.add(
+            SolicitacaoViagemFactory(viagem_id=rodada_com_um_assento.id, aluno_id=aluno.usuario_id)
+        )
     _db.session.commit()
     return dupla
 
@@ -74,8 +77,8 @@ def test_duas_declaracoes_simultaneas_nao_estouram_a_capacidade(
 
     _db.session.expire_all()
     confirmados = (
-        _db.session.query(AlunosConfirmados)
-        .filter_by(viagem_id=viagem_id, status=StatusSolicitacao.CONFIRMADO)
+        _db.session.query(SolicitacaoViagem)
+        .filter_by(viagem_id=viagem_id, status=StatusSolicitacao.ATIVA)
         .count()
     )
     assert confirmados == 1, "capacidade estourada: o lock não serializou as declarações"
