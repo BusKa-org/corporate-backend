@@ -28,6 +28,15 @@ def register_models(api):
             "nome_responsavel": fields.String(required=False, description="Nome do responsável"),
             "cpf_responsavel": fields.String(required=False, description="CPF do responsável"),
             "endereco_casa": fields.Nested(endereco_input, required=False),
+            "necessidades_acessibilidade": fields.List(
+                fields.String,
+                required=False,
+                description="CADEIRA_DE_RODAS, MOBILIDADE_REDUZIDA, DEFICIENCIA_VISUAL, "
+                "DEFICIENCIA_AUDITIVA, DEFICIENCIA_INTELECTUAL, OUTRA",
+            ),
+            "observacao_acessibilidade": fields.String(
+                required=False, description="Observação livre sobre acessibilidade"
+            ),
         },
     )
 
@@ -48,12 +57,11 @@ def register_models(api):
             "signup_completed_at": fields.DateTime(description="Data de conclusão do cadastro"),
             "data_nascimento": fields.String(description="Data de nascimento"),
             "is_minor": fields.Boolean(description="Menor de idade"),
-            "email_responsavel": fields.String(description="E-mail do responsável"),
             "nome_responsavel": fields.String(description="Nome do responsável"),
             "cpf_responsavel": fields.String(description="CPF do responsável"),
-            "guardian_consented_at": fields.DateTime(
-                description="Data/hora do consentimento do responsável"
-            ),
+            "foto_url": fields.String(description="Caminho da foto (GET autenticado)"),
+            "necessidades_acessibilidade": fields.List(fields.String),
+            "observacao_acessibilidade": fields.String(),
         },
     )
 

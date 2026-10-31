@@ -43,13 +43,22 @@ def register_models(api):
         {
             "id": fields.String(description="UUID"),
             "data": fields.String(description="Data"),
-            "horario_saida": fields.String(description="Horário"),
-            "sentido": fields.String(description="Sentido"),
-            "status": fields.String(description="AGENDADA, EM_ANDAMENTO, FINALIZADA"),
+            "horario_inicio": fields.String(
+                description="Horário de saída (HH:MM:SS); null em viagem sob demanda"
+            ),
+            "tipo": fields.String(description="Sentido (IDA/VOLTA); null em viagem sob demanda"),
+            "status": fields.String(
+                description="AGENDADA, SOLICITADA, BUFFER_ABERTO, EM_ANDAMENTO, FINALIZADA, CANCELADA"
+            ),
             "rota_id": fields.String(description="UUID da rota"),
             "rota_nome": fields.String(description="Nome da rota"),
-            "motorista_id": fields.String(description="UUID do motorista"),
-            "veiculo_id": fields.String(description="UUID do veículo"),
+            "inicio_real": fields.DateTime(description="Início real da viagem"),
+            "horario_fim": fields.DateTime(description="Fim real da viagem"),
+            "buffer_fim": fields.DateTime(
+                description="Fim do buffer de embarque (sob demanda, BUFFER_ABERTO)"
+            ),
+            "motorista_nome": fields.String(description="Nome do motorista"),
+            "veiculo_placa": fields.String(description="Placa do veículo"),
         },
     )
 
@@ -58,6 +67,9 @@ def register_models(api):
         {
             "aluno_id": fields.String(description="UUID do aluno"),
             "nome": fields.String(description="Nome do aluno"),
+            "foto_url": fields.String(description="Caminho da foto (GET autenticado)"),
+            "necessidades_acessibilidade": fields.List(fields.String),
+            "observacao_acessibilidade": fields.String(),
             "confirmacao": fields.Boolean(description="Confirmado"),
             "ponto_embarque": fields.String(description="UUID do ponto de embarque"),
         },
@@ -69,10 +81,11 @@ def register_models(api):
             "viagem_id": fields.String(description="UUID da viagem"),
             "data": fields.String(description="Data"),
             "dia_semana": fields.String(description="Dia da semana"),
-            "horario_saida": fields.String(description="Horário"),
-            "sentido": fields.String(description="Sentido"),
+            "horario_saida": fields.String(description="Horário; null em viagem sob demanda"),
+            "sentido": fields.String(description="Sentido; null em viagem sob demanda"),
             "rota_id": fields.String(description="UUID da rota"),
             "rota_nome": fields.String(description="Nome da rota"),
+            "status_viagem": fields.String(description="Status da viagem"),
             "status_confirmacao": fields.Boolean(description="Confirmado"),
             "ponto_embarque_id": fields.String(description="UUID do ponto de embarque"),
         },
@@ -94,7 +107,22 @@ def register_models(api):
         },
     )
 
+    # ----- Declaração de trajeto sob demanda (RF-13) -----
+
+    declaracao_trajeto_request = api.model(
+        "DeclaracaoTrajetoRequest",
+        {
+            "ponto_origem_id": fields.String(
+                required=True, description="UUID do ponto de embarque"
+            ),
+            "ponto_destino_id": fields.String(
+                required=True, description="UUID do ponto de desembarque"
+            ),
+        },
+    )
+
     return {
+        "declaracao_trajeto_request": declaracao_trajeto_request,
         "viagem_create_request": viagem_create_request,
         "viagem_confirmacao_request": viagem_confirmacao_request,
         "viagem_acao_request": viagem_acao_request,

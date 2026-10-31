@@ -1,5 +1,7 @@
+from flask import current_app
 from marshmallow import fields, validate
 
+from app.models.enum import TipoViagem
 from app.schemas.common import BaseSchema
 
 from .horario_schema import HorarioResponseSchema
@@ -31,10 +33,22 @@ class RotaHorarioCreateRequestSchema(BaseSchema):
     dias = fields.List(fields.String(), required=True)
 
 
+def validar_buffer_minutos(valor: int) -> None:
+    """Limite lido na hora: cada implantação ajusta no .env (ROTA_BUFFER_MINUTOS_MAX)."""
+    validate.Range(min=1, max=current_app.config["ROTA_BUFFER_MINUTOS_MAX"])(valor)
+
+
+def validar_prazo_inicio_minutos(valor: int) -> None:
+    validate.Range(min=1, max=current_app.config["ROTA_PRAZO_INICIO_MINUTOS_MAX"])(valor)
+
+
 class RotaCreateRequestSchema(BaseSchema):
     """Schema for creating a new route."""
 
     nome = fields.String(required=True)
+    tipo = fields.Enum(TipoViagem, load_default=TipoViagem.FIXA)
+    buffer_minutos = fields.Integer(load_default=None, validate=validar_buffer_minutos)
+    prazo_inicio_minutos = fields.Integer(load_default=None, validate=validar_prazo_inicio_minutos)
     motorista_padrao_id = fields.String(load_default=None)
     veiculo_padrao_id = fields.String(load_default=None)
     pontos = fields.List(fields.Nested(RotaPontoAddRequestSchema), load_default=[])
@@ -49,8 +63,12 @@ class RotaUpdateRequestSchema(BaseSchema):
     """
 
     nome = fields.String()
+    # Só para recusar a troca com 400 em vez de ignorar o campo.
+    tipo = fields.Enum(TipoViagem)
     motorista_padrao_id = fields.String(allow_none=True)
     veiculo_padrao_id = fields.String(allow_none=True)
+    buffer_minutos = fields.Integer(validate=validar_buffer_minutos)
+    prazo_inicio_minutos = fields.Integer(validate=validar_prazo_inicio_minutos)
 
 
 # ==========================================
@@ -61,6 +79,9 @@ class RotaUpdateRequestSchema(BaseSchema):
 class RotaResponseSchema(BaseSchema):
     id = fields.String()
     nome = fields.String()
+    tipo = fields.Enum(TipoViagem)
+    buffer_minutos = fields.Integer()
+    prazo_inicio_minutos = fields.Integer()
     motorista_id = fields.Method("get_motorista_id")
     veiculo_id = fields.Method("get_veiculo_id")
     organizacao_id = fields.String()

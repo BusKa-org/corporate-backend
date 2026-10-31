@@ -4,7 +4,7 @@ ENDERECO = {
     "logradouro": "Rua A",
     "numero": "1",
     "bairro": "Centro",
-    "cidade": "Campina Grande",
+    "cidade": "Cidade Exemplo",
     "cep": "58400000",
     "latitude": -7.2,
     "longitude": -35.9,

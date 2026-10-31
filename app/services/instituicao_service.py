@@ -21,7 +21,7 @@ def create_instituicao(gestor_id: str, data: dict[str, Any]) -> Instituicao:
 
     Raises: ForbiddenError, ValidationError, AppError
     """
-    user = User.query.get(gestor_id)
+    user = db.session.get(User, gestor_id)
     if not user or user.role != UserRole.GESTOR:
         raise ForbiddenError("Permissão negada. Apenas gestores criam instituições.")
 
@@ -71,7 +71,7 @@ def create_instituicao(gestor_id: str, data: dict[str, Any]) -> Instituicao:
 
 def list_all(gestor_id: str) -> list[Instituicao]:
     """List all institutions for user's organizacao."""
-    user = User.query.get(gestor_id)
+    user = db.session.get(User, gestor_id)
     if not user:
         raise NotFoundError("Usuário não encontrado")
 
@@ -107,11 +107,11 @@ def get_by_id(gestor_id: str, inst_id: str) -> Instituicao:
 
     Raises: NotFoundError, ForbiddenError
     """
-    user = User.query.get(gestor_id)
+    user = db.session.get(User, gestor_id)
     if not user:
         raise NotFoundError("Usuário não encontrado")
 
-    inst = Instituicao.query.get(inst_id)
+    inst = db.session.get(Instituicao, inst_id)
     if not inst:
         raise NotFoundError("Instituição não encontrada")
 
@@ -127,11 +127,11 @@ def delete_instituicao(gestor_id: str, inst_id: str) -> None:
 
     Raises: ForbiddenError, NotFoundError, AppError
     """
-    user = User.query.get(gestor_id)
+    user = db.session.get(User, gestor_id)
     if not user or user.role != UserRole.GESTOR:
         raise ForbiddenError("Apenas gestores podem remover instituições")
 
-    inst = Instituicao.query.get(inst_id)
+    inst = db.session.get(Instituicao, inst_id)
     if not inst:
         raise NotFoundError("Instituição não encontrada")
 

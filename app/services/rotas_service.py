@@ -3,20 +3,79 @@
 import logging
 from typing import Any
 
+from flask import current_app
+from sqlalchemy import or_
+
 from app.core.exceptions import (
     AppError,
+    ConflictError,
     ForbiddenError,
     NotFoundError,
     ValidationError,
 )
 from app.models.base import db
-from app.models.enum import DiaDaSemana, SentidoViagem, UserRole
+from app.models.enum import DiaDaSemana, SentidoViagem, StatusViagem, TipoViagem, UserRole
 from app.models.geo import Ponto
 from app.models.rota import DiasOperacao, HorarioRota, Rota, RotaAluno, RotaPonto
 from app.models.user import User
+from app.models.viagem import Viagem
 from app.utils import audit_logger, validate_uuid
 
 logger = logging.getLogger(__name__)
+
+PARAMETROS_SOB_DEMANDA = ("buffer_minutos", "prazo_inicio_minutos")
+
+# RF-04, fluxo secundário 1: enquanto uma viagem que usa o ponto estiver de pé,
+# a alteração espera.
+STATUS_VIAGEM_ATIVA = (
+    StatusViagem.SOLICITADA,
+    StatusViagem.BUFFER_ABERTO,
+    StatusViagem.EM_ANDAMENTO,
+)
+
+
+def _existe_viagem_ativa(rota_ids: list) -> bool:
+    """Viagem ativa em qualquer das rotas, tanto a rodada sob demanda
+    (`Viagem.rota_id`) quanto a viagem programada (via grade de horários)."""
+    if not rota_ids:
+        return False
+
+    return (
+        db.session.query(Viagem.id)
+        .outerjoin(HorarioRota, Viagem.horario_rota_id == HorarioRota.id)
+        .filter(
+            Viagem.status.in_(STATUS_VIAGEM_ATIVA),
+            or_(Viagem.rota_id.in_(rota_ids), HorarioRota.rota_id.in_(rota_ids)),
+        )
+        .first()
+        is not None
+    )
+
+
+def garantir_rota_sem_viagem_ativa(rota_id: str) -> None:
+    """RF-04: bloqueia mexer na sequência de pontos de um circuito em uso."""
+    if _existe_viagem_ativa([rota_id]):
+        raise ConflictError(
+            "Há viagens ativas usando esta rota; aguarde a finalização para alterar os pontos"
+        )
+
+
+def garantir_ponto_sem_viagem_ativa(ponto_id: str) -> None:
+    """RF-04: bloqueia editar ou remover um ponto usado por viagem ativa."""
+    rota_ids = [
+        row[0] for row in db.session.query(RotaPonto.rota_id).filter_by(ponto_id=ponto_id).all()
+    ]
+    if _existe_viagem_ativa(rota_ids):
+        raise ConflictError(
+            "Há viagens ativas usando este ponto; aguarde a finalização para alterá-lo"
+        )
+
+
+def _renumerar_pontos(rota_id: str) -> None:
+    """Mantém `RotaPonto.ordem` como 1..n sem buracos após adição/remoção."""
+    pontos = RotaPonto.query.filter_by(rota_id=rota_id).order_by(RotaPonto.ordem).all()
+    for posicao, rp in enumerate(pontos, start=1):
+        rp.ordem = posicao
 
 
 def list_all_rotas(user_id: str) -> list[Rota]:
@@ -33,7 +92,7 @@ def list_all_rotas(user_id: str) -> list[Rota]:
         NotFoundError: If user not found
     """
     validate_uuid(user_id, "User ID")
-    user = User.query.get(user_id)
+    user = db.session.get(User, user_id)
     if not user:
         raise NotFoundError("Usuário não encontrado")
 
@@ -43,7 +102,7 @@ def list_all_rotas(user_id: str) -> list[Rota]:
 
 def list_my_rotas(user_id: str) -> list[Rota]:
     """List routes linked to the logged-in user."""
-    user = User.query.get(user_id)
+    user = db.session.get(User, user_id)
     if not user:
         raise NotFoundError("Usuário não encontrado")
 
@@ -74,6 +133,26 @@ def create_rota(gestor_id: str, data: dict[str, Any]) -> Rota:
     if not nome:
         raise ValidationError("Nome da rota é obrigatório")
 
+    tipo = data.get("tipo", TipoViagem.FIXA)
+    parametros = {}
+    if tipo == TipoViagem.SOB_DEMANDA:
+        if data.get("horarios"):
+            raise ValidationError("Rotas sob demanda não possuem grade de horários")
+        buffer_minutos = data.get("buffer_minutos")
+        prazo_inicio_minutos = data.get("prazo_inicio_minutos")
+        parametros = {
+            "buffer_minutos": buffer_minutos,
+            "prazo_inicio_minutos": prazo_inicio_minutos,
+        }
+        if buffer_minutos is None:
+            parametros["buffer_minutos"] = current_app.config["ROTA_BUFFER_MINUTOS_PADRAO"]
+        if prazo_inicio_minutos is None:
+            parametros["prazo_inicio_minutos"] = current_app.config[
+                "ROTA_PRAZO_INICIO_MINUTOS_PADRAO"
+            ]
+    elif any(data.get(k) is not None for k in PARAMETROS_SOB_DEMANDA):
+        raise ValidationError("Parâmetros de buffer só se aplicam a rotas sob demanda")
+
     try:
         # If a driver creates a route, automatically assign themselves as the default driver
         motorista_id = data.get("motorista_padrao_id")
@@ -82,6 +161,8 @@ def create_rota(gestor_id: str, data: dict[str, Any]) -> Rota:
 
         rota = Rota(
             nome=nome,
+            tipo=tipo,
+            **parametros,
             motorista_padrao_id=motorista_id,
             veiculo_padrao_id=data.get("veiculo_padrao_id"),
             organizacao_id=user.organizacao_id,
@@ -97,7 +178,7 @@ def create_rota(gestor_id: str, data: dict[str, Any]) -> Rota:
 
                 if ponto_id:
                     # Link an existing ponto by ID
-                    existing_ponto = Ponto.query.get(ponto_id)
+                    existing_ponto = db.session.get(Ponto, ponto_id)
                     if not existing_ponto:
                         logger.warning(f"Ponto {ponto_id} not found, skipping")
                         continue
@@ -149,12 +230,12 @@ def add_ponto(gestor_id: str, rota_id: str, data: dict[str, Any]) -> None:
 
     Raises: ForbiddenError, NotFoundError, ValidationError, AppError
     """
-    user = User.query.get(gestor_id)
+    user = db.session.get(User, gestor_id)
 
     if not user or user.role not in (UserRole.GESTOR, UserRole.MOTORISTA):
         raise ForbiddenError("Permissão negada")
 
-    rota = Rota.query.get(rota_id)
+    rota = db.session.get(Rota, rota_id)
     if not rota:
         raise NotFoundError("Rota não encontrada")
 
@@ -165,18 +246,21 @@ def add_ponto(gestor_id: str, rota_id: str, data: dict[str, Any]) -> None:
     if not pontos or not isinstance(pontos, list):
         raise ValidationError("A rota deve conter pelo menos um ponto válido")
 
+    garantir_rota_sem_viagem_ativa(rota.id)
+
     try:
         # Clear existing route points (replacing with new set)
         RotaPonto.query.filter_by(rota_id=rota.id).delete()
         db.session.flush()
 
-        for p in pontos:
+        # A ordem enviada é uma preferência: o que persiste é a sequência
+        # 1..n sem buracos que o RF-14 usa para numerar os segmentos.
+        for ordem, p in enumerate(sorted(pontos, key=lambda x: x.get("ordem", 0)), start=1):
             ponto_id = p.get("ponto_id")
-            ordem = p.get("ordem", 1)
 
             # Case 1: Link existing point by ID
             if ponto_id:
-                existing_ponto = Ponto.query.get(ponto_id)
+                existing_ponto = db.session.get(Ponto, ponto_id)
                 if not existing_ponto:
                     logger.warning(f"Point {ponto_id} not found, skipping")
                     continue
@@ -208,6 +292,9 @@ def add_ponto(gestor_id: str, rota_id: str, data: dict[str, Any]) -> None:
                 novo_rota_ponto = RotaPonto(rota_id=rota.id, ponto_id=ponto.id, ordem=ordem)
                 db.session.add(novo_rota_ponto)
 
+        # Fecha os buracos deixados pelos pontos ignorados acima.
+        _renumerar_pontos(rota.id)
+
         db.session.commit()
 
     except Exception as e:
@@ -216,22 +303,61 @@ def add_ponto(gestor_id: str, rota_id: str, data: dict[str, Any]) -> None:
         raise AppError(f"Erro ao adicionar pontos: {str(e)}", 500)
 
 
+def remover_ponto(gestor_id: str, rota_id: str, ponto_id: str) -> None:
+    """RF-04: remove um ponto do circuito e renumera a sequência restante.
+
+    Raises: ForbiddenError, NotFoundError, ConflictError
+    """
+    user = db.session.get(User, gestor_id)
+    if not user or user.role != UserRole.GESTOR:
+        raise ForbiddenError("Apenas gestores gerenciam os pontos do circuito")
+
+    rota = db.session.get(Rota, rota_id)
+    if not rota:
+        raise NotFoundError("Rota não encontrada")
+
+    if rota.organizacao_id != user.organizacao_id:
+        raise ForbiddenError("Acesso negado")
+
+    rota_ponto = db.session.get(RotaPonto, (rota.id, ponto_id))
+    if not rota_ponto:
+        raise NotFoundError("Ponto não encontrado nesta rota")
+
+    garantir_rota_sem_viagem_ativa(rota.id)
+
+    db.session.delete(rota_ponto)
+    db.session.flush()
+    _renumerar_pontos(rota.id)
+    db.session.commit()
+
+    audit_logger.log_user_action(
+        action="remover_ponto",
+        user_id=gestor_id,
+        resource_type="rota",
+        resource_id=str(rota_id),
+        details={"ponto_id": str(ponto_id)},
+    )
+
+
 def add_horario(gestor_id: str, rota_id: str, data: dict[str, Any]) -> HorarioRota:
     """
     Add a schedule to a route.
 
     Raises: ForbiddenError, NotFoundError, ValidationError, AppError
     """
-    user = User.query.get(gestor_id)
+    user = db.session.get(User, gestor_id)
     if not user or user.role != UserRole.GESTOR:
         raise ForbiddenError("Apenas gestores gerenciam horários")
 
-    rota = Rota.query.get(rota_id)
+    rota = db.session.get(Rota, rota_id)
     if not rota:
         raise NotFoundError("Rota não encontrada")
 
     if rota.organizacao_id != user.organizacao_id:
         raise ForbiddenError("Acesso negado")
+
+    if rota.tipo == TipoViagem.SOB_DEMANDA:
+        raise ValidationError("Rotas sob demanda não possuem grade de horários")
 
     dias_list = data.get("dias", [])
     if not dias_list:
@@ -265,11 +391,11 @@ def get_horarios(user_id: str, rota_id: str) -> list:
 
     Raises: NotFoundError, ForbiddenError
     """
-    user = User.query.get(user_id)
+    user = db.session.get(User, user_id)
     if not user:
         raise NotFoundError("Usuário não encontrado")
 
-    rota = Rota.query.get(rota_id)
+    rota = db.session.get(Rota, rota_id)
     if not rota:
         raise NotFoundError("Rota não encontrada")
 
@@ -288,11 +414,11 @@ def get_by_id(user_id: str, rota_id: str) -> Rota:
 
     Raises: NotFoundError, ForbiddenError
     """
-    user = User.query.get(user_id)
+    user = db.session.get(User, user_id)
     if not user:
         raise NotFoundError("Usuário não encontrado")
 
-    rota = Rota.query.get(rota_id)
+    rota = db.session.get(Rota, rota_id)
     if not rota:
         raise NotFoundError("Rota não encontrada")
 
@@ -325,12 +451,12 @@ def update_rota(user_id: str, rota_id: str, data: dict[str, Any]) -> Rota:
     validate_uuid(user_id, "User ID")
     validate_uuid(rota_id, "Rota ID")
 
-    user = User.query.get(user_id)
+    user = db.session.get(User, user_id)
     if not user or user.role != UserRole.GESTOR:
         logger.warning(f"Non-gestor {user_id} attempted to update route {rota_id}")
         raise ForbiddenError("Permissão negada")
 
-    rota = Rota.query.get(rota_id)
+    rota = db.session.get(Rota, rota_id)
     if not rota:
         raise NotFoundError("Rota não encontrada")
 
@@ -352,6 +478,12 @@ def update_rota(user_id: str, rota_id: str, data: dict[str, Any]) -> Rota:
         )
         raise ForbiddenError("Acesso negado")
 
+    if "tipo" in data and data["tipo"] != rota.tipo:
+        raise ValidationError("O tipo da rota não pode ser alterado; crie uma nova rota")
+
+    if rota.tipo != TipoViagem.SOB_DEMANDA and any(k in data for k in PARAMETROS_SOB_DEMANDA):
+        raise ValidationError("Parâmetros de buffer só se aplicam a rotas sob demanda")
+
     updated_fields: list[str] = []
 
     try:
@@ -366,6 +498,11 @@ def update_rota(user_id: str, rota_id: str, data: dict[str, Any]) -> Rota:
         if "veiculo_padrao_id" in data:
             rota.veiculo_padrao_id = data.get("veiculo_padrao_id")
             updated_fields.append("veiculo_padrao_id")
+
+        for campo in PARAMETROS_SOB_DEMANDA:
+            if campo in data:
+                setattr(rota, campo, data[campo])
+                updated_fields.append(campo)
 
         db.session.commit()
 
@@ -402,12 +539,12 @@ def delete_rota(user_id: str, rota_id: str) -> None:
     validate_uuid(user_id, "User ID")
     validate_uuid(rota_id, "Rota ID")
 
-    user = User.query.get(user_id)
+    user = db.session.get(User, user_id)
     if not user or user.role != UserRole.GESTOR:
         logger.warning(f"Non-gestor {user_id} attempted to delete route {rota_id}")
         raise ForbiddenError("Permissão negada")
 
-    rota = Rota.query.get(rota_id)
+    rota = db.session.get(Rota, rota_id)
     if not rota:
         raise NotFoundError("Rota não encontrada")
 
@@ -451,11 +588,11 @@ def delete_rota(user_id: str, rota_id: str) -> None:
 
 
 def get_pontos_by_rota(user_id: str, rota_id: str) -> list[dict[str, Any]]:
-    user = User.query.get(user_id)
+    user = db.session.get(User, user_id)
     if not user:
         raise NotFoundError("Usuário não encontrado")
 
-    rota = Rota.query.get(rota_id)
+    rota = db.session.get(Rota, rota_id)
     if not rota:
         raise NotFoundError("Rota não encontrada")
 

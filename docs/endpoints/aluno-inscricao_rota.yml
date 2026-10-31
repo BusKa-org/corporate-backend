@@ -3,8 +3,8 @@ tags:
   - Aluno
 summary: Inscrever ou Desinscrever-se em uma Rota
 description: |
-  Permite que o aluno se inscreva ou cancele sua inscrição em uma rota específica.  
-  Apenas usuários com o papel **aluno** podem acessar este endpoint.  
+  Permite que o aluno se inscreva ou cancele sua inscrição em uma rota específica.
+  Apenas usuários com o papel **aluno** podem acessar este endpoint.
   É necessário um **token JWT** válido no cabeçalho `Authorization`.
 operationId: gerenciarInscricaoRota
 security:

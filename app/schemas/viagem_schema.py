@@ -131,6 +131,15 @@ class ViagemListQuerySchema(BaseSchema):
 # ==========================================
 
 
+def _rota_da_viagem(obj):
+    # On-demand trips have no horario_rota; older fixed trips may lack rota_id.
+    if obj.rota:
+        return obj.rota
+    if obj.horario_rota:
+        return obj.horario_rota.rota
+    return None
+
+
 class MessageResponseSchema(BaseSchema):
     message = fields.String(required=True)
 
@@ -138,6 +147,14 @@ class MessageResponseSchema(BaseSchema):
 class ViagemAlunoConfirmacaoResponseSchema(BaseSchema):
     aluno_id = fields.String()
     nome = fields.String(attribute="aluno.nome")
+    # Motorista confere a foto no embarque (RF-17) e vê quem precisa de ajuda.
+    foto_url = fields.String(attribute="aluno.foto_url", dump_default=None)
+    necessidades_acessibilidade = fields.List(
+        fields.String(), attribute="aluno.necessidades_acessibilidade"
+    )
+    observacao_acessibilidade = fields.String(
+        attribute="aluno.observacao_acessibilidade", dump_default=None
+    )
     confirmacao = fields.Boolean()
     ponto_embarque = fields.String(attribute="ponto_embarque.apelido")
     ponto_destino = fields.String(attribute="ponto_destino.apelido")
@@ -162,6 +179,7 @@ class ViagemResponseSchema(BaseSchema):
     horario_inicio = fields.Method("get_horario_inicio")
     horario_fim = fields.DateTime(attribute="fim_real")
     inicio_real = fields.DateTime()  # Actual start time for elapsed calculation
+    buffer_fim = fields.DateTime()
     tipo = fields.Method("get_tipo")
     rota_id = fields.Method("get_rota_id")
     rota_nome = fields.Method("get_rota_nome")
@@ -177,8 +195,9 @@ class ViagemResponseSchema(BaseSchema):
 
     def get_total_alunos(self, obj):
         """Total students enrolled in the route."""
-        if obj.horario_rota and obj.horario_rota.rota:
-            return len(obj.horario_rota.rota.alunos_inscritos)
+        rota = _rota_da_viagem(obj)
+        if rota:
+            return len(rota.alunos_inscritos)
         return 0
 
     def get_alunos_confirmados_count(self, obj):
@@ -204,21 +223,19 @@ class ViagemResponseSchema(BaseSchema):
         return None
 
     def get_rota_id(self, obj):
-        if obj.horario_rota and obj.horario_rota.rota:
-            return str(obj.horario_rota.rota.id)
-        return None
+        rota = _rota_da_viagem(obj)
+        return str(rota.id) if rota else None
 
     def get_rota_nome(self, obj):
-        if obj.horario_rota and obj.horario_rota.rota:
-            return obj.horario_rota.rota.nome
-        return None
+        rota = _rota_da_viagem(obj)
+        return rota.nome if rota else None
 
     origem = fields.Method("get_origem")
     destino = fields.Method("get_destino")
 
     def get_origem(self, obj):
-        if obj.horario_rota and obj.horario_rota.rota:
-            rota = obj.horario_rota.rota
+        rota = _rota_da_viagem(obj)
+        if rota:
             if rota.pontos_padrao and len(rota.pontos_padrao) > 0:
                 primeiro_ponto = sorted(rota.pontos_padrao, key=lambda p: p.ordem)[0]
                 if primeiro_ponto.ponto:
@@ -226,8 +243,8 @@ class ViagemResponseSchema(BaseSchema):
         return None
 
     def get_destino(self, obj):
-        if obj.horario_rota and obj.horario_rota.rota:
-            rota = obj.horario_rota.rota
+        rota = _rota_da_viagem(obj)
+        if rota:
             if rota.pontos_padrao and len(rota.pontos_padrao) > 0:
                 ultimo_ponto = sorted(rota.pontos_padrao, key=lambda p: p.ordem)[-1]
                 if ultimo_ponto.ponto:
@@ -277,10 +294,11 @@ class ViagemAgendaAlunoResponseSchema(BaseSchema):
 
     def get_total_alunos(self, obj):
         """Total students subscribed to the route."""
-        if obj.horario_rota and obj.horario_rota.rota:
+        rota = _rota_da_viagem(obj)
+        if rota:
             from app.models.rota import RotaAluno
 
-            return RotaAluno.query.filter_by(rota_id=obj.horario_rota.rota.id).count()
+            return RotaAluno.query.filter_by(rota_id=rota.id).count()
         return 0
 
     def _find_confirmacao(self, obj):
@@ -303,11 +321,11 @@ class ViagemAgendaAlunoResponseSchema(BaseSchema):
         return obj.horario_rota.sentido.name if obj.horario_rota else None
 
     def get_rota_id(self, obj):
-        rota = obj.horario_rota.rota if obj.horario_rota else None
+        rota = _rota_da_viagem(obj)
         return str(rota.id) if rota else None
 
     def get_rota_nome(self, obj):
-        rota = obj.horario_rota.rota if obj.horario_rota else None
+        rota = _rota_da_viagem(obj)
         return rota.nome if rota else None
 
     def get_status_confirmacao(self, obj):
@@ -317,6 +335,25 @@ class ViagemAgendaAlunoResponseSchema(BaseSchema):
     def get_ponto_embarque_id(self, obj):
         c = self._find_confirmacao(obj)
         return str(c.ponto_embarque_id) if (c and c.ponto_embarque_id) else None
+
+
+# ==========================================
+# Declaração de trajeto sob demanda (RF-13)
+# ==========================================
+
+
+class DeclaracaoTrajetoRequestSchema(BaseSchema):
+    """RF-13: origem e destino entre os pontos fixos do circuito."""
+
+    ponto_origem_id = fields.UUID(required=True)
+    ponto_destino_id = fields.UUID(required=True)
+
+    @validates_schema
+    def validate_pontos(self, data: dict[str, Any], **kwargs) -> None:
+        if data.get("ponto_origem_id") == data.get("ponto_destino_id"):
+            raise MarshmallowValidationError(
+                {"ponto_destino_id": ["A origem e o destino precisam ser pontos diferentes."]}
+            )
 
 
 class ViagemListResponseSchema(BaseSchema):

@@ -10,7 +10,6 @@ from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
 
-
 # revision identifiers, used by Alembic
 revision: str = "a1b2c3d4e5f7"
 down_revision: Union[str, None] = "d4e5f6a7b8c9"
@@ -34,16 +33,14 @@ def upgrade() -> None:
     # suffix length (instead of a fixed LEFT(..., 16)) keeps the result
     # within varchar(20) even once rn reaches 4+ digits. `nome` is NOT NULL
     # in the initial schema, so there is no NULL-name case to handle.
-    op.execute(
-        """
+    op.execute("""
         WITH ranked AS (SELECT id, ROW_NUMBER() OVER (ORDER BY id) AS rn FROM organizacao)
         UPDATE organizacao o
         SET sigla = LEFT(UPPER(REPLACE(o.nome, ' ', '')), 20 - LENGTH('_' || r.rn::text))
                     || '_' || r.rn::text
         FROM ranked r
         WHERE r.id = o.id
-        """
-    )
+        """)
     op.alter_column("organizacao", "sigla", nullable=False)
     op.create_index("ix_organizacao_sigla", "organizacao", ["sigla"], unique=True)
 
@@ -89,12 +86,10 @@ def downgrade() -> None:
     # after the truncation point), which breaks the unique index below. A
     # real IBGE code is meaningless for a corporate tenant anyway, so use a
     # synthetic, collision-free value instead.
-    op.execute(
-        """
+    op.execute("""
         WITH r AS (SELECT id, ROW_NUMBER() OVER (ORDER BY id) n FROM organizacao)
         UPDATE organizacao o SET codigo_ibge = LPAD(r.n::text, 10, '0') FROM r WHERE r.id = o.id
-        """
-    )
+        """)
     op.alter_column("organizacao", "codigo_ibge", nullable=False)
     op.create_index("ix_prefeitura_codigo_ibge", "organizacao", ["codigo_ibge"], unique=True)
 

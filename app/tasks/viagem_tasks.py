@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 from app.extensions import scheduler
 from app.models.base import db
 from app.models.viagem import AlunosConfirmados, Viagem
+from app.services import buffer_service
 from app.services.notificacao_service import NotificacaoService
 from app.utils.geo_utils import calcular_distancia_metros
 
@@ -68,3 +69,13 @@ def realizar_auto_checkin(viagem_id: str, aluno_id: str, tentativa: int) -> None
                 trigger="date",
                 run_date=nova_data,
             )
+
+
+def job_fechar_buffers_expirados(app) -> None:
+    with app.app_context():
+        buffer_service.fechar_buffers_expirados()
+
+
+def job_alertar_prazo_inicio(app) -> None:
+    with app.app_context():
+        buffer_service.alertar_prazo_inicio()

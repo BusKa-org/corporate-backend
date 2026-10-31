@@ -7,6 +7,7 @@ from flask_apscheduler import APScheduler
 from app.tasks.convite_tasks import enviar_convites_pendentes
 from app.tasks.notificacao_tasks import verificar_viagens_10min, verificar_viagens_24h
 from app.tasks.retencao_tasks import job_anonimizar_retencoes
+from app.tasks.viagem_tasks import job_alertar_prazo_inicio, job_fechar_buffers_expirados
 
 
 def init_scheduler(app: Flask, scheduler: APScheduler):
@@ -60,6 +61,24 @@ def init_scheduler(app: Flask, scheduler: APScheduler):
         day=1,
         hour=3,
         minute=0,
+        replace_existing=True,
+    )
+
+    scheduler.add_job(
+        id="job_fechar_buffers",
+        func=job_fechar_buffers_expirados,
+        args=[app],
+        trigger="interval",
+        seconds=app.config["JOB_BUFFER_INTERVALO_SEGUNDOS"],
+        replace_existing=True,
+    )
+
+    scheduler.add_job(
+        id="job_prazo_inicio",
+        func=job_alertar_prazo_inicio,
+        args=[app],
+        trigger="interval",
+        seconds=app.config["JOB_PRAZO_INICIO_INTERVALO_SEGUNDOS"],
         replace_existing=True,
     )
 

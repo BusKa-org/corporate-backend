@@ -3,8 +3,8 @@ tags:
   - Aluno
 summary: Listar Rotas do Município
 description: |
-  Retorna todas as rotas disponíveis no município do aluno autenticado.  
-  Apenas usuários com o papel **aluno** podem acessar este endpoint.  
+  Retorna todas as rotas disponíveis no município do aluno autenticado.
+  Apenas usuários com o papel **aluno** podem acessar este endpoint.
   Requer um **JWT token** válido no cabeçalho `Authorization`.
 operationId: listarRotasAluno
 security:

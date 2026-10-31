@@ -14,13 +14,14 @@ from app.models.base import db
 from app.models.enum import UserRole
 from app.models.onibus import Onibus
 from app.models.user import User
+from app.utils.validators import validate_uuid
 
 logger = logging.getLogger(__name__)
 
 
 def list_all(user_id: str) -> list[Onibus]:
     """List all buses for user's organizacao."""
-    user = User.query.get(user_id)
+    user = db.session.get(User, user_id)
     if not user:
         raise NotFoundError("Usuário não encontrado")
 
@@ -33,11 +34,11 @@ def get_by_id(user_id: str, onibus_id: str) -> Onibus:
 
     Raises: NotFoundError, ForbiddenError
     """
-    user = User.query.get(user_id)
+    user = db.session.get(User, user_id)
     if not user:
         raise NotFoundError("Usuário não encontrado")
 
-    onibus = Onibus.query.get(onibus_id)
+    onibus = db.session.get(Onibus, validate_uuid(onibus_id, "ID do ônibus"))
     if not onibus:
         raise NotFoundError("Ônibus não encontrado")
 
@@ -53,7 +54,7 @@ def create_onibus(user_id: str, data: dict[str, Any]) -> Onibus:
 
     Raises: ForbiddenError, ValidationError, ConflictError, AppError
     """
-    user = User.query.get(user_id)
+    user = db.session.get(User, user_id)
 
     if not user or user.role != UserRole.GESTOR:
         raise ForbiddenError("Apenas gestores podem gerenciar a frota")
@@ -91,12 +92,12 @@ def update_onibus(user_id: str, onibus_id: str, data: dict[str, Any]) -> Onibus:
 
     Raises: ForbiddenError, NotFoundError, ConflictError, AppError
     """
-    user = User.query.get(user_id)
+    user = db.session.get(User, user_id)
 
     if not user or user.role != UserRole.GESTOR:
         raise ForbiddenError("Apenas gestores podem gerenciar a frota")
 
-    onibus = Onibus.query.get(onibus_id)
+    onibus = db.session.get(Onibus, validate_uuid(onibus_id, "ID do ônibus"))
     if not onibus:
         raise NotFoundError("Ônibus não encontrado")
 
@@ -133,12 +134,12 @@ def delete_onibus(user_id: str, onibus_id: str) -> None:
 
     Raises: ForbiddenError, NotFoundError, AppError
     """
-    user = User.query.get(user_id)
+    user = db.session.get(User, user_id)
 
     if not user or user.role != UserRole.GESTOR:
         raise ForbiddenError("Apenas gestores podem gerenciar a frota")
 
-    onibus = Onibus.query.get(onibus_id)
+    onibus = db.session.get(Onibus, validate_uuid(onibus_id, "ID do ônibus"))
     if not onibus:
         raise NotFoundError("Ônibus não encontrado")
 

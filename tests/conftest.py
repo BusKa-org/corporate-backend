@@ -1,6 +1,6 @@
 import os
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 
 import psycopg2
@@ -13,10 +13,10 @@ from app import create_app
 from app.core.config import Settings
 from app.models.base import db
 from app.models.consentimento import ACEITE, Consentimento
-from app.models.enum import DiaDaSemana, StatusViagem, UserStatus
+from app.models.enum import DiaDaSemana, StatusViagem, TipoViagem, UserStatus
 from app.services.consentimento_service import VERSAO_TERMO_VIGENTE
 from tests.factories.geo_factory import PontoFactory
-from tests.factories.onibus_factory import OnibusFactory
+from tests.factories.onibus_factory import JanelaDisponibilidadeFactory, OnibusFactory
 from tests.factories.organizacao_factory import OrganizacaoFactory
 from tests.factories.rota_factory import (
     DiasOperacaoFactory,
@@ -26,7 +26,11 @@ from tests.factories.rota_factory import (
     RotaPontoFactory,
 )
 from tests.factories.user_factory import AlunoFactory, GestorFactory, MotoristaFactory
-from tests.factories.viagem_factory import AlunosConfirmadosFactory, ViagemFactory
+from tests.factories.viagem_factory import (
+    AlunosConfirmadosFactory,
+    SolicitacaoViagemFactory,
+    ViagemFactory,
+)
 
 
 class AuthenticatedClient:
@@ -140,6 +144,8 @@ def app():
             "JWT_SECRET_KEY": "change_this_secret_key_use_long_random_string",
             "SQLALCHEMY_DATABASE_URI": _TEST_DB_URI,
             "SQLALCHEMY_TRACK_MODIFICATIONS": False,
+            # Suíte faz muitos logins seguidos; o limite tem testes próprios.
+            "RATELIMIT_ENABLED": False,
         }
     )
     return app
@@ -369,6 +375,65 @@ def viagem_futura_iniciada_com_motorista(_db, horario_rota, motorista):
     return v
 
 
+# ==========================================
+# Circuito sob demanda com capacidade por trecho — RF-13 a RF-18
+# ==========================================
+#
+# Um circuito de quatro pontos ordenados dá três segmentos (P1→P2, P2→P3,
+# P3→P4), o mínimo para exercitar trajetos disjuntos reusando o mesmo assento
+# na validação de capacidade (RF-14).
+
+
+@pytest.fixture()
+def pontos_circuito(_db, organizacao):
+    pontos = [PontoFactory(organizacao_id=organizacao.id) for _ in range(4)]
+    _db.session.add_all(pontos)
+    _db.session.commit()
+    return pontos
+
+
+@pytest.fixture()
+def circuito(_db, rota_sob_demanda, pontos_circuito):
+    """A rota sob demanda com os quatro pontos em ordem."""
+    for ordem, p in enumerate(pontos_circuito, start=1):
+        _db.session.add(RotaPontoFactory(rota_id=rota_sob_demanda.id, ponto_id=p.id, ordem=ordem))
+    _db.session.commit()
+    return rota_sob_demanda
+
+
+@pytest.fixture()
+def viagem_buffer_aberto(_db, circuito, motorista, onibus):
+    """Viagem do circuito com o buffer aberto pelo relógio real, ainda sem solicitações."""
+    v = ViagemFactory(
+        data=date.today(),
+        rota_id=circuito.id,
+        motorista_id=motorista.user.id,
+        veiculo_id=onibus.id,
+        status=StatusViagem.BUFFER_ABERTO,
+        buffer_fim=datetime.now(UTC) + timedelta(minutes=5),
+    )
+    _db.session.add(v)
+    _db.session.commit()
+    return v
+
+
+def reservar_trajeto(_db, viagem, aluno_id, origem_id, destino_id):
+    """Solicita (se ainda não solicitou) e declara o trajeto na viagem."""
+    from app.models.enum import StatusSolicitacao
+    from app.models.viagem import SolicitacaoViagem
+    from app.services import capacidade_service
+
+    ativa = (
+        _db.session.query(SolicitacaoViagem)
+        .filter_by(viagem_id=viagem.id, aluno_id=aluno_id, status=StatusSolicitacao.ATIVA)
+        .first()
+    )
+    if not ativa:
+        _db.session.add(SolicitacaoViagemFactory(viagem_id=viagem.id, aluno_id=aluno_id))
+        _db.session.commit()
+    return capacidade_service.validar_e_reservar(viagem.id, aluno_id, origem_id, destino_id)
+
+
 @pytest.fixture()
 def confirmacao_aluno(_db, viagem_futura_agendada_com_motorista, aluno, ponto):
     conf = AlunosConfirmadosFactory(
@@ -381,3 +446,81 @@ def confirmacao_aluno(_db, viagem_futura_agendada_com_motorista, aluno, ponto):
     _db.session.add(conf)
     _db.session.commit()
     return conf
+
+
+# ---------------------------------------------------------------------------
+# Viagens sob demanda (RF-05, RF-10, RF-11, RF-12, RF-19)
+# ---------------------------------------------------------------------------
+
+# Segunda-feira, 10:00 no fuso padrão (America/Sao_Paulo, UTC-3): dentro da janela padrão 08:00-12:00.
+SEGUNDA_10H_LOCAL = datetime(2026, 11, 2, 13, 0, tzinfo=UTC)
+
+
+class Relogio:
+    def __init__(self, agora: datetime):
+        self.agora = agora
+
+    def ajustar(self, agora: datetime) -> None:
+        self.agora = agora
+
+    def avancar(self, **delta: float) -> None:
+        self.agora = self.agora + timedelta(**delta)
+
+
+@pytest.fixture()
+def relogio(monkeypatch):
+    """Fixa app.utils.tempo.agora_utc (e por tabela agora_local). Começa em SEGUNDA_10H_LOCAL."""
+    from app.utils import tempo
+
+    r = Relogio(SEGUNDA_10H_LOCAL)
+    monkeypatch.setattr(tempo, "agora_utc", lambda: r.agora)
+    return r
+
+
+@pytest.fixture()
+def rota_sob_demanda(_db, organizacao, onibus):
+    r = RotaFactory(
+        organizacao_id=organizacao.id,
+        tipo=TipoViagem.SOB_DEMANDA,
+        buffer_minutos=5,
+        prazo_inicio_minutos=10,
+        motorista_padrao_id=None,
+        veiculo_padrao_id=onibus.id,
+    )
+    _db.session.add(r)
+    _db.session.commit()
+    return r
+
+
+@pytest.fixture()
+def janela(_db, onibus, motorista):
+    """Janela de segunda 08:00-12:00 do `onibus`, com o `motorista`."""
+    j = JanelaDisponibilidadeFactory(
+        onibus_id=onibus.id,
+        motorista_id=motorista.user.id,
+        dia=DiaDaSemana.SEG,
+        hora_inicio=time(8, 0),
+        hora_fim=time(12, 0),
+    )
+    _db.session.add(j)
+    _db.session.commit()
+    return j
+
+
+@pytest.fixture()
+def viagem_solicitada(_db, rota_sob_demanda, onibus, motorista, aluno):
+    """Viagem SOLICITADA da rota sob demanda, com solicitação ATIVA do `aluno`."""
+    v = ViagemFactory(
+        rota_id=rota_sob_demanda.id,
+        horario_rota_id=None,
+        data=SEGUNDA_10H_LOCAL.date(),
+        status=StatusViagem.SOLICITADA,
+        motorista_id=motorista.user.id,
+        veiculo_id=onibus.id,
+        created_at=SEGUNDA_10H_LOCAL,
+    )
+    _db.session.add(v)
+    _db.session.flush()
+    _db.session.add(SolicitacaoViagemFactory(viagem_id=v.id, aluno_id=aluno.user.id))
+    _db.session.commit()
+    return v

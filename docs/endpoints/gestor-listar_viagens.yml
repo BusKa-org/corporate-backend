@@ -3,8 +3,8 @@ tags:
   - Gestor
 summary: Listar Viagens do Município
 description: |
-  Retorna a lista de todas as viagens disponíveis associadas às rotas do município do gestor autenticado.  
-  Apenas usuários com o papel **gestor** podem acessar este endpoint.  
+  Retorna a lista de todas as viagens disponíveis associadas às rotas do município do gestor autenticado.
+  Apenas usuários com o papel **gestor** podem acessar este endpoint.
   Requer um **JWT token** válido no cabeçalho `Authorization`.
 operationId: listarViagens
 security:

@@ -14,8 +14,12 @@ from flask_cors import CORS
 from flask_jwt_extended import JWTManager
 from flask_restx import Api
 
-from app.core.error_handlers import register_error_handlers, register_jwt_handlers
-from app.extensions import scheduler
+from app.core.error_handlers import (
+    register_api_error_handlers,
+    register_error_handlers,
+    register_jwt_handlers,
+)
+from app.extensions import limiter, scheduler
 from app.utils.scheduler_setup import init_scheduler
 
 from .api.controllers.aluno_controller import api as alunos_ns
@@ -23,6 +27,7 @@ from .api.controllers.auth_controller import api as auth_ns
 from .api.controllers.consentimento_controller import api as consentimento_ns
 from .api.controllers.convite_controller import api as convites_ns
 from .api.controllers.dashboard_controller import api as dashboard_ns
+from .api.controllers.embarque_controller import api as embarque_ns
 from .api.controllers.instituicao_controller import api as inst_ns
 from .api.controllers.notificacao_controller import api as notificacoes_ns
 from .api.controllers.ocorrencia_controller import api as ocorrencias_ns
@@ -30,6 +35,7 @@ from .api.controllers.onibus_controller import api as onibus_ns
 from .api.controllers.pontos_controller import api as pontos_ns
 from .api.controllers.rotas_controller import api as rotas_ns
 from .api.controllers.routing_controller import api as routing_ns
+from .api.controllers.telemetria_controller import api as telemetria_ns
 from .api.controllers.user_controller import api as user_ns
 from .api.controllers.viagens_controller import api as viagem_ns
 from .core.config import Settings
@@ -105,6 +111,38 @@ def create_app(
     app.config["MAIL_USE_TLS"] = settings.MAIL_USE_TLS
     app.config["FRONTEND_URL"] = settings.FRONTEND_URL
     app.config["APP_DOWNLOAD_URL"] = settings.APP_DOWNLOAD_URL
+    app.config["JOB_BUFFER_INTERVALO_SEGUNDOS"] = settings.JOB_BUFFER_INTERVALO_SEGUNDOS
+    app.config["JOB_PRAZO_INICIO_INTERVALO_SEGUNDOS"] = settings.JOB_PRAZO_INICIO_INTERVALO_SEGUNDOS
+    app.config["MOTORISTA_HORAS_MAX_DIRECAO"] = settings.MOTORISTA_HORAS_MAX_DIRECAO
+    app.config["MOTORISTA_DESCANSO_MINUTOS"] = settings.MOTORISTA_DESCANSO_MINUTOS
+    app.config["TIMEZONE"] = settings.TIMEZONE
+    app.config["ROTA_BUFFER_MINUTOS_PADRAO"] = settings.ROTA_BUFFER_MINUTOS_PADRAO
+    app.config["ROTA_BUFFER_MINUTOS_MAX"] = settings.ROTA_BUFFER_MINUTOS_MAX
+    app.config["ROTA_PRAZO_INICIO_MINUTOS_PADRAO"] = settings.ROTA_PRAZO_INICIO_MINUTOS_PADRAO
+    app.config["ROTA_PRAZO_INICIO_MINUTOS_MAX"] = settings.ROTA_PRAZO_INICIO_MINUTOS_MAX
+    app.config["FOTOS_ALUNO_DIR"] = settings.FOTOS_ALUNO_DIR or os.path.join(
+        app.instance_path, "fotos_aluno"
+    )
+    app.config["FOTO_ALUNO_MAX_BYTES"] = settings.FOTO_ALUNO_MAX_BYTES
+    app.config["FOTO_ALUNO_MAX_PIXELS"] = settings.FOTO_ALUNO_MAX_PIXELS
+    app.config["QR_PASSO_SEGUNDOS"] = settings.QR_PASSO_SEGUNDOS
+    app.config["QR_DIGITOS"] = settings.QR_DIGITOS
+    app.config["QR_JANELA_PASSOS"] = settings.QR_JANELA_PASSOS
+    app.config["SYNC_TOLERANCIA_SEGUNDOS"] = settings.SYNC_TOLERANCIA_SEGUNDOS
+    app.config["CONVITE_PIN_MAX_ERROS_TOTAL"] = settings.CONVITE_PIN_MAX_ERROS_TOTAL
+    app.config["CONVITE_PIN_BLOQUEIO_MINUTOS"] = settings.CONVITE_PIN_BLOQUEIO_MINUTOS
+    app.config["RATELIMIT_ENABLED"] = settings.RATELIMIT_ENABLED
+    app.config["RATELIMIT_STORAGE_URI"] = settings.RATELIMIT_STORAGE_URI
+    app.config["RATELIMIT_DEFAULT"] = settings.RATELIMIT_DEFAULT
+    app.config["RATELIMIT_AUTH"] = settings.RATELIMIT_AUTH
+    app.config["RATELIMIT_SENSITIVE"] = settings.RATELIMIT_SENSITIVE
+    app.config["RATELIMIT_REALTIME"] = settings.RATELIMIT_REALTIME
+    app.config["RATELIMIT_HEADERS_ENABLED"] = True
+    # Redis fora do ar não derruba a API: cada worker passa a contar em memória
+    # (com aviso no log) e volta para o Redis quando ele responder.
+    app.config["RATELIMIT_IN_MEMORY_FALLBACK_ENABLED"] = True
+    app.config["RATELIMIT_SWALLOW_ERRORS"] = True
+    app.config["RATELIMIT_STORAGE_OPTIONS"] = {"socket_connect_timeout": 1, "socket_timeout": 1}
 
     # Maximum request size (16MB)
     app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024
@@ -140,10 +178,18 @@ def create_app(
         allow_headers=["Content-Type", "Authorization"],
         methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         max_age=86400,  # Cache preflight for 24 hours
+        # Sem isso o navegador esconde do front quanto falta para o 429 passar.
+        expose_headers=[
+            "Retry-After",
+            "X-RateLimit-Limit",
+            "X-RateLimit-Remaining",
+            "X-RateLimit-Reset",
+        ],
     )
 
     db.init_app(app)
     jwt.init_app(app)
+    limiter.init_app(app)
 
     # ==========================================
     # Scheduler Configuration
@@ -215,6 +261,9 @@ Inclua o header: `Authorization: Bearer <seu_token>`
     api.add_namespace(alunos_ns, path="/v1/alunos")
     api.add_namespace(ocorrencias_ns, path="/v1/ocorrencias")
     api.add_namespace(dashboard_ns, path="/v1/dashboard")
+    api.add_namespace(consentimento_ns, path="/v1/consentimento")
+    api.add_namespace(embarque_ns, path="/v1/embarque")
+    api.add_namespace(telemetria_ns, path="/v1/telemetria")
 
     # Client-specific extensions — see `plugins` param contract on the signature.
     for register in (_discover_plugins() if plugins is None else plugins):
@@ -226,6 +275,7 @@ Inclua o header: `Authorization: Bearer <seu_token>`
 
     register_jwt_handlers(jwt)
     register_error_handlers(app)
+    register_api_error_handlers(api)
 
     # ==========================================
     # OpenAPI Export Endpoint

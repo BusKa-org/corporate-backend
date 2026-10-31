@@ -1,46 +1,74 @@
 """Testes de integração do serviço de credencial de embarque."""
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 import pytest
 
-from app.core.exceptions import ConflictError, NotFoundError, ValidationError
+from app.core.exceptions import NotFoundError, ValidationError
+from app.models.credencial_embarque import CredencialEmbarque
 from app.models.enum import StatusViagem
 from app.services import credencial_embarque_service
-from tests.factories.credencial_embarque_factory import CredencialEmbarqueFactory
-from tests.factories.viagem_factory import ViagemFactory
+from tests.factories.geo_factory import PontoFactory
+from tests.factories.viagem_factory import AlunosConfirmadosFactory, ViagemFactory
+
+
+def _gerar(viagem, aluno, ponto):
+    return credencial_embarque_service.gerar_credencial(
+        viagem_id=viagem.id, aluno_id=aluno.user.id, ponto_embarque_id=ponto.id
+    )
+
+
+def _confirmado(_db, viagem, aluno, ponto):
+    registro = AlunosConfirmadosFactory(
+        viagem_id=viagem.id, aluno_id=aluno.user.id, confirmacao=True, ponto_embarque_id=ponto.id
+    )
+    _db.session.add(registro)
+    _db.session.commit()
+    return registro
 
 
 def test_gerar_credencial_sucesso(_db, aluno, ponto, viagem_futura_agendada_com_motorista):
-    credencial = credencial_embarque_service.gerar_credencial(
-        viagem_id=viagem_futura_agendada_com_motorista.id,
-        aluno_id=aluno.user.id,
-        ponto_embarque_id=ponto.id,
-    )
+    credencial = _gerar(viagem_futura_agendada_com_motorista, aluno, ponto)
 
-    assert credencial.token
+    assert len(bytes.fromhex(credencial.segredo)) == 32
     assert credencial.viagem_id == viagem_futura_agendada_com_motorista.id
     assert credencial.aluno_id == aluno.user.id
     assert credencial.ponto_embarque_id == ponto.id
     assert credencial.usado is False
+    assert credencial.recusada_em is None
     assert credencial.expires_at > datetime.now(UTC)
 
 
-def test_gerar_credencial_duplicada_levanta_conflict(
+def test_gerar_credencial_de_novo_no_mesmo_ponto_devolve_a_mesma(
     _db, aluno, ponto, viagem_futura_agendada_com_motorista
 ):
-    credencial_embarque_service.gerar_credencial(
-        viagem_id=viagem_futura_agendada_com_motorista.id,
-        aluno_id=aluno.user.id,
-        ponto_embarque_id=ponto.id,
-    )
+    primeira = _gerar(viagem_futura_agendada_com_motorista, aluno, ponto)
+    segunda = _gerar(viagem_futura_agendada_com_motorista, aluno, ponto)
 
-    with pytest.raises(ConflictError):
-        credencial_embarque_service.gerar_credencial(
-            viagem_id=viagem_futura_agendada_com_motorista.id,
-            aluno_id=aluno.user.id,
-            ponto_embarque_id=ponto.id,
-        )
+    assert segunda.id == primeira.id
+    assert CredencialEmbarque.query.count() == 1
+
+
+def test_gerar_credencial_em_outro_ponto_revoga_a_anterior(
+    _db, aluno, ponto, organizacao, viagem_futura_agendada_com_motorista
+):
+    outro_ponto = PontoFactory(organizacao_id=organizacao.id)
+    _db.session.add(outro_ponto)
+    _db.session.commit()
+
+    antiga = _gerar(viagem_futura_agendada_com_motorista, aluno, ponto)
+    nova = _gerar(viagem_futura_agendada_com_motorista, aluno, outro_ponto)
+
+    _db.session.refresh(antiga)
+    assert antiga.revogada_em is not None
+    assert nova.revogada_em is None
+    assert nova.ponto_embarque_id == outro_ponto.id
+    assert (
+        credencial_embarque_service.credencial_ativa(
+            viagem_futura_agendada_com_motorista.id, aluno.user.id
+        ).id
+        == nova.id
+    )
 
 
 @pytest.mark.parametrize("status", [StatusViagem.CANCELADA, StatusViagem.FINALIZADA])
@@ -50,11 +78,7 @@ def test_gerar_credencial_viagem_nao_ativa_levanta_validation(_db, aluno, ponto,
     _db.session.commit()
 
     with pytest.raises(ValidationError):
-        credencial_embarque_service.gerar_credencial(
-            viagem_id=viagem.id,
-            aluno_id=aluno.user.id,
-            ponto_embarque_id=ponto.id,
-        )
+        _gerar(viagem, aluno, ponto)
 
 
 def test_gerar_credencial_viagem_nao_encontrada(_db, aluno, ponto):
@@ -66,69 +90,9 @@ def test_gerar_credencial_viagem_nao_encontrada(_db, aluno, ponto):
         )
 
 
-def test_validar_credencial_sucesso(_db, aluno, ponto, viagem_futura_agendada_com_motorista):
-    credencial = credencial_embarque_service.gerar_credencial(
-        viagem_id=viagem_futura_agendada_com_motorista.id,
-        aluno_id=aluno.user.id,
-        ponto_embarque_id=ponto.id,
-    )
-
-    encontrada = credencial_embarque_service.validar_credencial(credencial.token)
-
-    assert encontrada.id == credencial.id
-
-
-def test_validar_credencial_token_inexistente(_db):
-    with pytest.raises(NotFoundError):
-        credencial_embarque_service.validar_credencial("token-que-nao-existe")
-
-
-def test_validar_credencial_ja_usada_levanta_validation(
-    _db, aluno, ponto, viagem_futura_agendada_com_motorista
-):
-    credencial = CredencialEmbarqueFactory(
-        viagem_id=viagem_futura_agendada_com_motorista.id,
-        aluno_id=aluno.user.id,
-        ponto_embarque_id=ponto.id,
-        usado=True,
-    )
-    _db.session.add(credencial)
-    _db.session.commit()
-
-    with pytest.raises(ValidationError):
-        credencial_embarque_service.validar_credencial(credencial.token)
-
-
-def test_validar_credencial_expirada_levanta_validation(
-    _db, aluno, ponto, viagem_futura_agendada_com_motorista
-):
-    credencial = CredencialEmbarqueFactory(
-        viagem_id=viagem_futura_agendada_com_motorista.id,
-        aluno_id=aluno.user.id,
-        ponto_embarque_id=ponto.id,
-        expires_at=datetime.now(UTC) - timedelta(minutes=1),
-    )
-    _db.session.add(credencial)
-    _db.session.commit()
-
-    with pytest.raises(ValidationError):
-        credencial_embarque_service.validar_credencial(credencial.token)
-
-
-def test_validar_credencial_nao_altera_estado(
-    _db, aluno, ponto, viagem_futura_agendada_com_motorista
-):
-    credencial = credencial_embarque_service.gerar_credencial(
-        viagem_id=viagem_futura_agendada_com_motorista.id,
-        aluno_id=aluno.user.id,
-        ponto_embarque_id=ponto.id,
-    )
-
-    credencial_embarque_service.validar_credencial(credencial.token)
-    credencial_embarque_service.validar_credencial(credencial.token)
-
-    _db.session.refresh(credencial)
-    assert credencial.usado is False
+def test_validar_credencial_foi_removida():
+    """As regras da credencial lida moram só em embarque_service."""
+    assert not hasattr(credencial_embarque_service, "validar_credencial")
 
 
 def test_get_credencial_embarque_requires_auth(client, viagem_futura_agendada_com_motorista):
@@ -151,28 +115,48 @@ def test_get_credencial_embarque_not_generated_yet(aluno, viagem_futura_agendada
 
 
 def test_get_credencial_embarque_sucesso(_db, aluno, ponto, viagem_futura_agendada_com_motorista):
-    credencial = credencial_embarque_service.gerar_credencial(
-        viagem_id=viagem_futura_agendada_com_motorista.id,
-        aluno_id=aluno.user.id,
-        ponto_embarque_id=ponto.id,
-    )
+    _confirmado(_db, viagem_futura_agendada_com_motorista, aluno, ponto)
+    credencial = _gerar(viagem_futura_agendada_com_motorista, aluno, ponto)
 
     r = aluno.client.get(
         f"/v1/viagens/{viagem_futura_agendada_com_motorista.id}/credencial-embarque"
     )
 
     assert r.status_code == 200
-    assert r.json["token"] == credencial.token
+    assert r.json["credencial_id"] == str(credencial.id)
+    assert r.json["segredo"] == credencial.segredo
+    assert (r.json["algoritmo"], r.json["passo_segundos"], r.json["digitos"]) == ("SHA1", 30, 6)
+    assert "token" not in r.json
+
+
+def test_get_credencial_embarque_devolve_a_do_ponto_atual(
+    _db, aluno, ponto, organizacao, viagem_futura_agendada_com_motorista
+):
+    outro_ponto = PontoFactory(organizacao_id=organizacao.id)
+    _db.session.add(outro_ponto)
+    _db.session.commit()
+    _gerar(viagem_futura_agendada_com_motorista, aluno, ponto)
+    registro = _confirmado(_db, viagem_futura_agendada_com_motorista, aluno, ponto)
+    registro.ponto_embarque_id = outro_ponto.id
+    _db.session.commit()
+    url = f"/v1/viagens/{viagem_futura_agendada_com_motorista.id}/credencial-embarque"
+
+    # O ponto mudou e ninguém reemitiu: a credencial antiga não é mais a dele.
+    assert aluno.client.get(url).status_code == 404
+
+    nova = _gerar(viagem_futura_agendada_com_motorista, aluno, outro_ponto)
+    _db.session.commit()
+    r = aluno.client.get(url)
+    assert r.status_code == 200
+    assert r.json["credencial_id"] == str(nova.id)
+    assert r.json["ponto_embarque_id"] == str(outro_ponto.id)
 
 
 def test_get_credencial_embarque_nao_vaza_para_outro_aluno(
     _db, aluno, other_aluno, ponto, viagem_futura_agendada_com_motorista
 ):
-    credencial_embarque_service.gerar_credencial(
-        viagem_id=viagem_futura_agendada_com_motorista.id,
-        aluno_id=aluno.user.id,
-        ponto_embarque_id=ponto.id,
-    )
+    _confirmado(_db, viagem_futura_agendada_com_motorista, aluno, ponto)
+    _gerar(viagem_futura_agendada_com_motorista, aluno, ponto)
 
     r = other_aluno.client.get(
         f"/v1/viagens/{viagem_futura_agendada_com_motorista.id}/credencial-embarque"

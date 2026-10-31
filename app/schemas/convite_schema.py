@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 
 from marshmallow import fields, validate
 
+from app.schemas.aluno_schema import AcessibilidadeInputSchema
 from app.schemas.common import BaseSchema
 
 
@@ -15,7 +16,7 @@ class ConviteListQuerySchema(BaseSchema):
     estado = fields.String(load_default=None, allow_none=True)
 
 
-class ConviteAceiteRequestSchema(BaseSchema):
+class ConviteAceiteRequestSchema(AcessibilidadeInputSchema):
     """Dados da pessoa ao concluir. Nome, CPF e instituição podem vir do convite."""
 
     nome = fields.String(load_default=None, allow_none=True)
@@ -31,7 +32,12 @@ class PinSolicitarRequestSchema(BaseSchema):
 
 class PinValidarRequestSchema(BaseSchema):
     email = fields.String(required=True)
-    pin = fields.String(required=True, load_only=True)
+    # Espaços nas pontas são tirados no serviço.
+    pin = fields.String(
+        required=True,
+        load_only=True,
+        validate=validate.Regexp(r"^\s*\d{8}\s*$", error="O PIN tem 8 dígitos"),
+    )
 
 
 class ConviteResponseSchema(BaseSchema):
