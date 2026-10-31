@@ -4,17 +4,18 @@ Revision ID: edd55e85bcdd
 Revises: dcc0d379db3c
 Create Date: 2026-04-08 03:59:18.277664+00:00
 """
+
 from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
 
-
 # revision identifiers, used by Alembic
-revision: str = 'edd55e85bcdd'
-down_revision: Union[str, None] = 'dcc0d379db3c'
+revision: str = "edd55e85bcdd"
+down_revision: Union[str, None] = "dcc0d379db3c"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
+
 
 def upgrade():
     op.alter_column(

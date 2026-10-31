@@ -7,10 +7,10 @@ import pytest
 
 from app.models.consentimento import ACEITE, Consentimento
 from app.models.credencial_embarque import CredencialEmbarque
-from app.models.enum import StatusSolicitacao, StatusViagem, UserStatus
+from app.models.enum import StatusMotorista, StatusSolicitacao, StatusViagem, UserStatus
 from app.models.notificacao import Notificacao
 from app.models.viagem import AlunosConfirmados, Viagem
-from app.services import buffer_service
+from app.services import buffer_service, viagens_service
 from app.services.consentimento_service import VERSAO_TERMO_VIGENTE
 from tests.factories.user_factory import AlunoFactory, GestorFactory, MotoristaFactory
 
@@ -215,3 +215,35 @@ def test_prazo_nao_alerta_viagem_ja_iniciada(_db, viagem_solicitada, gestor, rel
 
     assert buffer_service.alertar_prazo_inicio() == 0
     assert _notificacoes(gestor.user.id) == 0
+
+
+def _em_rota(_db, viagem, pontos, relogio):
+    solicitacao = viagem.solicitacoes[0]
+    solicitacao.ponto_embarque_id = pontos[0].id
+    solicitacao.ponto_destino_id = pontos[2].id
+    _abrir_buffer(_db, viagem, relogio.agora + timedelta(minutes=5))
+    relogio.avancar(minutes=6)
+    buffer_service.fechar_buffers_expirados()
+
+
+def test_motorista_de_viagem_sob_demanda_em_rota_fica_em_rota(
+    _db, viagem_solicitada, circuito, pontos_circuito, motorista, relogio
+):
+    """PR #16 calcula o estado do motorista pela viagem EM_ANDAMENTO, também a sob demanda."""
+    _em_rota(_db, viagem_solicitada, pontos_circuito, relogio)
+
+    estado = viagens_service.status_motorista(motorista.user, relogio.agora)
+    assert estado == StatusMotorista.EM_ROTA
+
+
+def test_gestor_cancelar_viagem_sob_demanda_iniciada_fecha_fim_real(
+    _db, viagem_solicitada, circuito, pontos_circuito, gestor, relogio
+):
+    _em_rota(_db, viagem_solicitada, pontos_circuito, relogio)
+
+    r = gestor.client.put(f"/v1/viagens/{viagem_solicitada.id}/cancelar")
+
+    assert r.status_code == 200, r.get_data(as_text=True)
+    viagem = _db.session.get(Viagem, viagem_solicitada.id)
+    assert viagem.status == StatusViagem.CANCELADA
+    assert viagem.fim_real == relogio.agora

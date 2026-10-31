@@ -110,6 +110,9 @@ def create_app(
     app.config["FUSO_HORARIO"] = settings.FUSO_HORARIO
     app.config["JOB_BUFFER_INTERVALO_SEGUNDOS"] = settings.JOB_BUFFER_INTERVALO_SEGUNDOS
     app.config["JOB_PRAZO_INICIO_INTERVALO_SEGUNDOS"] = settings.JOB_PRAZO_INICIO_INTERVALO_SEGUNDOS
+    app.config["MOTORISTA_HORAS_MAX_DIRECAO"] = settings.MOTORISTA_HORAS_MAX_DIRECAO
+    app.config["MOTORISTA_DESCANSO_MINUTOS"] = settings.MOTORISTA_DESCANSO_MINUTOS
+    app.config["TIMEZONE"] = settings.TIMEZONE
     app.config["FOTOS_ALUNO_DIR"] = settings.FOTOS_ALUNO_DIR or os.path.join(
         app.instance_path, "fotos_aluno"
     )

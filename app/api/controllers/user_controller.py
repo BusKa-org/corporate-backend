@@ -12,6 +12,7 @@ from app.schemas.user_schema import (
     FcmTokenRequestSchema,
     FcmTokenResponseSchema,
     MotoristaCreateRequestSchema,
+    MotoristaUpdateRequestSchema,
     UpdateProfileRequestSchema,
     UserListResponseSchema,
     UserResponseSchema,
@@ -26,6 +27,7 @@ models = user_contract.register_models(api)
 # Validation schemas (Marshmallow)
 user_list_response_schema = UserListResponseSchema()
 motorista_create_schema = MotoristaCreateRequestSchema()
+motorista_update_schema = MotoristaUpdateRequestSchema()
 change_password_schema = ChangePasswordRequestSchema()
 user_response_schema = UserResponseSchema()
 change_password_response_schema = ChangePasswordResponseSchema()
@@ -117,6 +119,20 @@ class UserResource(Resource):
 
 @api.route("/motoristas/<string:motorista_id>")
 class MotoristaResource(Resource):
+    @api.doc(
+        "update_motorista",
+        responses={200: "Updated", 400: "Validation error", 403: "Forbidden", 404: "Not found"},
+    )
+    @api.expect(models["motorista_update_request"])
+    @api.response(200, "Success", models["user_response"])
+    @jwt_required()
+    def patch(self, motorista_id: str) -> tuple[dict[str, Any], int]:
+        """Gestor edita um motorista (dados e horário de trabalho)"""
+        current_user_id = get_jwt_identity()
+        payload = motorista_update_schema.load(request.get_json(silent=True) or {})
+        motorista = user_service.update_motorista(current_user_id, motorista_id, payload)
+        return user_response_schema.dump(motorista), 200
+
     @api.doc(
         "delete_motorista",
         responses={200: "Deleted", 403: "Forbidden", 404: "Not found", 400: "Has linked trips"},

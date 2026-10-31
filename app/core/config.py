@@ -73,6 +73,17 @@ class Settings:
             "JOB_PRAZO_INICIO_INTERVALO_SEGUNDOS", default=60, min_val=5, max_val=3600
         )
 
+        # Jornada do motorista. Padrão do CTB (Lei 9.503/97) art. 67-C §1º-A, incluído pela
+        # Lei 13.103/2015: no transporte de passageiros, 30 min de descanso a cada 4 h de
+        # direção (fracionamento permitido).
+        self.MOTORISTA_HORAS_MAX_DIRECAO = self._get_int(
+            "MOTORISTA_HORAS_MAX_DIRECAO", default=4, min_val=1, max_val=24
+        )
+        self.MOTORISTA_DESCANSO_MINUTOS = self._get_int(
+            "MOTORISTA_DESCANSO_MINUTOS", default=30, min_val=1, max_val=1440
+        )
+        # Fuso usado para comparar o horário de trabalho do motorista com o relógio
+        self.TIMEZONE = os.getenv("TIMEZONE", "America/Sao_Paulo")
         # Fotos dos alunos (RF-15/RF-17). Vazio = <instance_path>/fotos_aluno.
         self.FOTOS_ALUNO_DIR = os.getenv("FOTOS_ALUNO_DIR", "")
         self.FOTO_ALUNO_MAX_BYTES = self._get_int(

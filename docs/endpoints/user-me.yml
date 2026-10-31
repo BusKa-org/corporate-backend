@@ -3,7 +3,7 @@ tags:
   - User
 summary: Get Current Authenticated User
 description: |
-  Returns the profile of the currently authenticated user.  
+  Returns the profile of the currently authenticated user.
   Requires a valid **JWT access token** in the `Authorization` header as a Bearer token.
 operationId: getCurrentUser
 security:

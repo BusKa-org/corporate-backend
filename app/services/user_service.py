@@ -1,8 +1,10 @@
 """User service - CRUD operations, driver creation, password management."""
 
 import logging
+from datetime import UTC, datetime
 from typing import Any, cast
 
+from sqlalchemy.orm import with_polymorphic
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from app.core.exceptions import (
@@ -16,6 +18,7 @@ from app.core.exceptions import (
 from app.models.base import db
 from app.models.enum import UserRole, UserStatus
 from app.models.user import Gestor, Motorista, User
+from app.services.viagens_service import motoristas_em_viagem, status_motorista
 from app.utils import audit_logger, validate_cpf, validate_email, validate_password, validate_uuid
 
 logger = logging.getLogger(__name__)
@@ -45,10 +48,29 @@ def _get_gestor_or_403(
     return cast(Gestor, user)
 
 
+def _preencher_status_motoristas(users: list[User]) -> None:
+    """Compute each driver's state for the response, with one query for the whole list."""
+    motorista_ids = []
+    for user in users:
+        if isinstance(user, Motorista):
+            motorista_ids.append(user.id)
+    if not motorista_ids:
+        return
+    em_viagem = motoristas_em_viagem(motorista_ids)
+    agora = datetime.now(UTC)
+    for user in users:
+        if isinstance(user, Motorista):
+            user.status_motorista = status_motorista(user, agora, user.id in em_viagem)
+
+
 def get_all_users(current_user_id: str) -> list[User]:
     """List all users in the same organizacao (gestor only)."""
     gestor = _get_gestor_or_403(current_user_id, "Apenas gestores podem listar usuários")
-    return db.session.query(User).filter_by(organizacao_id=gestor.organizacao_id).all()
+    # with_polymorphic carrega as colunas de cada subtipo na mesma query (sem N+1)
+    todos = with_polymorphic(User, "*")
+    users = db.session.query(todos).filter(todos.organizacao_id == gestor.organizacao_id).all()
+    _preencher_status_motoristas(users)
+    return users
 
 
 def get_user_by_id(user_id: str, current_user_id: str | None = None) -> User:
@@ -60,16 +82,19 @@ def get_user_by_id(user_id: str, current_user_id: str | None = None) -> User:
 
     # Skip authorization for internal use
     if current_user_id is None:
+        _preencher_status_motoristas([user])
         return user
 
     current_user = _get_user_or_404(current_user_id)
 
     # Allow self-access
     if str(user_id) == str(current_user_id):
+        _preencher_status_motoristas([user])
         return user
 
     # Allow gestor access within same organizacao
     if current_user.role == UserRole.GESTOR and user.organizacao_id == current_user.organizacao_id:
+        _preencher_status_motoristas([user])
         return user
 
     # Log unauthorized access attempt
@@ -114,6 +139,31 @@ def update_user(user_id: str, data: dict[str, Any]) -> User:
         raise AppError(f"Erro ao atualizar usuário: {str(e)}", 500)
 
 
+def _aplicar_jornada(motorista: Motorista, data: dict[str, Any]) -> None:
+    """Copy working-hours fields present in `data` onto the driver and validate them."""
+    if "horario_inicio" in data:
+        motorista.horario_inicio = data["horario_inicio"]
+    if "horario_fim" in data:
+        motorista.horario_fim = data["horario_fim"]
+    if "dias_trabalho" in data:
+        dias = data["dias_trabalho"]
+        if dias is None:
+            motorista.dias_trabalho = None
+        else:
+            valores: list[str] = []
+            for dia in dias:
+                if dia.value not in valores:
+                    valores.append(dia.value)
+            motorista.dias_trabalho = valores
+
+    inicio = motorista.horario_inicio
+    fim = motorista.horario_fim
+    if (inicio is None) != (fim is None):
+        raise ValidationError("Informe o início e o fim do horário de trabalho")
+    if inicio is not None and inicio == fim:
+        raise ValidationError("Início e fim do horário de trabalho não podem ser iguais")
+
+
 def create_motorista(gestor_id: str, data: dict[str, Any]) -> Motorista:
     """Create a new driver (gestor only)."""
     gestor = _get_gestor_or_403(gestor_id, "Apenas gestores podem cadastrar motoristas")
@@ -143,9 +193,11 @@ def create_motorista(gestor_id: str, data: dict[str, Any]) -> Motorista:
             role=UserRole.MOTORISTA,
             cnh=cnh,
         )
+        _aplicar_jornada(new_motorista, data)
 
         db.session.add(new_motorista)
         db.session.commit()
+        _preencher_status_motoristas([new_motorista])
         return new_motorista
 
     except (ValidationError, ConflictError, ForbiddenError):
@@ -154,6 +206,44 @@ def create_motorista(gestor_id: str, data: dict[str, Any]) -> Motorista:
         db.session.rollback()
         logger.error(f"Error creating motorista: {e}", exc_info=True)
         raise AppError(f"Erro ao criar motorista: {str(e)}", 500)
+
+
+def update_motorista(gestor_id: str, motorista_id: str, data: dict[str, Any]) -> Motorista:
+    """Gestor updates a driver of the same organizacao, including working hours."""
+    gestor = _get_gestor_or_403(gestor_id, "Apenas gestores podem editar motoristas")
+
+    user = _get_user_or_404(motorista_id)
+    if user.role != UserRole.MOTORISTA:
+        raise NotFoundError("Motorista não encontrado")
+    if user.organizacao_id != gestor.organizacao_id:
+        raise ForbiddenError("Proibido editar motoristas de outra organização")
+    motorista = cast(Motorista, user)
+
+    if nome := data.get("nome"):
+        motorista.nome = nome
+    if telefone := data.get("telefone"):
+        motorista.telefone = telefone
+    if cnh := data.get("cnh"):
+        existing = db.session.query(Motorista).filter_by(cnh=cnh).first()
+        if existing and existing.id != motorista.id:
+            raise ConflictError("CNH já cadastrada para outro motorista", field="cnh")
+        motorista.cnh = cnh
+
+    try:
+        _aplicar_jornada(motorista, data)
+    except ValidationError:
+        db.session.rollback()
+        raise
+
+    db.session.commit()
+    audit_logger.log_user_action(
+        action="update_motorista",
+        user_id=gestor_id,
+        resource_type="motorista",
+        resource_id=motorista_id,
+    )
+    _preencher_status_motoristas([motorista])
+    return motorista
 
 
 def change_password(user_id: str, data: dict[str, Any]) -> None:
@@ -200,13 +290,13 @@ def change_password(user_id: str, data: dict[str, Any]) -> None:
 
 
 def get_motoristas_by_municipio(gestor_id: str):
-    from app.models.user import User
-
     gestor = _get_user_or_404(gestor_id)
 
-    motoristas = User.query.filter(
-        User.organizacao_id == gestor.organizacao_id, User.role == UserRole.MOTORISTA
-    ).all()
+    # Consulta Motorista direto: via User, as colunas de motorista vinham uma query por linha
+    motoristas = (
+        db.session.query(Motorista).filter(Motorista.organizacao_id == gestor.organizacao_id).all()
+    )
+    _preencher_status_motoristas(motoristas)
 
     return motoristas
 
@@ -244,6 +334,7 @@ def update_profile(user_id: str, data: dict[str, Any]) -> User:
             resource_type="user",
             resource_id=user_id,
         )
+        _preencher_status_motoristas([user])
         return user
     except Exception as e:
         db.session.rollback()

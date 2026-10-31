@@ -4,13 +4,13 @@ Revision ID: c3d4e5f6a7b8
 Revises: 7bb68b5bee12
 Create Date: 2026-04-08 09:00:00.000000+00:00
 """
+
 from typing import Sequence, Union
 
 from alembic import op
 
-
-revision: str = 'c3d4e5f6a7b8'
-down_revision: Union[str, None] = '7bb68b5bee12'
+revision: str = "c3d4e5f6a7b8"
+down_revision: Union[str, None] = "7bb68b5bee12"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

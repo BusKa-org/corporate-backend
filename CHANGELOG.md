@@ -49,6 +49,16 @@ All notable changes to this project will be documented in this file.
   back; after departure it is a no-show and leaves the driver's boarding list.
 - Circuit editing (`DELETE /v1/rotas/<id>/pontos/<ponto_id>`, gap-free stop order) is
   blocked while a trip that uses the circuit is active.
+- Driver working hours and state: the gestor sets `horario_inicio`, `horario_fim` and
+  `dias_trabalho` (`PATCH /v1/users/motoristas/<id>`). User responses show the driver's
+  `status_motorista` (`ATIVO`, `EM_ROTA`, `EM_DESCANSO_OBRIGATORIO`) and `descanso_ate`. The
+  state is computed, not stored: `EM_ROTA` while a trip is `EM_ANDAMENTO`, otherwise
+  `EM_DESCANSO_OBRIGATORIO` while `descanso_ate` is in the future, otherwise `ATIVO`.
+  Finishing or cancelling a started trip stores `descanso_ate` when the max continuous
+  driving time was reached. Starting a trip returns 409 if the driver is `EM_ROTA` and 403
+  during rest or outside working hours. It locks the trip and driver rows, so two
+  simultaneous starts can't both pass.
+  New settings `MOTORISTA_HORAS_MAX_DIRECAO`, `MOTORISTA_DESCANSO_MINUTOS` and `TIMEZONE`.
 - Passenger accessibility needs (`necessidades_acessibilidade`, `observacao_acessibilidade`)
   on registration and `PUT /v1/alunos/me`, shown to the gestor and to the driver of the trip.
 - Passenger photo: `PUT /v1/alunos/me/foto` (multipart, JPEG/PNG/WEBP, EXIF/GPS and text
