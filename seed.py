@@ -21,7 +21,7 @@ from werkzeug.security import generate_password_hash
 
 from app import create_app
 from app.models.base import db
-from app.models.consentimento import Consentimento
+from app.models.consentimento import ACEITE, Consentimento
 from app.models.enum import (
     DiaDaSemana,
     StatusSolicitacao,
@@ -38,13 +38,13 @@ from app.models.rota import Rota, RotaPonto
 from app.models.telemetria import TelemetriaVeiculo
 from app.models.user import Aluno, Gestor, Motorista
 from app.models.viagem import AlunosConfirmados, Viagem, ViagemPonto
+from app.services.consentimento_service import VERSAO_TERMO_VIGENTE
 
 app = create_app()
 
 SENHA_DEV = "buska123"
 ORG_SIGLA = "DEMO"
 CAPACIDADE_DEMO = 20
-TERMO_VERSAO = "1.0"
 
 # Coordenadas arbitrárias, só para os pontos não ficarem sobrepostos no mapa.
 CIRCUITO = [
@@ -146,9 +146,6 @@ def _equipe(org: Organizacao, senha: str) -> tuple[Gestor, Motorista]:
 def _alunos(org: Organizacao, insts: dict[str, Instituicao], senha: str) -> list[Aluno]:
     criados = []
     for indice, (nome, email, cpf, sigla) in enumerate(PESSOAS):
-        # O último fica pendente de aprovação, para a fila do gestor (RF-02)
-        # não nascer vazia.
-        pendente = indice == len(PESSOAS) - 1
         aluno = Aluno(
             organizacao_id=org.id,
             nome=nome,
@@ -157,8 +154,8 @@ def _alunos(org: Organizacao, insts: dict[str, Instituicao], senha: str) -> list
             cpf=cpf,
             telefone=f"8398888{indice:04d}",
             role=UserRole.ALUNO,
-            status=UserStatus.PENDING_APPROVAL if pendente else UserStatus.ACTIVE,
-            signup_completed_at=None if pendente else datetime.now(UTC),
+            status=UserStatus.ACTIVE,
+            signup_completed_at=datetime.now(UTC),
             instituicao_id=insts[sigla].id,
         )
         db.session.add(aluno)
@@ -168,15 +165,9 @@ def _alunos(org: Organizacao, insts: dict[str, Instituicao], senha: str) -> list
     # Consentimento vigente para quem já está ativo — sem ele o RF-10 barra a
     # solicitação e o ambiente de desenvolvimento não sai do lugar.
     for aluno in criados:
-        if aluno.status == UserStatus.ACTIVE:
-            db.session.add(
-                Consentimento(
-                    usuario_id=aluno.id,
-                    versao_termo=TERMO_VERSAO,
-                    aceito_em=datetime.now(UTC),
-                    ip_origem="127.0.0.1",
-                )
-            )
+        db.session.add(
+            Consentimento(usuario_id=aluno.id, versao=VERSAO_TERMO_VIGENTE, acao=ACEITE)
+        )
     db.session.flush()
     return criados
 
@@ -369,7 +360,6 @@ def seed_demo_data() -> None:
     print("  motorista@demo.dev     motorista")
     for nome, email, _cpf, sigla in PESSOAS:
         print(f"  {email:<22} {nome} ({sigla})")
-    print(f"\n{PESSOAS[-1][1]} está PENDING_APPROVAL, para exercitar o RF-02.")
     print("-" * 60 + "\n")
 
 

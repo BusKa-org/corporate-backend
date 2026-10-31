@@ -11,10 +11,11 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from flask_jwt_extended import create_access_token
 
+from app.models.credencial_embarque import CredencialEmbarque
 from app.models.enum import StatusSolicitacao, StatusViagem, TipoOcorrencia
 from app.models.ocorrencia import Ocorrencia
 from app.models.viagem import AlunosConfirmados, TelemetriaViagem, Viagem, ViagemPonto
-from app.services import capacidade_service
+from app.services import capacidade_service, consentimento_service
 from app.tasks.viagem_tasks import consolidar_buffers_expirados
 from tests.conftest import Actor, AuthenticatedClient
 from tests.factories.user_factory import AlunoFactory
@@ -79,6 +80,16 @@ def _registro(_db, viagem, actor) -> AlunosConfirmados:
     return _db.session.get(AlunosConfirmados, (viagem.id, actor.user.id))
 
 
+def _token(_db, viagem, actor) -> str | None:
+    """Token da credencial de embarque do aluno na viagem, ou None."""
+    credencial = (
+        _db.session.query(CredencialEmbarque)
+        .filter_by(viagem_id=viagem.id, aluno_id=actor.user.id)
+        .first()
+    )
+    return credencial.token if credencial else None
+
+
 # ==========================================
 # RF-15 — emissão das credenciais
 # ==========================================
@@ -86,7 +97,7 @@ def _registro(_db, viagem, actor) -> AlunosConfirmados:
 
 @pytest.mark.integration
 def test_consolidacao_emite_uma_credencial_por_confirmado(_db, rodada, aluno, aluno2, aluno3):
-    tokens = [_registro(_db, rodada, a).qr_token for a in (aluno, aluno2, aluno3)]
+    tokens = [_token(_db, rodada, a) for a in (aluno, aluno2, aluno3)]
 
     assert all(tokens)
     assert len(set(tokens)) == 3
@@ -121,18 +132,17 @@ def test_interessado_que_nao_declarou_trajeto_nao_recebe_credencial(
 
     _consolidar(_db, viagem_ociosa, [(aluno.user.id, p1, p3)])
 
-    assert _registro(_db, viagem_ociosa, aluno).qr_token
-    assert _registro(_db, viagem_ociosa, aluno2).qr_token is None
+    assert _token(_db, viagem_ociosa, aluno)
+    assert _token(_db, viagem_ociosa, aluno2) is None
 
 
 @pytest.mark.integration
-def test_aluno_busca_a_propria_credencial(rodada, aluno, pontos_circuito):
-    r = aluno.client.get(f"/v1/embarque/viagens/{rodada.id}/credencial")
+def test_aluno_busca_a_propria_credencial(_db, rodada, aluno, pontos_circuito):
+    r = aluno.client.get(f"/v1/viagens/{rodada.id}/credencial-embarque")
 
     assert r.status_code == 200, r.get_data(as_text=True)
     corpo = r.get_json()
-    assert corpo["aluno_id"] == str(aluno.user.id)
-    assert corpo["qr_token"]
+    assert corpo["token"] == _token(_db, rodada, aluno)
     assert corpo["ponto_embarque_id"] == str(pontos_circuito[0].id)
 
 
@@ -143,8 +153,9 @@ def test_aluno_de_fora_da_rodada_nao_alcanca_credencial_alguma(
     """A busca é sempre pela identidade do JWT: não há como pedir a do outro."""
     p1, _, p3, _ = pontos_circuito
     _consolidar(_db, viagem_ociosa, [(aluno.user.id, p1, p3)])
+    consentimento_service.aceitar(str(aluno2.user.id), consentimento_service.VERSAO_TERMO_VIGENTE)
 
-    r = aluno2.client.get(f"/v1/embarque/viagens/{viagem_ociosa.id}/credencial")
+    r = aluno2.client.get(f"/v1/viagens/{viagem_ociosa.id}/credencial-embarque")
     assert r.status_code == 404
 
 
@@ -174,7 +185,7 @@ def test_roteiro_traz_a_matriz_de_permissoes_do_ponto(_db, rodada, motorista, al
 
     passageiros = corpo["pontos"][0]["passageiros"]
     assert [p["aluno_id"] for p in passageiros] == [str(aluno.user.id)]
-    assert passageiros[0]["qr_token"] == _registro(_db, rodada, aluno).qr_token
+    assert passageiros[0]["qr_token"] == _token(_db, rodada, aluno)
 
 
 @pytest.mark.integration
@@ -229,7 +240,7 @@ def _validar(motorista, viagem, token):
 
 @pytest.mark.integration
 def test_credencial_valida_registra_o_embarque(_db, rodada, motorista, aluno):
-    r = _validar(motorista, rodada, _registro(_db, rodada, aluno).qr_token)
+    r = _validar(motorista, rodada, _token(_db, rodada, aluno))
 
     assert r.status_code == 200, r.get_data(as_text=True)
     assert r.get_json()["manual"] is False
@@ -265,7 +276,7 @@ def test_credencial_de_outra_viagem(
 
     # aluno2 já está na `rodada`; aqui ele ganha uma credencial da outra viagem.
     _consolidar(_db, outra, [(aluno2.user.id, p2, p4)])
-    token_da_outra = _db.session.get(AlunosConfirmados, (outra.id, aluno2.user.id)).qr_token
+    token_da_outra = _token(_db, outra, aluno2)
 
     r = _validar(motorista, rodada, token_da_outra)
 
@@ -276,7 +287,7 @@ def test_credencial_de_outra_viagem(
 @pytest.mark.integration
 def test_credencial_de_outro_ponto(_db, rodada, motorista, aluno2):
     """O veículo está em P1 e a credencial do aluno 2 é de P2."""
-    r = _validar(motorista, rodada, _registro(_db, rodada, aluno2).qr_token)
+    r = _validar(motorista, rodada, _token(_db, rodada, aluno2))
 
     assert r.status_code == 409
     assert r.get_json()["error"]["code"] == "CREDENCIAL_DE_OUTRO_PONTO"
@@ -285,7 +296,7 @@ def test_credencial_de_outro_ponto(_db, rodada, motorista, aluno2):
 
 @pytest.mark.integration
 def test_credencial_ja_utilizada(_db, rodada, motorista, aluno):
-    token = _registro(_db, rodada, aluno).qr_token
+    token = _token(_db, rodada, aluno)
     assert _validar(motorista, rodada, token).status_code == 200
 
     r = _validar(motorista, rodada, token)
@@ -332,7 +343,7 @@ def _lote(_db, rodada, aluno, aluno2, pontos_circuito):
             "evento_id": "ev-embarque-1",
             "tipo": "EMBARQUE",
             "ocorrido_em": base.isoformat(),
-            "qr_token": _registro(_db, rodada, aluno).qr_token,
+            "qr_token": _token(_db, rodada, aluno),
             "ponto_id": str(p1.id),
         },
         {
@@ -471,7 +482,7 @@ def test_sincronizacao_aceita_viagem_ja_finalizada(_db, rodada, motorista, aluno
                 "evento_id": "ev-tardio",
                 "tipo": "EMBARQUE",
                 "ocorrido_em": datetime.now(UTC).isoformat(),
-                "qr_token": _registro(_db, rodada, aluno).qr_token,
+                "qr_token": _token(_db, rodada, aluno),
                 "ponto_id": str(pontos_circuito[0].id),
             }
         ],

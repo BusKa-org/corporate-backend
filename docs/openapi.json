@@ -27,61 +27,7 @@
         ]
       }
     },
-    "/v1/alunos/guardian-consent/{token}": {
-      "parameters": [
-        {
-          "name": "token",
-          "in": "path",
-          "required": true,
-          "type": "string"
-        }
-      ],
-      "get": {
-        "responses": {
-          "200": {
-            "description": "Success",
-            "schema": {
-              "$ref": "#/definitions/GuardianConsentResponse"
-            }
-          }
-        },
-        "summary": "(Público) Busca dados do aluno para a tela de consentimento do responsável",
-        "operationId": "guardian_consent_info",
-        "security": [],
-        "tags": [
-          "alunos"
-        ]
-      },
-      "post": {
-        "responses": {
-          "200": {
-            "description": "Success",
-            "schema": {
-              "$ref": "#/definitions/AlunoResponse"
-            }
-          }
-        },
-        "summary": "(Público) Responsável confirma consentimento para o aluno menor",
-        "operationId": "guardian_consent_confirm",
-        "security": [],
-        "tags": [
-          "alunos"
-        ]
-      }
-    },
     "/v1/alunos/me": {
-      "delete": {
-        "responses": {
-          "200": {
-            "description": "Success"
-          }
-        },
-        "summary": "Aluno exclui sua conta",
-        "operationId": "aluno_delete",
-        "tags": [
-          "alunos"
-        ]
-      },
       "put": {
         "responses": {
           "200": {
@@ -108,34 +54,6 @@
         ]
       }
     },
-    "/v1/alunos/signup": {
-      "post": {
-        "responses": {
-          "201": {
-            "description": "Success",
-            "schema": {
-              "$ref": "#/definitions/AlunoResponse"
-            }
-          }
-        },
-        "summary": "Auto-cadastro do Aluno (Público)",
-        "operationId": "aluno_signup",
-        "parameters": [
-          {
-            "name": "payload",
-            "required": true,
-            "in": "body",
-            "schema": {
-              "$ref": "#/definitions/AlunoSelfSignupRequest"
-            }
-          }
-        ],
-        "security": [],
-        "tags": [
-          "alunos"
-        ]
-      }
-    },
     "/v1/alunos/{aluno_id}": {
       "parameters": [
         {
@@ -156,63 +74,6 @@
         },
         "summary": "(Gestor) Obtém detalhes completos de um aluno",
         "operationId": "get_aluno_detail",
-        "tags": [
-          "alunos"
-        ]
-      }
-    },
-    "/v1/alunos/{aluno_id}/aprovar": {
-      "parameters": [
-        {
-          "name": "aluno_id",
-          "in": "path",
-          "required": true,
-          "type": "string"
-        }
-      ],
-      "post": {
-        "responses": {
-          "200": {
-            "description": "Success"
-          }
-        },
-        "summary": "(Gestor) Aprova o cadastro de um aluno pendente",
-        "operationId": "aprovar_aluno",
-        "tags": [
-          "alunos"
-        ]
-      }
-    },
-    "/v1/alunos/{aluno_id}/rejeitar": {
-      "parameters": [
-        {
-          "name": "aluno_id",
-          "in": "path",
-          "required": true,
-          "type": "string"
-        }
-      ],
-      "post": {
-        "responses": {
-          "200": {
-            "description": "Success",
-            "schema": {
-              "$ref": "#/definitions/AlunoResponse"
-            }
-          }
-        },
-        "summary": "(Gestor) Rejeita o cadastro de um aluno pendente, com motivo",
-        "operationId": "rejeitar_aluno",
-        "parameters": [
-          {
-            "name": "payload",
-            "required": true,
-            "in": "body",
-            "schema": {
-              "$ref": "#/definitions/AlunoRejeitarRequest"
-            }
-          }
-        ],
         "tags": [
           "alunos"
         ]
@@ -284,77 +145,222 @@
       }
     },
     "/v1/consentimento": {
+      "delete": {
+        "responses": {
+          "200": {
+            "description": "Consentimento revogado"
+          },
+          "409": {
+            "description": "Não há consentimento vigente"
+          }
+        },
+        "summary": "Revoga o consentimento",
+        "description": "O usuário volta ao estado pendente.",
+        "operationId": "revogar_consentimento",
+        "tags": [
+          "consentimento"
+        ]
+      },
       "get": {
         "responses": {
           "200": {
-            "description": "Success",
-            "schema": {
-              "$ref": "#/definitions/ConsentimentoStatusResponse"
-            }
-          },
-          "404": {
-            "description": "Usuário não encontrado"
+            "description": "Estado do consentimento do usuário logado"
           }
         },
-        "summary": "Situação do usuário logado perante a versão vigente do termo",
-        "operationId": "get_consentimento_status",
+        "summary": "Versão vigente do termo e se o usuário logado ainda precisa aceitar",
+        "operationId": "get_consentimento",
         "tags": [
           "consentimento"
         ]
       },
       "post": {
         "responses": {
-          "201": {
-            "description": "Aceite registrado",
-            "schema": {
-              "$ref": "#/definitions/ConsentimentoResponse"
-            }
+          "200": {
+            "description": "Aceite registrado"
           },
-          "404": {
-            "description": "Não encontrado"
+          "400": {
+            "description": "Versão do termo inválida"
           }
         },
-        "summary": "Registra o aceite do Termo e da Política de Privacidade",
-        "operationId": "registrar_consentimento",
+        "summary": "Registra o aceite da versão vigente do termo",
+        "description": "Corpo: {\"versao\": \"...\"}",
+        "operationId": "aceitar_consentimento",
         "tags": [
           "consentimento"
         ]
       }
     },
-    "/v1/consentimento/conta": {
-      "delete": {
+    "/v1/convites": {
+      "get": {
         "responses": {
           "200": {
-            "description": "Conta excluída",
-            "schema": {
-              "$ref": "#/definitions/ConsentimentoMessageResponse"
-            }
+            "description": "Convites da organização"
+          },
+          "403": {
+            "description": "Não é gestor"
+          }
+        },
+        "summary": "(Gestor) Lista os convites da organização",
+        "description": "Filtro opcional: ?estado=",
+        "operationId": "listar_convites",
+        "tags": [
+          "convites"
+        ]
+      },
+      "post": {
+        "responses": {
+          "200": {
+            "description": "Resultado por linha"
+          },
+          "400": {
+            "description": "Lote inválido"
+          },
+          "403": {
+            "description": "Não é gestor"
+          }
+        },
+        "summary": "(Gestor) Convida por e-mail, até 500 por chamada",
+        "description": "Corpo: {\"convites\": [{\"email\", ...}]}",
+        "operationId": "criar_convites",
+        "tags": [
+          "convites"
+        ]
+      }
+    },
+    "/v1/convites/aceite/{token}": {
+      "parameters": [
+        {
+          "name": "token",
+          "in": "path",
+          "required": true,
+          "type": "string"
+        }
+      ],
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Dados do convite"
+          },
+          "404": {
+            "description": "Convite inválido ou expirado"
+          }
+        },
+        "summary": "(Público) Dados preenchidos pelo gestor e os campos que ainda faltam",
+        "operationId": "consultar_convite",
+        "tags": [
+          "convites"
+        ]
+      },
+      "post": {
+        "responses": {
+          "201": {
+            "description": "Cadastro concluído"
           },
           "400": {
             "description": "Dados inválidos"
           },
-          "401": {
-            "description": "Credenciais inválidas"
+          "404": {
+            "description": "Convite inválido ou expirado"
           },
           "409": {
-            "description": "Viagem em andamento com embarque confirmado"
+            "description": "E-mail ou CPF já cadastrado"
           }
         },
-        "summary": "Exclui a conta e anonimiza os dados pessoais do titular (Art",
-        "description": "18 LGPD)",
-        "operationId": "excluir_conta",
-        "parameters": [
-          {
-            "name": "payload",
-            "required": true,
-            "in": "body",
-            "schema": {
-              "$ref": "#/definitions/ExclusaoContaRequest"
-            }
-          }
-        ],
+        "summary": "(Público) Conclui o cadastro",
+        "description": "Corpo: nome, cpf, telefone, instituicao_id, senha",
+        "operationId": "concluir_convite",
         "tags": [
-          "consentimento"
+          "convites"
+        ]
+      }
+    },
+    "/v1/convites/pin": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "Resposta igual para qualquer e-mail"
+          }
+        },
+        "summary": "(Público) Envia um PIN de 10 minutos ao e-mail, se ele estiver habilitado",
+        "description": "Corpo: {\"email\"}",
+        "operationId": "solicitar_pin_do_convite",
+        "tags": [
+          "convites"
+        ]
+      }
+    },
+    "/v1/convites/pin/validar": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "PIN correto"
+          },
+          "400": {
+            "description": "PIN inválido ou expirado"
+          }
+        },
+        "summary": "(Público) Confere o PIN",
+        "description": "Devolve o token que abre /aceite/<token>. Corpo: {\"email\", \"pin\"}",
+        "operationId": "validar_pin_do_convite",
+        "tags": [
+          "convites"
+        ]
+      }
+    },
+    "/v1/convites/{convite_id}": {
+      "parameters": [
+        {
+          "name": "convite_id",
+          "in": "path",
+          "required": true,
+          "type": "string"
+        }
+      ],
+      "delete": {
+        "responses": {
+          "200": {
+            "description": "Cancelado"
+          },
+          "404": {
+            "description": "Não encontrado"
+          },
+          "409": {
+            "description": "Não pendente"
+          }
+        },
+        "summary": "(Gestor) Cancela um convite pendente",
+        "operationId": "cancelar_convite",
+        "tags": [
+          "convites"
+        ]
+      }
+    },
+    "/v1/convites/{convite_id}/reenviar": {
+      "parameters": [
+        {
+          "name": "convite_id",
+          "in": "path",
+          "required": true,
+          "type": "string"
+        }
+      ],
+      "post": {
+        "responses": {
+          "200": {
+            "description": "Reenviado"
+          },
+          "404": {
+            "description": "Não encontrado"
+          },
+          "409": {
+            "description": "Não pendente"
+          }
+        },
+        "summary": "(Gestor) Reenvia um convite pendente",
+        "description": "O link anterior deixa de valer.",
+        "operationId": "reenviar_convite",
+        "tags": [
+          "convites"
         ]
       }
     },
@@ -535,31 +541,6 @@
         ],
         "tags": [
           "dashboard"
-        ]
-      }
-    },
-    "/v1/embarque/viagens/{viagem_id}/credencial": {
-      "parameters": [
-        {
-          "name": "viagem_id",
-          "in": "path",
-          "required": true,
-          "type": "string"
-        }
-      ],
-      "get": {
-        "responses": {
-          "200": {
-            "description": "Success",
-            "schema": {
-              "$ref": "#/definitions/CredencialResponse"
-            }
-          }
-        },
-        "summary": "Credencial de embarque do próprio aluno na rodada (RF-15)",
-        "operationId": "get_credencial",
-        "tags": [
-          "embarque"
         ]
       }
     },
@@ -815,6 +796,17 @@
           "type": "string"
         }
       ],
+      "delete": {
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "operationId": "delete_instituicao",
+        "tags": [
+          "instituicoes"
+        ]
+      },
       "get": {
         "responses": {
           "200": {
@@ -825,17 +817,6 @@
           }
         },
         "operationId": "get_instituicao",
-        "tags": [
-          "instituicoes"
-        ]
-      },
-      "delete": {
-        "responses": {
-          "200": {
-            "description": "Success"
-          }
-        },
-        "operationId": "delete_instituicao",
         "tags": [
           "instituicoes"
         ]
@@ -909,6 +890,21 @@
           "type": "string"
         }
       ],
+      "delete": {
+        "responses": {
+          "200": {
+            "description": "Deleted",
+            "schema": {
+              "$ref": "#/definitions/JanelaMessageResponse"
+            }
+          }
+        },
+        "summary": "Remove uma janela de disponibilidade (Gestor)",
+        "operationId": "delete_janela",
+        "tags": [
+          "janelas"
+        ]
+      },
       "patch": {
         "responses": {
           "200": {
@@ -930,21 +926,6 @@
             }
           }
         ],
-        "tags": [
-          "janelas"
-        ]
-      },
-      "delete": {
-        "responses": {
-          "200": {
-            "description": "Deleted",
-            "schema": {
-              "$ref": "#/definitions/JanelaMessageResponse"
-            }
-          }
-        },
-        "summary": "Remove uma janela de disponibilidade (Gestor)",
-        "operationId": "delete_janela",
         "tags": [
           "janelas"
         ]
@@ -1131,6 +1112,33 @@
           "type": "string"
         }
       ],
+      "delete": {
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "Remove um ônibus",
+        "operationId": "delete_onibus",
+        "tags": [
+          "onibus"
+        ]
+      },
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/OnibusResponse"
+            }
+          }
+        },
+        "summary": "Detalhes de um ônibus",
+        "operationId": "get_onibus",
+        "tags": [
+          "onibus"
+        ]
+      },
       "patch": {
         "responses": {
           "200": {
@@ -1152,33 +1160,6 @@
             }
           }
         ],
-        "tags": [
-          "onibus"
-        ]
-      },
-      "get": {
-        "responses": {
-          "200": {
-            "description": "Success",
-            "schema": {
-              "$ref": "#/definitions/OnibusResponse"
-            }
-          }
-        },
-        "summary": "Detalhes de um ônibus",
-        "operationId": "get_onibus",
-        "tags": [
-          "onibus"
-        ]
-      },
-      "delete": {
-        "responses": {
-          "200": {
-            "description": "Success"
-          }
-        },
-        "summary": "Remove um ônibus",
-        "operationId": "delete_onibus",
         "tags": [
           "onibus"
         ]
@@ -1698,39 +1679,6 @@
         ]
       }
     },
-    "/v1/users/alunos": {
-      "post": {
-        "responses": {
-          "201": {
-            "description": "Aluno account created"
-          },
-          "400": {
-            "description": "Validation error"
-          },
-          "403": {
-            "description": "Forbidden - not a gestor"
-          },
-          "409": {
-            "description": "Conflict - duplicate email/CPF"
-          }
-        },
-        "summary": "Gestor provisiona uma nova conta de aluno",
-        "operationId": "aluno_provision_account",
-        "parameters": [
-          {
-            "name": "payload",
-            "required": true,
-            "in": "body",
-            "schema": {
-              "$ref": "#/definitions/AlunoProvisionAccountRequest"
-            }
-          }
-        ],
-        "tags": [
-          "users"
-        ]
-      }
-    },
     "/v1/users/change-password": {
       "post": {
         "responses": {
@@ -1795,6 +1743,46 @@
       }
     },
     "/v1/users/me": {
+      "delete": {
+        "responses": {
+          "200": {
+            "description": "Conta excluída"
+          },
+          "401": {
+            "description": "Credenciais inválidas"
+          },
+          "403": {
+            "description": "Somente passageiros podem excluir a conta"
+          },
+          "409": {
+            "description": "Viagem em andamento"
+          }
+        },
+        "summary": "Exclui a conta e os dados pessoais do passageiro logado",
+        "description": "Corpo: {\"email\", \"senha\"}",
+        "operationId": "delete_my_account",
+        "tags": [
+          "users"
+        ]
+      },
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/UserResponse"
+            }
+          },
+          "404": {
+            "description": "User not found"
+          }
+        },
+        "summary": "Perfil do usuário logado",
+        "operationId": "get_my_profile",
+        "tags": [
+          "users"
+        ]
+      },
       "patch": {
         "responses": {
           "200": {
@@ -1822,24 +1810,6 @@
             }
           }
         ],
-        "tags": [
-          "users"
-        ]
-      },
-      "get": {
-        "responses": {
-          "200": {
-            "description": "Success",
-            "schema": {
-              "$ref": "#/definitions/UserResponse"
-            }
-          },
-          "404": {
-            "description": "User not found"
-          }
-        },
-        "summary": "Perfil do usuário logado",
-        "operationId": "get_my_profile",
         "tags": [
           "users"
         ]
@@ -2208,6 +2178,31 @@
         ]
       }
     },
+    "/v1/viagens/{id}/credencial-embarque": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "type": "string"
+        }
+      ],
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/CredencialEmbarqueResponse"
+            }
+          }
+        },
+        "summary": "Retorna o QR de embarque do aluno autenticado para esta viagem",
+        "operationId": "get_credencial_embarque_viagem",
+        "tags": [
+          "viagens"
+        ]
+      }
+    },
     "/v1/viagens/{id}/declaracao": {
       "parameters": [
         {
@@ -2217,6 +2212,24 @@
           "type": "string"
         }
       ],
+      "delete": {
+        "responses": {
+          "200": {
+            "description": "Cancelada",
+            "schema": {
+              "$ref": "#/definitions/CancelamentoResponse"
+            }
+          },
+          "404": {
+            "description": "Sem solicitação"
+          }
+        },
+        "summary": "(Aluno) Cancela a solicitação da rodada",
+        "operationId": "cancelar_solicitacao",
+        "tags": [
+          "viagens"
+        ]
+      },
       "post": {
         "responses": {
           "201": {
@@ -2244,24 +2257,6 @@
             }
           }
         ],
-        "tags": [
-          "viagens"
-        ]
-      },
-      "delete": {
-        "responses": {
-          "200": {
-            "description": "Cancelada",
-            "schema": {
-              "$ref": "#/definitions/CancelamentoResponse"
-            }
-          },
-          "404": {
-            "description": "Sem solicitação"
-          }
-        },
-        "summary": "(Aluno) Cancela a solicitação da rodada",
-        "operationId": "cancelar_solicitacao",
         "tags": [
           "viagens"
         ]
@@ -2436,6 +2431,14 @@
       "description": "Gerenciamento de Usuários e Perfil"
     },
     {
+      "name": "consentimento",
+      "description": "Consentimento LGPD (termo e política de privacidade)"
+    },
+    {
+      "name": "convites",
+      "description": "Convites de cadastro de passageiros"
+    },
+    {
       "name": "notificacoes",
       "description": "Avisos e comunicados"
     },
@@ -2478,10 +2481,6 @@
     {
       "name": "janelas",
       "description": "Janelas de Disponibilidade do Veículo"
-    },
-    {
-      "name": "consentimento",
-      "description": "Consentimento LGPD e Direitos do Titular"
     },
     {
       "name": "embarque",
@@ -2662,37 +2661,6 @@
         "cnh": {
           "type": "string",
           "description": "CNH (apenas motoristas)"
-        }
-      },
-      "type": "object"
-    },
-    "AlunoProvisionAccountRequest": {
-      "required": [
-        "cpf",
-        "email",
-        "nome",
-        "password"
-      ],
-      "properties": {
-        "nome": {
-          "type": "string",
-          "description": "Nome completo"
-        },
-        "email": {
-          "type": "string",
-          "description": "Email"
-        },
-        "password": {
-          "type": "string",
-          "description": "Senha"
-        },
-        "cpf": {
-          "type": "string",
-          "description": "CPF"
-        },
-        "telefone": {
-          "type": "string",
-          "description": "Telefone"
         }
       },
       "type": "object"
@@ -3353,6 +3321,19 @@
       },
       "type": "object"
     },
+    "CancelamentoResponse": {
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Resultado do cancelamento"
+        },
+        "vaga_liberada": {
+          "type": "boolean",
+          "description": "A vaga voltou para a rodada"
+        }
+      },
+      "type": "object"
+    },
     "DeclaracaoResponse": {
       "properties": {
         "viagem_id": {
@@ -3379,19 +3360,6 @@
           "type": "string",
           "format": "date-time",
           "description": "Momento da declaração"
-        }
-      },
-      "type": "object"
-    },
-    "CancelamentoResponse": {
-      "properties": {
-        "message": {
-          "type": "string",
-          "description": "Resultado do cancelamento"
-        },
-        "vaga_liberada": {
-          "type": "boolean",
-          "description": "A vaga voltou para a rodada"
         }
       },
       "type": "object"
@@ -3448,6 +3416,27 @@
         "ponto_embarque_id": {
           "type": "string",
           "description": "UUID do ponto de embarque"
+        }
+      },
+      "type": "object"
+    },
+    "CredencialEmbarqueResponse": {
+      "properties": {
+        "token": {
+          "type": "string",
+          "description": "Token opaco do QR de embarque"
+        },
+        "ponto_embarque_id": {
+          "type": "string",
+          "description": "UUID do ponto de embarque"
+        },
+        "expira_em": {
+          "type": "string",
+          "description": "Expiração (ISO 8601)"
+        },
+        "usado": {
+          "type": "boolean",
+          "description": "Se a credencial já foi usada no embarque"
         }
       },
       "type": "object"
@@ -3702,35 +3691,11 @@
       },
       "type": "object"
     },
-    "AlunoSelfSignupRequest": {
-      "required": [
-        "cpf",
-        "email",
-        "instituicao_id",
-        "nome",
-        "password",
-        "password_confirm"
-      ],
+    "AlunoMeUpdateRequest": {
       "properties": {
         "nome": {
           "type": "string",
           "description": "Nome completo"
-        },
-        "email": {
-          "type": "string",
-          "description": "Email"
-        },
-        "password": {
-          "type": "string",
-          "description": "Senha"
-        },
-        "password_confirm": {
-          "type": "string",
-          "description": "Confirmação da senha"
-        },
-        "cpf": {
-          "type": "string",
-          "description": "CPF"
         },
         "telefone": {
           "type": "string",
@@ -3738,15 +3703,7 @@
         },
         "matricula": {
           "type": "string",
-          "description": "Matrícula"
-        },
-        "instituicao_id": {
-          "type": "string",
-          "description": "UUID da instituição de vínculo"
-        },
-        "data_nascimento": {
-          "type": "string",
-          "description": "Data de nascimento (YYYY-MM-DD)"
+          "description": "Matrícula escolar"
         },
         "nome_responsavel": {
           "type": "string",
@@ -3755,10 +3712,6 @@
         "cpf_responsavel": {
           "type": "string",
           "description": "CPF do responsável"
-        },
-        "email_responsavel": {
-          "type": "string",
-          "description": "E-mail do responsável (obrigatório para menores)"
         },
         "endereco_casa": {
           "$ref": "#/definitions/EnderecoInput"
@@ -3878,34 +3831,6 @@
       },
       "type": "object"
     },
-    "AlunoMeUpdateRequest": {
-      "properties": {
-        "nome": {
-          "type": "string",
-          "description": "Nome completo"
-        },
-        "telefone": {
-          "type": "string",
-          "description": "Telefone"
-        },
-        "matricula": {
-          "type": "string",
-          "description": "Matrícula escolar"
-        },
-        "nome_responsavel": {
-          "type": "string",
-          "description": "Nome do responsável"
-        },
-        "cpf_responsavel": {
-          "type": "string",
-          "description": "CPF do responsável"
-        },
-        "endereco_casa": {
-          "$ref": "#/definitions/EnderecoInput"
-        }
-      },
-      "type": "object"
-    },
     "AlunoListResponse": {
       "properties": {
         "items": {
@@ -3917,40 +3842,6 @@
         "total": {
           "type": "integer",
           "description": "Total de alunos"
-        }
-      },
-      "type": "object"
-    },
-    "AlunoRejeitarRequest": {
-      "required": [
-        "motivo"
-      ],
-      "properties": {
-        "motivo": {
-          "type": "string",
-          "description": "Motivo da rejeição"
-        }
-      },
-      "type": "object"
-    },
-    "GuardianConsentResponse": {
-      "properties": {
-        "nome": {
-          "type": "string",
-          "description": "Nome do menor"
-        },
-        "data_nascimento": {
-          "type": "string",
-          "description": "Data de nascimento"
-        },
-        "is_minor": {
-          "type": "boolean",
-          "description": "Menor de idade"
-        },
-        "guardian_consented_at": {
-          "type": "string",
-          "format": "date-time",
-          "description": "Consentimento já registrado"
         }
       },
       "type": "object"
@@ -4366,102 +4257,6 @@
         "message": {
           "type": "string",
           "description": "Mensagem de confirmação"
-        }
-      },
-      "type": "object"
-    },
-    "ConsentimentoStatusResponse": {
-      "properties": {
-        "versao_termo": {
-          "type": "string",
-          "description": "Versão vigente do termo"
-        },
-        "aceito": {
-          "type": "boolean",
-          "description": "Há aceite válido para a versão vigente"
-        },
-        "aceito_em": {
-          "type": "string",
-          "format": "date-time",
-          "description": "Data/hora do aceite vigente"
-        }
-      },
-      "type": "object"
-    },
-    "ConsentimentoResponse": {
-      "properties": {
-        "id": {
-          "type": "string",
-          "description": "UUID do registro de consentimento"
-        },
-        "versao_termo": {
-          "type": "string",
-          "description": "Versão aceita"
-        },
-        "aceito_em": {
-          "type": "string",
-          "format": "date-time",
-          "description": "Data/hora do aceite"
-        }
-      },
-      "type": "object"
-    },
-    "ExclusaoContaRequest": {
-      "required": [
-        "email",
-        "password"
-      ],
-      "properties": {
-        "email": {
-          "type": "string",
-          "description": "E-mail do próprio titular"
-        },
-        "password": {
-          "type": "string",
-          "description": "Senha do próprio titular"
-        }
-      },
-      "type": "object"
-    },
-    "ConsentimentoMessageResponse": {
-      "properties": {
-        "message": {
-          "type": "string",
-          "description": "Mensagem de confirmação"
-        }
-      },
-      "type": "object"
-    },
-    "CredencialResponse": {
-      "properties": {
-        "viagem_id": {
-          "type": "string",
-          "description": "UUID da viagem"
-        },
-        "aluno_id": {
-          "type": "string",
-          "description": "UUID do aluno"
-        },
-        "qr_token": {
-          "type": "string",
-          "description": "Credencial opaca; o app a desenha como QR"
-        },
-        "ponto_embarque_id": {
-          "type": "string",
-          "description": "UUID do ponto de embarque"
-        },
-        "ponto_destino_id": {
-          "type": "string",
-          "description": "UUID do ponto de destino"
-        },
-        "embarcou": {
-          "type": "boolean",
-          "description": "Embarque já registrado"
-        },
-        "embarcado_em": {
-          "type": "string",
-          "format": "date-time",
-          "description": "Momento do embarque"
         }
       },
       "type": "object"

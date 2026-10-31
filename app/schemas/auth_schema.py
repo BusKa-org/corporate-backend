@@ -18,4 +18,5 @@ class UserInfoSchema(BaseSchema):
 class TokenResponseSchema(BaseSchema):
     message = fields.String(required=True)
     token = fields.String(required=True)
+    consentimento_pendente = fields.Boolean(required=True)
     user = fields.Nested(UserInfoSchema(), required=True)

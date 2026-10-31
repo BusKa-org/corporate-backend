@@ -4,9 +4,10 @@ from flask import request
 from flask_jwt_extended import get_jwt_identity, jwt_required
 from flask_restx import Namespace, Resource
 
-from app.api.contracts import ponto_contract, viagem_contract
+from app.api.contracts import credencial_embarque_contract, ponto_contract, viagem_contract
 from app.api.contracts.viagem_parsers import parsers
 from app.core.exceptions import ValidationError
+from app.schemas.credencial_embarque_schema import CredencialEmbarqueResponseSchema
 from app.schemas.ponto_schema import (
     PontoFlatListResponseSchema,
 )
@@ -26,11 +27,13 @@ from app.schemas.viagem_schema import (
     ViagemListResponseSchema,
     ViagemResponseSchema,
 )
-from app.services import viagens_service
+from app.services import credencial_embarque_service, viagens_service
+from app.services.consentimento_service import exige_consentimento
 
 api = Namespace("viagens", description="Execução de Viagens")
 
 ponto_models = ponto_contract.register_models(api)
+credencial_embarque_models = credencial_embarque_contract.register_models(api)
 
 # API contracts (Swagger documentation)
 models = viagem_contract.register_models(api)
@@ -51,6 +54,7 @@ viagem_agenda_aluno_list_response_schema = ViagemAgendaAlunoListResponseSchema()
 
 
 ponto_flat_list_response_schema = PontoFlatListResponseSchema()
+credencial_embarque_response_schema = CredencialEmbarqueResponseSchema()
 
 declaracao_trajeto_request_schema = DeclaracaoTrajetoRequestSchema()
 declaracao_response_schema = DeclaracaoResponseSchema()
@@ -173,12 +177,26 @@ class ViagemPontosResource(Resource):
         )
 
 
+@api.route("/<string:id>/credencial-embarque")
+class ViagemCredencialEmbarqueResource(Resource):
+    @api.doc("get_credencial_embarque_viagem")
+    @api.response(200, "Success", credencial_embarque_models["credencial_embarque_response"])
+    @jwt_required()
+    @exige_consentimento
+    def get(self, id: str) -> tuple[dict[str, Any], int]:
+        """Retorna o QR de embarque do aluno autenticado para esta viagem."""
+        user_id = get_jwt_identity()
+        credencial = credencial_embarque_service.buscar_credencial_do_aluno(user_id, id)
+        return credencial_embarque_response_schema.dump(credencial), 200
+
+
 @api.route("/<string:id>/confirmacao")
 class ViagemConfirmacaoResource(Resource):
     @api.doc("confirmar_presenca")
     @api.expect(models["viagem_confirmacao_request"])
     @api.response(200, "Success", models["viagem_aluno_confirmacao_response"])
     @jwt_required()
+    @exige_consentimento
     def put(self, id: str) -> tuple[dict[str, Any], int]:
         user_id = get_jwt_identity()
         data = request.get_json(silent=True) or {}

@@ -1,7 +1,7 @@
 """add non-school institution types
 
 Revision ID: b7c1e2f3a4d5
-Revises: f4ea939b97d7
+Revises: e3df828a86c6
 Create Date: 2026-08-03 19:30:00.000000+00:00
 
 RF-02 atende UFCG, UEPB, PaqTcPB e CITTA. As duas últimas não são escolas, e o
@@ -15,7 +15,7 @@ from collections.abc import Sequence
 from alembic import op
 
 revision: str = "b7c1e2f3a4d5"
-down_revision: str | None = "f4ea939b97d7"
+down_revision: str | None = "e3df828a86c6"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
@@ -48,8 +48,13 @@ def downgrade() -> None:
     escolares = "', '".join(TIPOS_ESCOLARES)
     op.execute("ALTER TYPE tipo_instituicao RENAME TO tipo_instituicao_old")
     op.execute(f"CREATE TYPE tipo_instituicao AS ENUM ('{escolares}')")
+    # O default ainda aponta para o tipo antigo e bloqueia o cast; solta e repõe.
+    op.execute("ALTER TABLE instituicao ALTER COLUMN tipo DROP DEFAULT")
     op.execute(
         "ALTER TABLE instituicao ALTER COLUMN tipo TYPE tipo_instituicao "
         "USING tipo::text::tipo_instituicao"
+    )
+    op.execute(
+        "ALTER TABLE instituicao ALTER COLUMN tipo SET DEFAULT 'ESCOLA_PUBLICA'::tipo_instituicao"
     )
     op.execute("DROP TYPE tipo_instituicao_old")

@@ -14,7 +14,6 @@ from flask_restx import Namespace, Resource
 from app.api.contracts import embarque_contract
 from app.schemas.embarque_schema import (
     AvancarPontoRequestSchema,
-    CredencialResponseSchema,
     EmbarqueManualRequestSchema,
     EmbarqueResponseSchema,
     RoteiroResponseSchema,
@@ -34,7 +33,6 @@ validar_request_schema = ValidarEmbarqueRequestSchema()
 manual_request_schema = EmbarqueManualRequestSchema()
 avancar_request_schema = AvancarPontoRequestSchema()
 sincronizacao_request_schema = SincronizacaoRequestSchema()
-credencial_response_schema = CredencialResponseSchema()
 roteiro_response_schema = RoteiroResponseSchema()
 embarque_response_schema = EmbarqueResponseSchema()
 sincronizacao_response_schema = SincronizacaoResponseSchema()
@@ -42,17 +40,6 @@ sincronizacao_response_schema = SincronizacaoResponseSchema()
 
 def _body() -> dict[str, Any]:
     return request.get_json(silent=True) or {}
-
-
-@api.route("/viagens/<string:viagem_id>/credencial")
-class CredencialResource(Resource):
-    @api.doc("get_credencial")
-    @api.response(200, "Success", models["credencial_response"])
-    @jwt_required()
-    def get(self, viagem_id: str) -> tuple[dict[str, Any], int]:
-        """Credencial de embarque do próprio aluno na rodada (RF-15)"""
-        credencial = embarque_service.minha_credencial(get_jwt_identity(), viagem_id)
-        return credencial_response_schema.dump(credencial), 200
 
 
 @api.route("/viagens/<string:viagem_id>/roteiro")

@@ -43,4 +43,3 @@ class AlunosConfirmadosFactory(factory.Factory):
     ponto_embarque_id = None
     ponto_destino_id = None
     status = StatusSolicitacao.INTERESSADO
-    qr_token = None

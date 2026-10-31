@@ -21,6 +21,7 @@ from app.models.enum import UserRole, UserStatus
 from app.models.organizacao import Organizacao
 from app.models.password_reset import PasswordResetToken
 from app.models.user import Aluno, Gestor, Motorista, User
+from app.services import consentimento_service
 from app.utils import audit_logger, validate_cpf, validate_email, validate_password
 from app.utils.email_sender import send_email
 
@@ -97,26 +98,7 @@ def login_user(data: dict[str, Any]) -> dict[str, Any]:
         )
         raise ForbiddenError("Sua conta está desativada. Entre em contato com o gestor.")
 
-    # RF-02 fluxo secundário 2 — cadastro recusado. Estado próprio, e não
-    # DISABLED, justamente para que a pessoa receba o motivo em vez de uma
-    # mensagem genérica de conta desativada.
-    if hasattr(user, "status") and user.status == UserStatus.REJECTED:
-        audit_logger.log_auth(
-            action="login_attempt",
-            user_id=str(user.id),
-            email=email,
-            success=False,
-            details={"reason": "account_rejected"},
-        )
-        motivo = getattr(user, "motivo_rejeicao", None)
-        raise ForbiddenError(
-            f"Seu cadastro foi recusado pelo gestor. Motivo: {motivo}"
-            if motivo
-            else "Seu cadastro foi recusado pelo gestor."
-        )
-
-    # RF-01 fluxo secundário 2 — cadastro ainda não analisado pelo gestor (RF-02)
-    if hasattr(user, "status") and user.status == UserStatus.PENDING_APPROVAL:
+    if user.status == UserStatus.PENDING_APPROVAL:
         audit_logger.log_auth(
             action="login_attempt",
             user_id=str(user.id),
@@ -124,9 +106,7 @@ def login_user(data: dict[str, Any]) -> dict[str, Any]:
             success=False,
             details={"reason": "pending_approval"},
         )
-        raise ForbiddenError(
-            "Seu cadastro está pendente de aprovação pelo gestor da sua instituição."
-        )
+        raise ForbiddenError("Seu cadastro aguarda aprovação do gestor.")
 
     # Block minors whose guardian has not yet consented
     if (
@@ -165,6 +145,7 @@ def login_user(data: dict[str, Any]) -> dict[str, Any]:
     return {
         "message": "Login successful",
         "token": access_token,
+        "consentimento_pendente": consentimento_service.consentimento_pendente(str(user.id)),
         "user": {
             "id": str(user.id),
             "nome": user.nome,

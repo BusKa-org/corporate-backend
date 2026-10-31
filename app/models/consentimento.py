@@ -1,37 +1,26 @@
-import uuid
+"""Registro de consentimento LGPD.
+
+Uma linha por evento: aceite ou revogação de uma versão do termo. O estado
+atual do usuário é a linha mais recente dele. Recusar o termo não grava nada.
+"""
 
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import relationship
 
 from .base import db
 
+ACEITE = "ACEITE"
+REVOGACAO = "REVOGACAO"
+
 
 class Consentimento(db.Model):
-    """RF-09: aceite versionado do Termo e da Política de Privacidade.
-
-    Uma linha por aceite, nunca sobrescrita: a prova de consentimento sob a
-    LGPD é o histórico, não o estado atual. Quando o termo muda de versão o
-    usuário volta a *sem consentimento* para a nova versão e um novo registro
-    é criado no aceite seguinte.
-    """
-
     __tablename__ = "consentimento"
+    __table_args__ = (db.Index("idx_consentimento_usuario", "usuario_id"),)
 
-    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    # Inteiro sequencial: a ordem dos eventos do usuário sai do id.
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     usuario_id = db.Column(
-        UUID(as_uuid=True),
-        db.ForeignKey("usuario.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
+        UUID(as_uuid=True), db.ForeignKey("usuario.id", ondelete="CASCADE"), nullable=False
     )
-
-    versao_termo = db.Column(db.String(20), nullable=False)
-    aceito_em = db.Column(db.DateTime(timezone=True), nullable=False, server_default=db.func.now())
-    revogado_em = db.Column(db.DateTime(timezone=True), nullable=True)
-
-    # Contexto do aceite, exigido para comprovar consentimento inequívoco.
-    ip_origem = db.Column(db.String(45), nullable=True)
-
-    usuario = relationship("User")
-
-    __table_args__ = (db.Index("idx_consentimento_usuario_versao", "usuario_id", "versao_termo"),)
+    versao = db.Column(db.String(20), nullable=False)
+    acao = db.Column(db.String(10), nullable=False)
+    created_at = db.Column(db.DateTime(timezone=True), server_default=db.func.now(), nullable=False)

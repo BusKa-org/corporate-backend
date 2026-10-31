@@ -1,7 +1,7 @@
-"""add DRT lifecycle, availability windows, consent and battery telemetry
+"""add DRT lifecycle, availability windows and battery telemetry
 
 Revision ID: d2ce717f75b5
-Revises: a1b2c3d4e5f7
+Revises: e5f6a7b8c9d0
 Create Date: 2026-08-03 16:48:34.410238+00:00
 
 Escrita a partir do autogenerate, com quatro correções que ele não faz sozinho:
@@ -18,6 +18,10 @@ Escrita a partir do autogenerate, com quatro correções que ele não faz sozinh
 
 O churn do índice `idx_aluno_guardian_token` que o autogenerate detectou é
 drift pré-existente, alheio a esta mudança, e foi removido daqui.
+
+Na fusão com a main, esta revisão passou a vir depois de `e5f6a7b8c9d0`: a
+tabela `consentimento` e a credencial de embarque são as da main (PRs #5 e #6),
+então a cópia de `consentimento` e a coluna `qr_token` saíram daqui.
 """
 
 from collections.abc import Sequence
@@ -28,7 +32,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic
 revision: str = "d2ce717f75b5"
-down_revision: str | None = "a1b2c3d4e5f7"
+down_revision: str | None = "e5f6a7b8c9d0"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
@@ -52,29 +56,6 @@ def upgrade() -> None:
         op.execute(f"ALTER TYPE status_viagem ADD VALUE IF NOT EXISTS '{valor}'")
 
     status_solicitacao.create(op.get_bind(), checkfirst=True)
-
-    op.create_table(
-        "consentimento",
-        sa.Column("id", sa.UUID(), nullable=False),
-        sa.Column("usuario_id", sa.UUID(), nullable=False),
-        sa.Column("versao_termo", sa.String(length=20), nullable=False),
-        sa.Column(
-            "aceito_em",
-            sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
-            nullable=False,
-        ),
-        sa.Column("revogado_em", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("ip_origem", sa.String(length=45), nullable=True),
-        sa.ForeignKeyConstraint(
-            ["usuario_id"], ["usuario.id"], name="consentimento_usuario_id_fkey", ondelete="CASCADE"
-        ),
-        sa.PrimaryKeyConstraint("id", name="consentimento_pkey"),
-    )
-    op.create_index(
-        "idx_consentimento_usuario_versao", "consentimento", ["usuario_id", "versao_termo"]
-    )
-    op.create_index("ix_consentimento_usuario_id", "consentimento", ["usuario_id"])
 
     op.create_table(
         "janela_disponibilidade",
@@ -174,12 +155,8 @@ def upgrade() -> None:
     op.add_column(
         "alunos_confirmados", sa.Column("declarado_em", sa.DateTime(timezone=True), nullable=True)
     )
-    op.add_column("alunos_confirmados", sa.Column("qr_token", sa.String(length=64), nullable=True))
     op.add_column(
         "alunos_confirmados", sa.Column("embarcado_em", sa.DateTime(timezone=True), nullable=True)
-    )
-    op.create_index(
-        "ix_alunos_confirmados_qr_token", "alunos_confirmados", ["qr_token"], unique=True
     )
 
     # Linhas herdadas: quem já tinha confirmação vira CONFIRMADO, o resto fica
@@ -212,9 +189,7 @@ def downgrade() -> None:
     op.drop_column("viagem", "janela_id")
     op.drop_column("viagem", "rota_id")
 
-    op.drop_index("ix_alunos_confirmados_qr_token", table_name="alunos_confirmados")
     op.drop_column("alunos_confirmados", "embarcado_em")
-    op.drop_column("alunos_confirmados", "qr_token")
     op.drop_column("alunos_confirmados", "declarado_em")
     op.drop_column("alunos_confirmados", "solicitado_em")
     op.drop_column("alunos_confirmados", "status")
@@ -225,10 +200,6 @@ def downgrade() -> None:
 
     op.drop_index("idx_janela_org_dia", table_name="janela_disponibilidade")
     op.drop_table("janela_disponibilidade")
-
-    op.drop_index("ix_consentimento_usuario_id", table_name="consentimento")
-    op.drop_index("idx_consentimento_usuario_versao", table_name="consentimento")
-    op.drop_table("consentimento")
 
     status_solicitacao.drop(op.get_bind(), checkfirst=True)
 

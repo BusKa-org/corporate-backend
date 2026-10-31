@@ -6,19 +6,6 @@ from flask_restx import fields
 def register_models(api):
     """Register boarding models with the API namespace."""
 
-    credencial_response = api.model(
-        "CredencialResponse",
-        {
-            "viagem_id": fields.String(description="UUID da viagem"),
-            "aluno_id": fields.String(description="UUID do aluno"),
-            "qr_token": fields.String(description="Credencial opaca; o app a desenha como QR"),
-            "ponto_embarque_id": fields.String(description="UUID do ponto de embarque"),
-            "ponto_destino_id": fields.String(description="UUID do ponto de destino"),
-            "embarcou": fields.Boolean(description="Embarque já registrado"),
-            "embarcado_em": fields.DateTime(description="Momento do embarque"),
-        },
-    )
-
     passageiro_ponto = api.model(
         "PassageiroDoPonto",
         {
@@ -133,7 +120,6 @@ def register_models(api):
     )
 
     return {
-        "credencial_response": credencial_response,
         "roteiro_response": roteiro_response,
         "validar_request": validar_request,
         "manual_request": manual_request,

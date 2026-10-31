@@ -189,7 +189,7 @@ class NotificacaoService:
             a
             for a in alunos
             if getattr(a, "receber_notificacoes", True)
-            and consentimento_service.tem_consentimento_vigente(str(a.usuario_id))
+            and not consentimento_service.consentimento_pendente(str(a.usuario_id))
         ]
 
     @staticmethod

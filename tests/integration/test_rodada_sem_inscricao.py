@@ -98,7 +98,7 @@ def test_gerar_viagem_programada_nao_copia_mais_o_roster(
 def test_aviso_por_viagem_alcanca_o_interessado_da_rodada(_db, viagem_ociosa, aluno, gestor):
     """Numa rodada, quem só demonstrou interesse ainda não tem `confirmacao`,
     mas precisa receber o comunicado do gestor."""
-    consentimento_service.registrar_aceite(str(aluno.user.id))
+    consentimento_service.aceitar(str(aluno.user.id), consentimento_service.VERSAO_TERMO_VIGENTE)
     _db.session.add(
         AlunosConfirmados(
             viagem_id=viagem_ociosa.id,

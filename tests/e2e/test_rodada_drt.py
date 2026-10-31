@@ -49,7 +49,7 @@ def passageiros(client, app, _db, organizacao):
     atores = []
     for aluno in turma:
         ator = _ator(client, app, aluno)
-        assert ator.post("/v1/consentimento").status_code == 201
+        assert ator.post("/v1/consentimento", json={"versao": "1.0"}).status_code == 200
         atores.append(ator)
     return atores
 
@@ -118,10 +118,10 @@ def test_rodada_completa_da_solicitacao_ao_embarque(
     assert viagem.status == StatusViagem.EM_ROTA
 
     # Cada confirmado recebe a sua credencial, e ninguém vê a do outro.
-    credencial = ana.get(f"/v1/embarque/viagens/{viagem_id}/credencial").get_json()
-    assert credencial["qr_token"]
-    token_bruno = bruno.get(f"/v1/embarque/viagens/{viagem_id}/credencial").get_json()["qr_token"]
-    assert token_bruno != credencial["qr_token"]
+    token_ana = ana.get(f"/v1/viagens/{viagem_id}/credencial-embarque").get_json()["token"]
+    assert token_ana
+    token_bruno = bruno.get(f"/v1/viagens/{viagem_id}/credencial-embarque").get_json()["token"]
+    assert token_bruno != token_ana
 
     # RF-16 — o roteiro do motorista sai na ordem do circuito.
     roteiro = condutor.get(f"/v1/embarque/viagens/{viagem_id}/roteiro").get_json()
@@ -134,7 +134,7 @@ def test_rodada_completa_da_solicitacao_ao_embarque(
     # RF-17 — o motorista valida a credencial no ponto correto.
     r = condutor.post(
         f"/v1/embarque/viagens/{viagem_id}/validacao",
-        json={"qr_token": credencial["qr_token"]},
+        json={"qr_token": token_ana},
     )
     assert r.status_code == 200, r.get_data(as_text=True)
 
@@ -147,7 +147,7 @@ def test_rodada_completa_da_solicitacao_ao_embarque(
     # A mesma credencial não embarca duas vezes.
     r = condutor.post(
         f"/v1/embarque/viagens/{viagem_id}/validacao",
-        json={"qr_token": credencial["qr_token"]},
+        json={"qr_token": token_ana},
     )
     assert r.status_code == 409
 

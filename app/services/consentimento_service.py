@@ -1,115 +1,83 @@
-"""RF-09 — consentimento LGPD versionado.
+"""Consentimento LGPD: aceite, revogação, estado e bloqueio."""
 
-Uma linha por aceite, nunca sobrescrita. O que libera as funcionalidades
-principais é existir um aceite *não revogado* para a versão vigente do termo:
-quando a versão muda, o aceite antigo continua no histórico (é a prova do
-consentimento dado à época) mas deixa de valer.
-"""
-
-import logging
-from datetime import UTC, datetime
-from functools import lru_cache
+from functools import wraps
 from typing import Any
 
-from flask import current_app
+from flask_jwt_extended import get_jwt_identity
 
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import ConflictError, ForbiddenError, ValidationError
 from app.core.transaction import transactional
 from app.models.base import db
-from app.models.consentimento import Consentimento
-from app.models.user import User
+from app.models.consentimento import ACEITE, REVOGACAO, Consentimento
 from app.utils import audit_logger
 
-logger = logging.getLogger(__name__)
+# O texto do termo mora no app. O back só conhece o identificador da versão.
+VERSAO_TERMO_VIGENTE = "1.0"
 
 
-@lru_cache(maxsize=1)
-def _versao_padrao() -> str:
-    """Default do ambiente, lido uma vez. `app.config` tem precedência."""
-    from app.core.config import Settings
-
-    return Settings().TERMO_VERSAO
-
-
-def versao_vigente() -> str:
-    """Versão do termo em vigor agora."""
-    return current_app.config.get("TERMO_VERSAO") or _versao_padrao()
-
-
-def _get_user_or_404(user_id: str) -> User:
-    user = db.session.get(User, user_id)
-    if not user:
-        raise NotFoundError("Usuário não encontrado")
-    return user
-
-
-def tem_consentimento_vigente(user_id: str) -> bool:
-    """Guarda de acesso: o usuário aceitou a versão em vigor e não revogou?
-
-    Usada pelos fluxos que dependem de consentimento (solicitação de viagem,
-    RF-10). Recusar o termo não desloga ninguém — apenas mantém o acesso
-    restrito, conforme o fluxo secundário 1 do RF-09.
-    """
-    return (
-        db.session.query(Consentimento.id)
-        .filter_by(usuario_id=user_id, versao_termo=versao_vigente(), revogado_em=None)
-        .first()
-        is not None
-    )
-
-
-def get_status(user_id: str) -> dict[str, Any]:
-    """Situação do titular perante a versão vigente do termo."""
-    _get_user_or_404(user_id)
-    versao = versao_vigente()
-
-    aceite = (
+def consentimento_pendente(user_id: str) -> bool:
+    """True quando o último evento do usuário não é um aceite da versão vigente."""
+    ultimo = (
         db.session.query(Consentimento)
-        .filter_by(usuario_id=user_id, versao_termo=versao, revogado_em=None)
-        .order_by(Consentimento.aceito_em.desc())
+        .filter(Consentimento.usuario_id == user_id)
+        .order_by(Consentimento.id.desc())
         .first()
     )
+    if ultimo is None:
+        return True
+    if ultimo.acao != ACEITE:
+        return True
+    if ultimo.versao != VERSAO_TERMO_VIGENTE:
+        return True
+    return False
 
+
+def get_estado(user_id: str) -> dict[str, Any]:
     return {
-        "versao_termo": versao,
-        "aceito": aceite is not None,
-        "aceito_em": aceite.aceito_em if aceite else None,
+        "versao_vigente": VERSAO_TERMO_VIGENTE,
+        "pendente": consentimento_pendente(user_id),
     }
 
 
-def registrar_aceite(user_id: str, ip_origem: str | None = None) -> Consentimento:
-    """Registra o aceite do titular para a versão vigente do termo."""
-    _get_user_or_404(user_id)
-    versao = versao_vigente()
+def aceitar(user_id: str, versao: str) -> dict[str, Any]:
+    if versao != VERSAO_TERMO_VIGENTE:
+        raise ValidationError(
+            f"Versão do termo inválida. A versão vigente é {VERSAO_TERMO_VIGENTE}."
+        )
 
     with transactional():
-        aceite = Consentimento(
-            usuario_id=user_id,
-            versao_termo=versao,
-            aceito_em=datetime.now(UTC),
-            ip_origem=ip_origem,
-        )
-        db.session.add(aceite)
+        db.session.add(Consentimento(usuario_id=user_id, versao=versao, acao=ACEITE))
 
     audit_logger.log_user_action(
-        action="consentimento_aceito",
-        user_id=user_id,
-        resource_type="consentimento",
-        resource_id=str(aceite.id),
-        details={"versao_termo": versao},
+        action="consent_accept", user_id=user_id, resource_type="consentimento"
     )
-    return aceite
+    return get_estado(user_id)
 
 
-def revogar_consentimentos(user_id: str) -> int:
-    """Revoga todos os aceites ativos do titular (RF-20).
+def revogar(user_id: str) -> dict[str, Any]:
+    if consentimento_pendente(user_id):
+        raise ConflictError("Não há consentimento vigente para revogar")
 
-    Não apaga as linhas: a LGPD exige poder comprovar quando o consentimento
-    foi dado e quando foi retirado. Não faz commit — quem chama controla a
-    transação.
-    """
-    return (
-        db.session.query(Consentimento)
-        .filter_by(usuario_id=user_id, revogado_em=None)
-        .update({"revogado_em": datetime.now(UTC)}, synchronize_session=False)
+    with transactional():
+        db.session.add(
+            Consentimento(usuario_id=user_id, versao=VERSAO_TERMO_VIGENTE, acao=REVOGACAO)
+        )
+
+    audit_logger.log_user_action(
+        action="consent_revoke", user_id=user_id, resource_type="consentimento"
     )
+    return get_estado(user_id)
+
+
+def exige_consentimento(func):
+    """Decorator para endpoints de passageiro. Vai abaixo de @jwt_required()."""
+
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        if consentimento_pendente(get_jwt_identity()):
+            raise ForbiddenError(
+                "É necessário aceitar o termo de uso e a política de privacidade para continuar"
+            )
+        return func(*args, **kwargs)
+
+    return wrapper

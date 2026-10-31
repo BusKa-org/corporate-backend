@@ -151,9 +151,6 @@ class AlunosConfirmados(db.Model):
     solicitado_em = db.Column(db.DateTime(timezone=True), server_default=db.func.now())
     declarado_em = db.Column(db.DateTime(timezone=True), nullable=True)
 
-    # RF-15: credencial de embarque, válida só para este par aluno/viagem.
-    # Gerada na consolidação do buffer, nunca reaproveitada entre rodadas.
-    qr_token = db.Column(db.String(64), unique=True, nullable=True, index=True)
     embarcado_em = db.Column(db.DateTime(timezone=True), nullable=True)
 
 

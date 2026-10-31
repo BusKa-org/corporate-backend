@@ -4,6 +4,8 @@ import logging
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
+from sqlalchemy import select
+
 from app.core.exceptions import (
     AppError,
     ConflictError,
@@ -148,6 +150,21 @@ def confirmar_presenca_aluno(
             horario = db.session.get(HorarioRota, viagem.horario_rota_id)
             if not horario:
                 raise NotFoundError("Horário da viagem não encontrado")
+
+            db.session.execute(select(User.id).where(User.id == aluno.usuario_id).with_for_update())
+            inscrito_em_outra = (
+                db.session.query(AlunosConfirmados)
+                .join(Viagem)
+                .filter(
+                    AlunosConfirmados.aluno_id == aluno.usuario_id,
+                    AlunosConfirmados.viagem_id != viagem.id,
+                    AlunosConfirmados.confirmacao.is_(True),
+                    Viagem.status.in_([StatusViagem.EM_ANDAMENTO, StatusViagem.EM_ROTA]),
+                )
+                .first()
+            )
+            if inscrito_em_outra:
+                raise ConflictError("Você já está em outra viagem em andamento")
 
             # schema already enforces ponto_embarque_id presence on confirmacao=True
             ponto_valido = (
@@ -596,7 +613,7 @@ def _aluno_apto(user_id: str) -> Aluno:
     if not aluno:
         raise ForbiddenError("Apenas alunos podem solicitar o veículo")
 
-    if not consentimento_service.tem_consentimento_vigente(user_id):
+    if consentimento_service.consentimento_pendente(user_id):
         raise ForbiddenError("Aceite o termo de uso antes de solicitar o veículo")
 
     return aluno

@@ -57,16 +57,6 @@ class SincronizacaoRequestSchema(BaseSchema):
 # ==========================================
 
 
-class CredencialResponseSchema(BaseSchema):
-    viagem_id = fields.String()
-    aluno_id = fields.String()
-    qr_token = fields.String()
-    ponto_embarque_id = fields.String(allow_none=True)
-    ponto_destino_id = fields.String(allow_none=True)
-    embarcou = fields.Boolean()
-    embarcado_em = fields.DateTime(allow_none=True)
-
-
 class PassageiroDoPontoSchema(BaseSchema):
     aluno_id = fields.String()
     nome = fields.String(allow_none=True)

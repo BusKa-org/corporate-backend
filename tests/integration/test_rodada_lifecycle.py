@@ -19,7 +19,7 @@ from tests.factories.user_factory import AlunoFactory
 @pytest.fixture()
 def com_consentimento(_db, aluno):
     """RF-10 exige consentimento vigente (RF-09)."""
-    consentimento_service.registrar_aceite(str(aluno.user.id))
+    consentimento_service.aceitar(str(aluno.user.id), consentimento_service.VERSAO_TERMO_VIGENTE)
     return aluno
 
 
@@ -32,7 +32,7 @@ def outro_aluno_consentido(_db, app, organizacao):
     u = AlunoFactory(organizacao_id=organizacao.id)
     _db.session.add(u)
     _db.session.commit()
-    consentimento_service.registrar_aceite(str(u.id))
+    consentimento_service.aceitar(str(u.id), consentimento_service.VERSAO_TERMO_VIGENTE)
 
     with app.app_context():
         token = create_access_token(identity=str(u.id))
@@ -65,6 +65,8 @@ def test_solicitar_requer_autenticacao(client, viagem_ociosa):
 
 @pytest.mark.integration
 def test_solicitar_sem_consentimento_e_recusado(aluno, viagem_ociosa):
+    # A fixture `aluno` já nasce com o termo aceito; revogar o deixa sem consentimento.
+    consentimento_service.revogar(str(aluno.user.id))
     r = aluno.client.post("/v1/viagens/solicitar")
     assert r.status_code == 403, r.get_data(as_text=True)
     assert "termo" in (r.get_json() or {})["error"]["message"]

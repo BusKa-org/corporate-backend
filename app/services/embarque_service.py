@@ -1,7 +1,8 @@
 """RF-15 a RF-18 — credencial de embarque, roteiro do motorista e sincronização.
 
-A credencial é um *token* opaco, não uma imagem: o backend emite e valida a
-string; desenhar o QR Code na tela é trabalho do app do aluno.
+A credencial é a `CredencialEmbarque` da main (PR #5): um token opaco que o
+app do aluno desenha como QR e busca em `GET /v1/viagens/<id>/credencial-embarque`.
+Este módulo a emite na consolidação do buffer e a consome no embarque.
 
 Escopo: a conferência visual por fotografia prevista no RF-15/RF-17 está fora
 do escopo desta entrega por decisão do cliente. O que existe aqui é a validação
@@ -9,7 +10,6 @@ da credencial contra o roteiro (viagem e ponto corretos) e o fallback manual.
 """
 
 import logging
-import secrets
 import uuid
 from datetime import UTC, datetime
 from typing import Any
@@ -17,6 +17,7 @@ from typing import Any
 from app.core.exceptions import AppError, ForbiddenError, NotFoundError, ValidationError
 from app.core.transaction import transactional
 from app.models.base import db
+from app.models.credencial_embarque import CredencialEmbarque
 from app.models.enum import (
     StatusOcorrencia,
     StatusSolicitacao,
@@ -27,6 +28,7 @@ from app.models.enum import (
 from app.models.ocorrencia import Ocorrencia
 from app.models.user import User
 from app.models.viagem import AlunosConfirmados, TelemetriaViagem, Viagem, ViagemPonto
+from app.services import credencial_embarque_service
 
 logger = logging.getLogger(__name__)
 
@@ -107,14 +109,16 @@ def _ponto_atual(viagem: Viagem) -> ViagemPonto | None:
 def consolidar_embarque(viagem: Viagem, confirmados: list[AlunosConfirmados]) -> int:
     """Emite as credenciais da rodada e materializa o roteiro do motorista.
 
-    Chamada pela consolidação do buffer (RF-15), dentro da transação dela. Um
-    token novo por passageiro confirmado, sorteado a cada rodada: a credencial
-    vale só para este par aluno/viagem e nunca é reaproveitada.
+    Chamada pela consolidação do buffer (RF-15), dentro da transação dela. Uma
+    credencial nova por passageiro confirmado: vale só para este aluno, nesta
+    viagem e neste ponto de embarque, e nunca é reaproveitada.
     """
     _materializar_pontos(viagem)
 
     for registro in confirmados:
-        registro.qr_token = secrets.token_urlsafe(32)
+        credencial_embarque_service.criar_credencial(
+            viagem.id, registro.aluno_id, registro.ponto_embarque_id
+        )
 
     return len(confirmados)
 
@@ -139,35 +143,6 @@ def _materializar_pontos(viagem: Viagem) -> None:
     db.session.flush()
 
 
-def minha_credencial(user_id: IdLike, viagem_id: IdLike) -> dict[str, Any]:
-    """RF-15: o aluno busca a própria credencial.
-
-    A busca é sempre pela identidade do JWT — não há parâmetro que permita
-    pedir a credencial de outro aluno.
-    """
-    registro = db.session.get(
-        AlunosConfirmados,
-        (_uuid(viagem_id, "ID da viagem"), _uuid(user_id, "ID do aluno")),
-    )
-    if not registro or registro.status != StatusSolicitacao.CONFIRMADO:
-        raise NotFoundError("Você não tem embarque confirmado nesta rodada")
-
-    if not registro.qr_token:
-        raise NotFoundError("A credencial é emitida quando a rodada é consolidada")
-
-    return {
-        "viagem_id": str(registro.viagem_id),
-        "aluno_id": str(registro.aluno_id),
-        "qr_token": registro.qr_token,
-        "ponto_embarque_id": (
-            str(registro.ponto_embarque_id) if registro.ponto_embarque_id else None
-        ),
-        "ponto_destino_id": str(registro.ponto_destino_id) if registro.ponto_destino_id else None,
-        "embarcou": registro.embarcou,
-        "embarcado_em": registro.embarcado_em,
-    }
-
-
 # ==========================================
 # RF-16 — roteiro do motorista
 # ==========================================
@@ -182,6 +157,10 @@ def roteiro(user_id: IdLike, viagem_id: IdLike) -> dict[str, Any]:
     viagem = _viagem_do_motorista(user_id, viagem_id, EM_PERCURSO)
     embarques = _embarques(viagem)
     atual = _ponto_atual(viagem)
+
+    token_por_aluno: dict[uuid.UUID, str] = {}
+    for credencial in CredencialEmbarque.query.filter_by(viagem_id=viagem.id).all():
+        token_por_aluno[credencial.aluno_id] = credencial.token
 
     pontos = []
     for vp in viagem.pontos_visitados:
@@ -204,7 +183,7 @@ def roteiro(user_id: IdLike, viagem_id: IdLike) -> dict[str, Any]:
                     {
                         "aluno_id": str(c.aluno_id),
                         "nome": c.aluno.nome if c.aluno else None,
-                        "qr_token": c.qr_token,
+                        "qr_token": token_por_aluno.get(c.aluno_id),
                         "embarcou": c.embarcou,
                         "ponto_destino_id": (
                             str(c.ponto_destino_id) if c.ponto_destino_id else None
@@ -257,16 +236,23 @@ def _marcar_visitado(vp: ViagemPonto, momento: datetime) -> None:
 # ==========================================
 
 
-def _registro_por_token(qr_token: str, viagem: Viagem) -> AlunosConfirmados:
-    registro = (
-        db.session.query(AlunosConfirmados).filter_by(qr_token=(qr_token or "").strip()).first()
-    )
-    if not registro:
+def _registro_por_token(qr_token: str, viagem: Viagem, momento: datetime) -> AlunosConfirmados:
+    credencial = CredencialEmbarque.query.filter_by(token=(qr_token or "").strip()).first()
+    if not credencial:
         raise EmbarqueRecusado("Credencial não reconhecida", "CREDENCIAL_DESCONHECIDA", 404)
 
-    if registro.viagem_id != viagem.id:
+    if credencial.viagem_id != viagem.id:
         raise EmbarqueRecusado("Credencial emitida para outra viagem", "CREDENCIAL_DE_OUTRA_VIAGEM")
 
+    # Vale o carimbo do evento, não a hora da chegada: a fila offline chega atrasada.
+    if momento >= credencial.expires_at:
+        raise EmbarqueRecusado("Credencial de embarque expirada", "CREDENCIAL_EXPIRADA")
+
+    registro = db.session.get(AlunosConfirmados, (viagem.id, credencial.aluno_id))
+    if not registro:
+        raise EmbarqueRecusado(
+            "Passageiro não consta na lista de embarque desta viagem", "PASSAGEIRO_NAO_PREVISTO"
+        )
     return registro
 
 
@@ -293,6 +279,13 @@ def _conferir(registro: AlunosConfirmados, ponto_esperado: uuid.UUID | None) -> 
 def _registrar_embarque(registro: AlunosConfirmados, momento: datetime) -> dict[str, Any]:
     registro.embarcou = True
     registro.embarcado_em = momento
+
+    # A credencial é de uso único, inclusive quando o embarque foi manual.
+    credenciais = CredencialEmbarque.query.filter_by(
+        viagem_id=registro.viagem_id, aluno_id=registro.aluno_id
+    ).all()
+    for credencial in credenciais:
+        credencial.usado = True
     return {
         "viagem_id": str(registro.viagem_id),
         "aluno_id": str(registro.aluno_id),
@@ -320,10 +313,11 @@ def validar_embarque(
     if not atual:
         raise ValidationError("Não há parada em atendimento nesta viagem")
 
+    momento = _aware(ocorrido_em)
     with transactional():
-        registro = _registro_por_token(qr_token, viagem)
+        registro = _registro_por_token(qr_token, viagem, momento)
         _conferir(registro, atual.ponto_id)
-        resultado = _registrar_embarque(registro, _aware(ocorrido_em))
+        resultado = _registrar_embarque(registro, momento)
 
     resultado["manual"] = False
     return resultado
@@ -448,7 +442,7 @@ def _aplicar_evento(viagem: Viagem, evento: dict[str, Any], motorista_id: IdLike
     ponto_esperado = _uuid(ponto_id, "ID do ponto") if ponto_id else None
 
     if tipo == "EMBARQUE":
-        registro = _registro_por_token(evento.get("qr_token") or "", viagem)
+        registro = _registro_por_token(evento.get("qr_token") or "", viagem, momento)
         if registro.embarcou:
             return "ja_aplicado"
         _conferir(registro, ponto_esperado)
