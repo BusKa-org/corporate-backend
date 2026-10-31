@@ -29,6 +29,8 @@ All notable changes to this project will be documented in this file.
   responses. Starting a trip needs `ATIVO`, working hours and no pending rest (403; 409 if
   already `EM_ROTA`) and sets `EM_ROTA`. Finishing or cancelling a started trip sets
   `EM_DESCANSO_OBRIGATORIO` when the max continuous driving time was reached, otherwise `ATIVO`.
+  Trip start locks the trip and driver rows, so two simultaneous starts can't both pass.
+  A driver left `EM_ROTA` with no trip in progress is recomputed on start and on read.
   New settings `MOTORISTA_HORAS_MAX_DIRECAO`, `MOTORISTA_DESCANSO_MINUTOS` and `TIMEZONE`.
 
 ### Removed
