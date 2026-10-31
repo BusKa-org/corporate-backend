@@ -93,7 +93,8 @@ class ConviteAceiteResource(Resource):
         },
     )
     def post(self, token: str) -> tuple[dict[str, str], int]:
-        """(Público) Conclui o cadastro. Corpo: nome, cpf, telefone, instituicao_id, senha"""
+        """(Público) Conclui o cadastro. Corpo: nome, cpf, telefone, instituicao_id, senha,
+        necessidades_acessibilidade, observacao_acessibilidade"""
         payload = convite_aceite_schema.load(request.get_json(silent=True) or {})
         convite_service.concluir_convite(token, payload)
         return {"message": "Cadastro concluído. Entre com seu e-mail e senha."}, 201
