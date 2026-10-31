@@ -8,13 +8,14 @@ from app.models.base import db
 from app.models.enum import UserRole
 from app.models.geo import Ponto
 from app.models.user import User
+from app.services.rotas_service import garantir_ponto_sem_viagem_ativa
 
 logger = logging.getLogger(__name__)
 
 
 def list_all(user_id: str) -> list[Ponto]:
     """List all points for user's organizacao."""
-    user = User.query.get(user_id)
+    user = db.session.get(User, user_id)
     if not user:
         raise NotFoundError("Usuário não encontrado")
 
@@ -27,11 +28,11 @@ def get_by_id(user_id: str, ponto_id: str) -> Ponto:
 
     Raises: NotFoundError, ForbiddenError
     """
-    user = User.query.get(user_id)
+    user = db.session.get(User, user_id)
     if not user:
         raise NotFoundError("Usuário não encontrado")
 
-    ponto = Ponto.query.get(ponto_id)
+    ponto = db.session.get(Ponto, ponto_id)
     if not ponto:
         raise NotFoundError("Ponto não encontrado")
 
@@ -47,7 +48,7 @@ def create_ponto(user_id: str, data: dict[str, Any]) -> Ponto:
 
     Raises: ForbiddenError, ValidationError, AppError
     """
-    user = User.query.get(user_id)
+    user = db.session.get(User, user_id)
     if not user or user.role not in (UserRole.GESTOR, UserRole.MOTORISTA):
         raise ForbiddenError("Permissão negada")
 
@@ -78,16 +79,18 @@ def update_ponto(user_id: str, ponto_id: str, data: dict[str, Any]) -> Ponto:
 
     Raises: ForbiddenError, NotFoundError, AppError
     """
-    user = User.query.get(user_id)
+    user = db.session.get(User, user_id)
     if not user or user.role != UserRole.GESTOR:
         raise ForbiddenError("Apenas gestores editam pontos")
 
-    ponto = Ponto.query.get(ponto_id)
+    ponto = db.session.get(Ponto, ponto_id)
     if not ponto:
         raise NotFoundError("Ponto não encontrado")
 
     if ponto.organizacao_id != user.organizacao_id:
         raise ForbiddenError("Acesso negado")
+
+    garantir_ponto_sem_viagem_ativa(ponto_id)
 
     try:
         # Update simple fields
@@ -110,16 +113,18 @@ def delete_ponto(user_id: str, ponto_id: str) -> None:
 
     Raises: ForbiddenError, NotFoundError, AppError
     """
-    user = User.query.get(user_id)
+    user = db.session.get(User, user_id)
     if not user or user.role != UserRole.GESTOR:
         raise ForbiddenError("Permissão negada")
 
-    ponto = Ponto.query.get(ponto_id)
+    ponto = db.session.get(Ponto, ponto_id)
     if not ponto:
         raise NotFoundError("Ponto não encontrado")
 
     if ponto.organizacao_id != user.organizacao_id:
         raise ForbiddenError("Acesso negado")
+
+    garantir_ponto_sem_viagem_ativa(ponto_id)
 
     try:
         db.session.delete(ponto)

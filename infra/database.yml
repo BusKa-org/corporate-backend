@@ -20,6 +20,19 @@ services:
       - ../database/init.sql:/docker-entrypoint-initdb.d/init.sql
       - mebuska_corporate_data:/var/lib/postgresql/data
 
+  # Contadores do rate limit, compartilhados entre os workers (RATELIMIT_STORAGE_URI).
+  redis:
+    image: redis:8.6-alpine
+    container_name: mebuska_corporate_redis
+    restart: always
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-6380}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
   mailhog:
     image: mailhog/mailhog
     container_name: mebuska_corporate_mailhog

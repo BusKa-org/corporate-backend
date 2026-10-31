@@ -22,6 +22,7 @@ dependencies = [
     "flask-apscheduler>=1.13.1",
     "firebase-admin>=7.2.0",
     "requests>=2.33.0",
+    "flask-limiter[redis]>=4.1.1",
 ]
 
 # ==========================================
@@ -101,6 +102,7 @@ markers = [
   "unit: fast tests without DB",
   "integration: API/DB integration tests",
   "e2e: full flows, slowest",
+  "concurrency: race-condition tests, real threads against Postgres",
 ]
 filterwarnings = [
   "ignore:pythonjsonlogger\\.jsonlogger has been moved:DeprecationWarning",

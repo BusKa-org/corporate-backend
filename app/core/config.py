@@ -1,6 +1,9 @@
 import logging
 import os
 import re
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+from limits import parse_many
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +58,93 @@ class Settings:
         # Link de download do app, incluído no e-mail de convite (opcional)
         self.APP_DOWNLOAD_URL = os.getenv("APP_DOWNLOAD_URL", "")
 
+        # Fuso da organização: hora local das janelas de disponibilidade (RF-05) e da
+        # jornada do motorista.
+        self.TIMEZONE = os.getenv("TIMEZONE", "America/Sao_Paulo")
+        try:
+            ZoneInfo(self.TIMEZONE)
+        except (ZoneInfoNotFoundError, ValueError):
+            self._errors.append(f"TIMEZONE is not a valid IANA timezone: '{self.TIMEZONE}'")
+            self.TIMEZONE = "UTC"
+
+        # Intervalos dos jobs de viagem sob demanda: fechar buffer expirado e
+        # avisar o gestor quando o motorista estoura o prazo de início (RF-11)
+        self.JOB_BUFFER_INTERVALO_SEGUNDOS = self._get_int(
+            "JOB_BUFFER_INTERVALO_SEGUNDOS", default=30, min_val=5, max_val=3600
+        )
+        self.JOB_PRAZO_INICIO_INTERVALO_SEGUNDOS = self._get_int(
+            "JOB_PRAZO_INICIO_INTERVALO_SEGUNDOS", default=60, min_val=5, max_val=3600
+        )
+
+        # Rotas sob demanda (RF-11): duração do buffer e prazo do motorista para iniciar,
+        # em minutos. O padrão vale quando o gestor cria a rota sem informar o valor.
+        self.ROTA_BUFFER_MINUTOS_MAX = self._get_int(
+            "ROTA_BUFFER_MINUTOS_MAX", default=30, min_val=1, max_val=1440
+        )
+        self.ROTA_BUFFER_MINUTOS_PADRAO = self._get_int(
+            "ROTA_BUFFER_MINUTOS_PADRAO", default=5, min_val=1, max_val=self.ROTA_BUFFER_MINUTOS_MAX
+        )
+        self.ROTA_PRAZO_INICIO_MINUTOS_MAX = self._get_int(
+            "ROTA_PRAZO_INICIO_MINUTOS_MAX", default=120, min_val=1, max_val=1440
+        )
+        self.ROTA_PRAZO_INICIO_MINUTOS_PADRAO = self._get_int(
+            "ROTA_PRAZO_INICIO_MINUTOS_PADRAO",
+            default=10,
+            min_val=1,
+            max_val=self.ROTA_PRAZO_INICIO_MINUTOS_MAX,
+        )
+
+        # Jornada do motorista. Padrão do CTB (Lei 9.503/97) art. 67-C §1º-A, incluído pela
+        # Lei 13.103/2015: no transporte de passageiros, 30 min de descanso a cada 4 h de
+        # direção (fracionamento permitido).
+        self.MOTORISTA_HORAS_MAX_DIRECAO = self._get_int(
+            "MOTORISTA_HORAS_MAX_DIRECAO", default=4, min_val=1, max_val=24
+        )
+        self.MOTORISTA_DESCANSO_MINUTOS = self._get_int(
+            "MOTORISTA_DESCANSO_MINUTOS", default=30, min_val=1, max_val=1440
+        )
+        # Fotos dos alunos (RF-15/RF-17). Vazio = <instance_path>/fotos_aluno.
+        self.FOTOS_ALUNO_DIR = os.getenv("FOTOS_ALUNO_DIR", "")
+        self.FOTO_ALUNO_MAX_BYTES = self._get_int(
+            "FOTO_ALUNO_MAX_BYTES", default=5 * 1024 * 1024, min_val=1024
+        )
+        # Largura x altura. 25 MP cobre foto de celular e barra imagem pequena em bytes
+        # que ocupa gigabytes de memória ao ser aberta (bomba de descompressão).
+        self.FOTO_ALUNO_MAX_PIXELS = self._get_int(
+            "FOTO_ALUNO_MAX_PIXELS", default=25_000_000, min_val=1
+        )
+
+        # QR dinâmico de embarque (RF-15): código TOTP (RFC 6238) que muda a cada passo.
+        # A janela aceita até N passos antes ou depois do relógio do servidor.
+        self.QR_PASSO_SEGUNDOS = self._get_int(
+            "QR_PASSO_SEGUNDOS", default=30, min_val=5, max_val=300
+        )
+        self.QR_DIGITOS = self._get_int("QR_DIGITOS", default=6, min_val=6, max_val=8)
+        self.QR_JANELA_PASSOS = self._get_int("QR_JANELA_PASSOS", default=1, min_val=0, max_val=10)
+        # Fila offline (RF-18): quanto o relógio do app do motorista pode estar adiantado.
+        self.SYNC_TOLERANCIA_SEGUNDOS = self._get_int(
+            "SYNC_TOLERANCIA_SEGUNDOS", default=120, min_val=0, max_val=3600
+        )
+
+        # Rate limit (Flask-Limiter). Formato do limite: "10 per minute", "2000 per hour".
+        self.RATELIMIT_ENABLED = os.getenv("RATELIMIT_ENABLED", "true").lower() == "true"
+        # memory:// conta separado em cada worker do gunicorn; produção usa Redis.
+        self.RATELIMIT_STORAGE_URI = os.getenv("RATELIMIT_STORAGE_URI", "memory://")
+        self.RATELIMIT_DEFAULT = self._get_rate_limit("RATELIMIT_DEFAULT", "2000 per hour")
+        self.RATELIMIT_AUTH = self._get_rate_limit("RATELIMIT_AUTH", "10 per minute")
+        self.RATELIMIT_SENSITIVE = self._get_rate_limit("RATELIMIT_SENSITIVE", "5 per minute")
+        # GPS, telemetria e embarque mandam muitas requisições seguidas do mesmo usuário.
+        self.RATELIMIT_REALTIME = self._get_rate_limit("RATELIMIT_REALTIME", "120 per minute")
+        if (
+            not self.DEBUG
+            and self.RATELIMIT_ENABLED
+            and self.RATELIMIT_STORAGE_URI.startswith("memory://")
+        ):
+            self._errors.append(
+                "RATELIMIT_STORAGE_URI cannot be memory:// in production "
+                "(each gunicorn worker would count separately); use redis://"
+            )
+
         # CORS settings
         self.CORS_ORIGINS = self._parse_cors_origins()
 
@@ -79,20 +169,38 @@ class Settings:
         self, key: str, default: int, min_val: int | None = None, max_val: int | None = None
     ) -> int:
         """Get an integer value with optional range validation."""
+        # The fallback stays in range: max_val can come from another setting
+        # (e.g. ROTA_BUFFER_MINUTOS_MAX=3 with the default PADRAO of 5).
+        fallback = default
+        if max_val is not None and fallback > max_val:
+            fallback = max_val
+        if min_val is not None and fallback < min_val:
+            fallback = min_val
+
         raw = os.getenv(key, str(default))
         try:
             value = int(raw)
         except ValueError:
             self._errors.append(f"{key} must be an integer, got '{raw}'")
-            return default
+            return fallback
 
         if min_val is not None and value < min_val:
             self._errors.append(f"{key} must be >= {min_val}, got {value}")
-            return default
+            return fallback
         if max_val is not None and value > max_val:
             self._errors.append(f"{key} must be <= {max_val}, got {value}")
-            return default
+            return fallback
 
+        return value
+
+    def _get_rate_limit(self, key: str, default: str) -> str:
+        """Get a rate limit string such as "10 per minute"."""
+        value = os.getenv(key, default)
+        try:
+            parse_many(value)
+        except ValueError:
+            self._errors.append(f"{key} is not a valid rate limit, got '{value}'")
+            return default
         return value
 
     def _get_secret(self, key: str, default: str, min_length: int = 16) -> str:

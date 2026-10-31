@@ -20,15 +20,16 @@ def verificar_viagens_24h(app):
 
         viagens = Viagem.query.filter(
             Viagem.status == StatusViagem.AGENDADA,
+            # on-demand trips have no timetable, so no reminders
+            Viagem.horario_rota_id.isnot(None),
             Viagem.aviso_24h_enviado.is_(False),
             Viagem.data >= amanha_inicio.date(),
             Viagem.data <= amanha_fim.date(),
         ).all()
 
         for viagem in viagens:
-            if not viagem.horario_rota:
-                continue
-            inscricoes = RotaAluno.query.filter_by(rota_id=viagem.horario_rota.rota_id).all()
+            rota_id = viagem.rota_id or viagem.horario_rota.rota_id
+            inscricoes = RotaAluno.query.filter_by(rota_id=rota_id).all()
 
             for insc in inscricoes:
                 aluno = db.session.get(User, insc.aluno_id)
@@ -55,6 +56,8 @@ def verificar_viagens_10min(app):
 
         viagens = Viagem.query.filter(
             Viagem.status == StatusViagem.AGENDADA,
+            Viagem.horario_rota_id.isnot(None),
+            Viagem.motorista_id.isnot(None),
             Viagem.aviso_10min_enviado.is_(False),
             Viagem.data == agora.date(),
         ).all()

@@ -3,9 +3,9 @@ tags:
   - Gestor
 summary: Relatório de Viagens por Rota
 description: |
-  Retorna um relatório simples com o total de viagens e o número de viagens concluídas por rota.  
-  O relatório é gerado apenas para as rotas do município do gestor autenticado.  
-  Apenas usuários com o papel **gestor** podem acessar este endpoint.  
+  Retorna um relatório simples com o total de viagens e o número de viagens concluídas por rota.
+  O relatório é gerado apenas para as rotas do município do gestor autenticado.
+  Apenas usuários com o papel **gestor** podem acessar este endpoint.
   Requer um **JWT token** válido no cabeçalho `Authorization`.
 operationId: relatoriosRotasGestor
 security:

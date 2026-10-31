@@ -38,8 +38,8 @@ source .venv/bin/activate
 # 2. Install dependencies
 make install
 
-# 3. Start the database (in another terminal)
-docker compose -f infra/database.yml up -d
+# 3. Start the database and Redis (rate limit counters)
+make db-up
 
 # 4. Create the database and apply migrations
 make db-create
@@ -71,7 +71,8 @@ curl -I http://localhost:5000/v1/auth/login | grep -E "X-Content-Type|X-Frame|X-
 
 ```bash
 make install        # Install dependencies
-make run            # Run the server (port 5000)
+make run            # Run the server (port 5000), bringing up db + redis
+make db-up          # Start the database and Redis (localhost:6380) containers
 make db-create      # Start the database and apply migrations
 make seed           # Seed sample data
 make db-reset       # Wipe the database
@@ -103,7 +104,6 @@ mebuska-corporate/
 │   └── services/           # Business logic services
 ├── database/               # SQL scripts
 │   ├── init.sql            # Schema and extensions
-│   └── populate.sql        # Seed data
 ├── docs/                   # API documentation
 │   └── endpoints/          # YAML specs (Swagger)
 ├── infra/
@@ -139,6 +139,22 @@ JWT_SECRET_KEY=a_long_random_jwt_secret
 JWT_EXPIRES_HOURS=2
 ```
 
+### Deploy (GitHub Actions)
+
+The deploy job writes `.env.prod` from repository **secrets** (`DB_USER`, `DB_PASSWORD`,
+`DB_NAME`, `JWT_SECRET`, `MAIL_*`, `FRONTEND_URL`, `CORS_ORIGINS`, `FIREBASE_CREDENTIALS`)
+and these optional repository **variables** (Settings > Secrets and variables > Actions >
+Variables). An unset variable is left out, so the default applies:
+
+| Variable | Default |
+|----------|---------|
+| `TIMEZONE` | `America/Sao_Paulo` |
+| `ROTA_BUFFER_MINUTOS_PADRAO` / `ROTA_BUFFER_MINUTOS_MAX` | `5` / `30` |
+| `ROTA_PRAZO_INICIO_MINUTOS_PADRAO` / `ROTA_PRAZO_INICIO_MINUTOS_MAX` | `10` / `120` |
+
+Lowering a `MAX` below its `PADRAO` requires setting the `PADRAO` too, or the API
+refuses to start.
+
 ## 📚 Documentation
 
 ### API Documentation
@@ -166,6 +182,10 @@ The backend implements multiple layers of security:
 - ✅ **Security Headers**: CSP, XSS Protection, HSTS, etc.
 - ✅ **Audit Logging**: logs every sensitive operation
 - ✅ **Request ID Tracking**
+- ✅ **Rate limiting** (Flask-Limiter, counters in Redis): limits per route and
+  setting in [`docs/api_contracts.md`](docs/api_contracts.md#rate-limit). Local
+  dev uses `RATELIMIT_STORAGE_URI=redis://localhost:6380/0` (see `.env.example`);
+  `docker-compose.prod.yml` runs its own `redis` service.
 
 ## 🚢 Deployment
 

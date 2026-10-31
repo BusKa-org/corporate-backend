@@ -3,8 +3,8 @@ tags:
   - Aluno
 summary: Listar Viagens Disponíveis no Município
 description: |
-  Retorna todas as viagens associadas às rotas do município do aluno autenticado.  
-  Apenas usuários com o papel **aluno** podem acessar este endpoint.  
+  Retorna todas as viagens associadas às rotas do município do aluno autenticado.
+  Apenas usuários com o papel **aluno** podem acessar este endpoint.
   Requer um **token JWT** válido no cabeçalho `Authorization`.
 operationId: listarViagensDisponiveisAluno
 security:

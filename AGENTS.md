@@ -126,6 +126,9 @@ exactly the kind of clever code this rule targets.
 
 ## Before opening a PR
 
+- [ ] Branched from `origin/dev` and opened against `dev`, not `main`.
+      `dev` is the integration branch; `main` only receives `dev` at release
+      time.
 - [ ] `pre-commit run --all-files` passes
 - [ ] New or changed endpoints reflected in `docs/api_contracts.md` or
       `docs/endpoints/` if applicable

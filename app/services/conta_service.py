@@ -8,8 +8,10 @@ estatístico é apagado.
 import hashlib
 import logging
 import secrets
+import uuid
 from datetime import UTC, datetime, timedelta
 
+from sqlalchemy import select
 from werkzeug.security import check_password_hash
 
 from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError, UnauthorizedError
@@ -17,14 +19,16 @@ from app.core.transaction import transactional
 from app.models.base import db
 from app.models.consentimento import REVOGACAO, Consentimento
 from app.models.credencial_embarque import CredencialEmbarque
-from app.models.enum import StatusViagem, UserRole, UserStatus
+from app.models.enum import StatusSolicitacao, StatusViagem, UserRole, UserStatus
 from app.models.geo import Endereco, Ponto
 from app.models.notificacao import Notificacao
 from app.models.password_reset import PasswordResetToken
 from app.models.retencao_legal import RetencaoLegal
 from app.models.rota import RotaAluno
 from app.models.user import Aluno, User
-from app.models.viagem import AlunosConfirmados, Viagem
+from app.models.viagem import AlunosConfirmados, SolicitacaoViagem, Viagem
+from app.services import solicitacoes_service, viagens_service
+from app.services.aluno_service import apagar_foto
 from app.services.consentimento_service import VERSAO_TERMO_VIGENTE
 from app.utils import audit_logger
 from app.utils.email_sender import send_email
@@ -35,6 +39,10 @@ logger = logging.getLogger(__name__)
 # equipe, sem validação jurídica formal. Passado o prazo, e-mail e CPF viram hashes.
 ANOS_DE_RETENCAO = 10
 LIMITE_ANONIMIZACAO_POR_EXECUCAO = 500
+EM_VIAGEM = (
+    "Você está em uma viagem em andamento. Conclua ou cancele a participação "
+    "antes de excluir a conta."
+)
 
 
 def _tem_viagem_em_andamento(aluno_id) -> bool:
@@ -67,6 +75,9 @@ def _anonimizar(user: User) -> None:
     if isinstance(user, Aluno):
         user.matricula = None
         user.foto_url = None
+        # Dado de saúde (LGPD art. 11), sem valor estatístico depois da exclusão.
+        user.necessidades_acessibilidade = []
+        user.observacao_acessibilidade = None
         user.data_nascimento = None
         user.nome_responsavel = None
         user.cpf_responsavel = None
@@ -102,12 +113,36 @@ def _apagar_dados_sem_valor_estatistico(aluno_id) -> None:
     ).delete(synchronize_session=False)
 
 
+def _solicitacoes_ativas(aluno_id) -> list[SolicitacaoViagem]:
+    return (
+        db.session.query(SolicitacaoViagem)
+        .join(Viagem, Viagem.id == SolicitacaoViagem.viagem_id)
+        .filter(
+            SolicitacaoViagem.aluno_id == aluno_id,
+            SolicitacaoViagem.status == StatusSolicitacao.ATIVA,
+            Viagem.status.in_(viagens_service.ESTADOS_ATIVOS_SOB_DEMANDA),
+        )
+        .order_by(SolicitacaoViagem.viagem_id)
+        .populate_existing()
+        .all()
+    )
+
+
 def excluir_conta(user_id: str, email: str, senha: str) -> None:
-    user = db.session.get(User, user_id)
+    # Ordem de locks do resto do sistema: veículo e viagem antes do aluno.
+    viagens_travadas: dict[uuid.UUID, Viagem] = {}
+    for solicitacao in _solicitacoes_ativas(user_id):
+        viagem = solicitacoes_service.travar_viagem(solicitacao.viagem)
+        viagens_travadas[viagem.id] = viagem
+
+    # Trava a conta: um segundo pedido simultâneo espera e já vê a conta anonimizada.
+    db.session.execute(select(User.id).where(User.id == user_id).with_for_update(key_share=True))
+    user = db.session.get(User, user_id, populate_existing=True)
     if user is None:
         raise NotFoundError("Usuário não encontrado")
     if user.role != UserRole.ALUNO:
         raise ForbiddenError("Somente passageiros podem excluir a própria conta")
+    assert isinstance(user, Aluno)
 
     email_confere = email.strip().lower() == user.email.lower()
     senha_confere = check_password_hash(user.senha_hash, senha)
@@ -121,15 +156,29 @@ def excluir_conta(user_id: str, email: str, senha: str) -> None:
         raise UnauthorizedError("Credenciais inválidas")
 
     if _tem_viagem_em_andamento(user.id):
-        raise ConflictError(
-            "Você está em uma viagem em andamento. Conclua ou cancele a participação "
-            "antes de excluir a conta."
-        )
+        raise ConflictError(EM_VIAGEM)
+
+    # Com a conta travada nenhuma solicitação nova aparece; relê as que já existem.
+    solicitacoes = _solicitacoes_ativas(user.id)
+    for solicitacao in solicitacoes:
+        travada = viagens_travadas.get(solicitacao.viagem_id)
+        if travada is None:
+            # Entrou numa viagem entre a leitura e o lock: não dá para travá-la agora sem
+            # inverter a ordem dos locks.
+            raise ConflictError("Sua solicitação de viagem mudou. Tente novamente.")
+        if travada.status == StatusViagem.EM_ANDAMENTO:
+            raise ConflictError(EM_VIAGEM)
 
     email_original = user.email
     aluno_id = user.id
 
     with transactional():
+        # Mesmo efeito de DELETE /v1/viagens/<id>/solicitacao: devolve o trecho e cancela a
+        # viagem que fica sem ninguém.
+        for solicitacao in solicitacoes:
+            solicitacoes_service.cancelar_na_viagem_travada(
+                user, viagens_travadas[solicitacao.viagem_id]
+            )
         _apagar_ponto_casa(user)
         _apagar_dados_sem_valor_estatistico(aluno_id)
         db.session.add(
@@ -144,6 +193,12 @@ def excluir_conta(user_id: str, email: str, senha: str) -> None:
             Consentimento(usuario_id=aluno_id, versao=VERSAO_TERMO_VIGENTE, acao=REVOGACAO)
         )
         _anonimizar(user)
+
+    # Depois do commit: se a transação falhar, a foto continua valendo.
+    try:
+        apagar_foto(str(aluno_id))
+    except OSError:
+        logger.exception("Falha ao apagar a foto do usuário %s", aluno_id)
 
     # Só o id, nunca o e-mail (o e-mail original não pode virar novo vestígio no log).
     audit_logger.log_user_action(

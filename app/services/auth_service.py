@@ -96,7 +96,7 @@ def login_user(data: dict[str, Any]) -> dict[str, Any]:
             success=False,
             details={"reason": "account_disabled"},
         )
-        raise ForbiddenError("Sua conta está desativada. Entre em contato com o gestor municipal.")
+        raise ForbiddenError("Sua conta está desativada. Entre em contato com o gestor.")
 
     if user.status == UserStatus.PENDING_APPROVAL:
         audit_logger.log_auth(
@@ -114,7 +114,7 @@ def login_user(data: dict[str, Any]) -> dict[str, Any]:
         and hasattr(user, "status")
         and user.status == UserStatus.PENDING_SIGNUP
     ):
-        aluno = Aluno.query.get(str(user.id))
+        aluno = db.session.get(Aluno, str(user.id))
         if aluno and aluno.email_responsavel and not aluno.guardian_consented_at:
             audit_logger.log_auth(
                 action="login_attempt",
@@ -178,7 +178,7 @@ def register_user(data: dict[str, Any]) -> User:
     email = validate_email(data.get("email", ""))
     cpf_clean = validate_cpf(data.get("cpf", ""))
 
-    if not Organizacao.query.get(organizacao_id):
+    if not db.session.get(Organizacao, organizacao_id):
         logger.warning(f"Registration attempt with invalid organizacao_id: {organizacao_id}")
         raise NotFoundError("Organizacao not found")
 
@@ -299,8 +299,6 @@ def request_password_reset(email_raw: str, base_url: str) -> None:
         raise ValidationError("Formato de email inválido")
 
     user = User.query.filter_by(email=email).first()
-    print(user)
-    print(email)
     if not user:
         logger.info("Password reset requested for unknown email: %s", email)
         return
@@ -332,7 +330,8 @@ def request_password_reset(email_raw: str, base_url: str) -> None:
 
 def reset_password(token: str, new_password: str) -> None:
     """Reset user password using a valid token. Invalidates the token."""
-    record = PasswordResetToken.query.filter_by(token=token).first()
+    # Trava o link: o segundo uso simultâneo espera e não encontra mais o registro.
+    record = PasswordResetToken.query.filter_by(token=token).with_for_update().first()
     if not record:
         raise ValidationError("Link inválido ou expirado")
     if record.is_expired():
@@ -341,7 +340,7 @@ def reset_password(token: str, new_password: str) -> None:
         raise ValidationError("Link expirado. Solicite uma nova recuperação de senha.")
 
     new_password = validate_password(new_password, "Nova senha")
-    user = User.query.get(record.user_id)
+    user = db.session.get(User, record.user_id)
     if not user:
         db.session.delete(record)
         db.session.commit()

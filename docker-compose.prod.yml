@@ -11,7 +11,12 @@ x-app-env: &app_env
   JWT_SECRET_KEY: ${JWT_SECRET_KEY:-change-me-in-production}
   JWT_EXPIRES_HOURS: ${JWT_EXPIRES_HOURS:-2}
   FLASK_ENV: ${FLASK_ENV:-production}
-  TZ: America/Sao_Paulo
+  TZ: ${TIMEZONE:-America/Sao_Paulo}
+  TIMEZONE: ${TIMEZONE:-America/Sao_Paulo}
+  ROTA_BUFFER_MINUTOS_PADRAO: ${ROTA_BUFFER_MINUTOS_PADRAO:-5}
+  ROTA_BUFFER_MINUTOS_MAX: ${ROTA_BUFFER_MINUTOS_MAX:-30}
+  ROTA_PRAZO_INICIO_MINUTOS_PADRAO: ${ROTA_PRAZO_INICIO_MINUTOS_PADRAO:-10}
+  ROTA_PRAZO_INICIO_MINUTOS_MAX: ${ROTA_PRAZO_INICIO_MINUTOS_MAX:-120}
   FIREBASE_CREDENTIALS: ${FIREBASE_CREDENTIALS:-}
   CORS_ORIGINS: ${CORS_ORIGINS:-}
   FRONTEND_URL: ${FRONTEND_URL:-}
@@ -21,6 +26,25 @@ x-app-env: &app_env
   MAIL_USERNAME: ${MAIL_USERNAME:-}
   MAIL_PASSWORD: ${MAIL_PASSWORD:-}
   MAIL_USE_TLS: ${MAIL_USE_TLS:-true}
+  JOB_BUFFER_INTERVALO_SEGUNDOS: ${JOB_BUFFER_INTERVALO_SEGUNDOS:-30}
+  JOB_PRAZO_INICIO_INTERVALO_SEGUNDOS: ${JOB_PRAZO_INICIO_INTERVALO_SEGUNDOS:-60}
+  MOTORISTA_HORAS_MAX_DIRECAO: ${MOTORISTA_HORAS_MAX_DIRECAO:-4}
+  MOTORISTA_DESCANSO_MINUTOS: ${MOTORISTA_DESCANSO_MINUTOS:-30}
+  # Vazio = /app/instance/fotos_aluno, que é onde o volume fotos_aluno está montado.
+  FOTOS_ALUNO_DIR: ${FOTOS_ALUNO_DIR:-}
+  FOTO_ALUNO_MAX_BYTES: ${FOTO_ALUNO_MAX_BYTES:-5242880}
+  FOTO_ALUNO_MAX_PIXELS: ${FOTO_ALUNO_MAX_PIXELS:-25000000}
+  QR_PASSO_SEGUNDOS: ${QR_PASSO_SEGUNDOS:-30}
+  QR_DIGITOS: ${QR_DIGITOS:-6}
+  QR_JANELA_PASSOS: ${QR_JANELA_PASSOS:-1}
+  SYNC_TOLERANCIA_SEGUNDOS: ${SYNC_TOLERANCIA_SEGUNDOS:-120}
+  # Um contador só para os 4 workers do gunicorn; memory:// contaria em cada um.
+  RATELIMIT_STORAGE_URI: ${RATELIMIT_STORAGE_URI:-redis://redis:6379/0}
+  RATELIMIT_ENABLED: ${RATELIMIT_ENABLED:-true}
+  RATELIMIT_DEFAULT: ${RATELIMIT_DEFAULT:-2000 per hour}
+  RATELIMIT_AUTH: ${RATELIMIT_AUTH:-10 per minute}
+  RATELIMIT_SENSITIVE: ${RATELIMIT_SENSITIVE:-5 per minute}
+  RATELIMIT_REALTIME: ${RATELIMIT_REALTIME:-120 per minute}
 
 services:
   db:
@@ -44,6 +68,24 @@ services:
       timeout: 5s
       retries: 5
 
+  # Sem porta no host: só a API fala com ele, pela rede interna.
+  redis:
+    image: redis:8.6-alpine
+    container_name: buska_redis
+    restart: unless-stopped
+    # Contadores são efêmeros: sem RDB/AOF, e /data em tmpfs para a imagem não
+    # criar um volume anônimo novo a cada recriação do container.
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    tmpfs:
+      - /data
+    networks:
+      - buska_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
   api:
     image: ${API_IMAGE}
     pull_policy: never
@@ -56,8 +98,13 @@ services:
       # São 4 workers do gunicorn. Se cada um subisse o próprio scheduler, as
       # notificações sairiam quadruplicadas.
       RUN_SCHEDULER: "false"
+    volumes:
+      # Fotos dos alunos (FOTOS_ALUNO_DIR vazio = /app/instance/fotos_aluno).
+      - fotos_aluno:/app/instance/fotos_aluno
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     networks:
       - buska_network
@@ -81,6 +128,8 @@ services:
 
 volumes:
   postgres_data:
+    driver: local
+  fotos_aluno:
     driver: local
 
 networks:

@@ -1,10 +1,10 @@
 import uuid
 from datetime import date
 
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import ARRAY, UUID
 
 from .base import db
-from .enum import UserRole, UserStatus
+from .enum import StatusMotorista, UserRole, UserStatus
 from .notificacao import Notificacao  # noqa: F401
 
 
@@ -55,6 +55,19 @@ class Motorista(User):
     )
     cnh = db.Column(db.String(20), unique=True, nullable=False)
 
+    # Horário de trabalho definido pelo gestor. Nulo = sem restrição de horário/dia.
+    # Valores de DiaDaSemana ("SEG", "TER", ...).
+    horario_inicio = db.Column(db.Time, nullable=True)
+    horario_fim = db.Column(db.Time, nullable=True)
+    dias_trabalho = db.Column(ARRAY(db.String(3)), nullable=True)
+
+    # Fim do descanso obrigatório, gravado ao fim de uma viagem. Nulo = não deve descanso.
+    descanso_ate = db.Column(db.DateTime(timezone=True), nullable=True)
+    # Calculado pelo service para a resposta (viagens + descanso_ate); não é coluna.
+    # __allow_unmapped__ deixa o SQLAlchemy ignorar essa anotação sem Mapped[].
+    __allow_unmapped__ = True
+    status_motorista: StatusMotorista | None = None
+
     __mapper_args__ = {
         "polymorphic_identity": UserRole.MOTORISTA,
     }
@@ -80,6 +93,13 @@ class Aluno(User):
     )
     matricula = db.Column(db.String(50))
     foto_url = db.Column(db.String(255))
+
+    # Nomes de NecessidadeAcessibilidade. Lista de texto, não ENUM do Postgres, para
+    # incluir uma necessidade nova sem migration.
+    necessidades_acessibilidade = db.Column(
+        ARRAY(db.String(30)), nullable=False, default=list, server_default="{}"
+    )
+    observacao_acessibilidade = db.Column(db.String(500))
 
     # Guardian (single responsible person, replaces the old pai/mae pair)
     nome_responsavel = db.Column(db.String(100))
