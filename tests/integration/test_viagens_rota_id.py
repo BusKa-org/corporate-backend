@@ -147,3 +147,18 @@ def test_finalizar_viagem_sob_demanda_grava_fim_real(motorista, rota_sob_demanda
     _db.session.refresh(v)
     assert v.status == StatusViagem.FINALIZADA
     assert v.fim_real is not None
+
+
+def test_post_viagem_fixa_responde_201_com_a_viagem(gestor, rota, dia_operacao):
+    r = gestor.client.post("/v1/viagens/", json={"rota_id": str(rota.id), "data": "2026-11-02"})
+    assert r.status_code == 201, r.get_data(as_text=True)
+    body = r.get_json()
+    assert body["rota_id"] == str(rota.id)
+    assert body["status"] == "AGENDADA"
+
+
+def test_gestor_de_outra_organizacao_nao_cancela_viagem(other_gestor, viagem_solicitada, _db):
+    r = other_gestor.client.put(f"/v1/viagens/{viagem_solicitada.id}/cancelar")
+    assert r.status_code == 403, r.get_data(as_text=True)
+    _db.session.refresh(viagem_solicitada)
+    assert viagem_solicitada.status == StatusViagem.SOLICITADA

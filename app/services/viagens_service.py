@@ -457,6 +457,10 @@ def cancelar_viagem(user_id: str, viagem_id: str) -> dict[str, Any]:
     if not viagem:
         raise NotFoundError("Viagem não encontrada")
 
+    rota = db.session.get(Rota, _rota_id_da_viagem(viagem))
+    if not rota or rota.organizacao_id != user.organizacao_id:
+        raise ForbiddenError("Acesso negado")
+
     if viagem.status in (StatusViagem.FINALIZADA, StatusViagem.CANCELADA):
         raise ValidationError(f"Não é possível cancelar uma viagem com status {viagem.status.name}")
 

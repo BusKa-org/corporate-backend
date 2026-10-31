@@ -160,11 +160,8 @@ class ViagemListResource(Resource):
         user_id = get_jwt_identity()
         data = request.get_json(silent=True) or {}
         payload = viagem_create_request_schema.load(data)
-        result = viagens_service.gerar_viagem(user_id, payload)
-
-        # gerar_viagem returns {message,id,dia}. If you want to return ViagemResponseSchema instead,
-        # change service to return the Viagem ORM instance. For now, keep it consistent with existing behavior.
-        return result, 201
+        viagem = viagens_service.gerar_viagem(user_id, payload)
+        return viagem_response_schema.dump(viagem), 201
 
 
 @api.route("/minhas")
