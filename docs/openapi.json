@@ -201,6 +201,22 @@
       }
     },
     "/v1/consentimento": {
+      "delete": {
+        "responses": {
+          "200": {
+            "description": "Consentimento revogado"
+          },
+          "409": {
+            "description": "Não há consentimento vigente"
+          }
+        },
+        "summary": "Revoga o consentimento",
+        "description": "O usuário volta ao estado pendente.",
+        "operationId": "revogar_consentimento",
+        "tags": [
+          "consentimento"
+        ]
+      },
       "get": {
         "responses": {
           "200": {
@@ -225,22 +241,6 @@
         "summary": "Registra o aceite da versão vigente do termo",
         "description": "Corpo: {\"versao\": \"...\"}",
         "operationId": "aceitar_consentimento",
-        "tags": [
-          "consentimento"
-        ]
-      },
-      "delete": {
-        "responses": {
-          "200": {
-            "description": "Consentimento revogado"
-          },
-          "409": {
-            "description": "Não há consentimento vigente"
-          }
-        },
-        "summary": "Revoga o consentimento",
-        "description": "O usuário volta ao estado pendente.",
-        "operationId": "revogar_consentimento",
         "tags": [
           "consentimento"
         ]
@@ -956,6 +956,17 @@
           "type": "string"
         }
       ],
+      "delete": {
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "operationId": "delete_instituicao",
+        "tags": [
+          "instituicoes"
+        ]
+      },
       "get": {
         "responses": {
           "200": {
@@ -966,17 +977,6 @@
           }
         },
         "operationId": "get_instituicao",
-        "tags": [
-          "instituicoes"
-        ]
-      },
-      "delete": {
-        "responses": {
-          "200": {
-            "description": "Success"
-          }
-        },
-        "operationId": "delete_instituicao",
         "tags": [
           "instituicoes"
         ]
@@ -1163,6 +1163,18 @@
           "type": "string"
         }
       ],
+      "delete": {
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "Remove um ônibus",
+        "operationId": "delete_onibus",
+        "tags": [
+          "onibus"
+        ]
+      },
       "get": {
         "responses": {
           "200": {
@@ -1199,18 +1211,6 @@
             }
           }
         ],
-        "tags": [
-          "onibus"
-        ]
-      },
-      "delete": {
-        "responses": {
-          "200": {
-            "description": "Success"
-          }
-        },
-        "summary": "Remove um ônibus",
-        "operationId": "delete_onibus",
         "tags": [
           "onibus"
         ]
@@ -1343,20 +1343,6 @@
           "type": "string"
         }
       ],
-      "get": {
-        "responses": {
-          "200": {
-            "description": "Success",
-            "schema": {
-              "$ref": "#/definitions/PontoResponse"
-            }
-          }
-        },
-        "operationId": "get_ponto",
-        "tags": [
-          "pontos"
-        ]
-      },
       "put": {
         "responses": {
           "200": {
@@ -1388,6 +1374,20 @@
           }
         },
         "operationId": "delete_ponto",
+        "tags": [
+          "pontos"
+        ]
+      },
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/PontoResponse"
+            }
+          }
+        },
+        "operationId": "get_ponto",
         "tags": [
           "pontos"
         ]
@@ -1458,20 +1458,6 @@
           "type": "string"
         }
       ],
-      "get": {
-        "responses": {
-          "200": {
-            "description": "Success",
-            "schema": {
-              "$ref": "#/definitions/RotaDetailResponse"
-            }
-          }
-        },
-        "operationId": "get_rota",
-        "tags": [
-          "rotas"
-        ]
-      },
       "put": {
         "responses": {
           "200": {
@@ -1500,6 +1486,20 @@
           }
         },
         "operationId": "delete_rota",
+        "tags": [
+          "rotas"
+        ]
+      },
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/RotaDetailResponse"
+            }
+          }
+        },
+        "operationId": "get_rota",
         "tags": [
           "rotas"
         ]
@@ -1922,6 +1922,28 @@
       }
     },
     "/v1/users/me": {
+      "delete": {
+        "responses": {
+          "200": {
+            "description": "Conta excluída"
+          },
+          "401": {
+            "description": "Credenciais inválidas"
+          },
+          "403": {
+            "description": "Somente passageiros podem excluir a conta"
+          },
+          "409": {
+            "description": "Viagem em andamento"
+          }
+        },
+        "summary": "Exclui a conta e os dados pessoais do passageiro logado",
+        "description": "Corpo: {\"email\", \"senha\"}",
+        "operationId": "delete_my_account",
+        "tags": [
+          "users"
+        ]
+      },
       "get": {
         "responses": {
           "200": {
@@ -1967,28 +1989,6 @@
             }
           }
         ],
-        "tags": [
-          "users"
-        ]
-      },
-      "delete": {
-        "responses": {
-          "200": {
-            "description": "Conta excluída"
-          },
-          "401": {
-            "description": "Credenciais inválidas"
-          },
-          "403": {
-            "description": "Somente passageiros podem excluir a conta"
-          },
-          "409": {
-            "description": "Viagem em andamento"
-          }
-        },
-        "summary": "Exclui a conta e os dados pessoais do passageiro logado",
-        "description": "Corpo: {\"email\", \"senha\"}",
-        "operationId": "delete_my_account",
         "tags": [
           "users"
         ]
@@ -2069,6 +2069,27 @@
           "type": "string"
         }
       ],
+      "delete": {
+        "responses": {
+          "200": {
+            "description": "Deleted"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "400": {
+            "description": "Has linked trips"
+          }
+        },
+        "summary": "Gestor remove um motorista",
+        "operationId": "delete_motorista",
+        "tags": [
+          "users"
+        ]
+      },
       "patch": {
         "responses": {
           "200": {
@@ -2099,27 +2120,6 @@
             }
           }
         ],
-        "tags": [
-          "users"
-        ]
-      },
-      "delete": {
-        "responses": {
-          "200": {
-            "description": "Deleted"
-          },
-          "403": {
-            "description": "Forbidden"
-          },
-          "404": {
-            "description": "Not found"
-          },
-          "400": {
-            "description": "Has linked trips"
-          }
-        },
-        "summary": "Gestor remove um motorista",
-        "operationId": "delete_motorista",
         "tags": [
           "users"
         ]
@@ -4398,10 +4398,6 @@
           "type": "boolean",
           "description": "Menor de idade"
         },
-        "email_responsavel": {
-          "type": "string",
-          "description": "E-mail do responsável"
-        },
         "nome_responsavel": {
           "type": "string",
           "description": "Nome do responsável"
@@ -4409,11 +4405,6 @@
         "cpf_responsavel": {
           "type": "string",
           "description": "CPF do responsável"
-        },
-        "guardian_consented_at": {
-          "type": "string",
-          "format": "date-time",
-          "description": "Data/hora do consentimento do responsável"
         },
         "foto_url": {
           "type": "string",
@@ -5272,6 +5263,7 @@
     },
     "MaskError": {
       "description": "When any error occurs on mask"
-    }
+    },
+    "RateLimitExceeded": {}
   }
 }

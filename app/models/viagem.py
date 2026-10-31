@@ -11,7 +11,12 @@ from .enum import StatusSolicitacao, StatusViagem
 class Viagem(db.Model):
     __tablename__ = "viagem"
 
-    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = db.Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        server_default=db.text("uuid_generate_v4()"),
+    )
     data = db.Column(db.Date, nullable=False)
     horario_rota_id = db.Column(
         UUID(as_uuid=True), db.ForeignKey("horario_rota.id", ondelete="SET NULL"), nullable=True
@@ -30,7 +35,11 @@ class Viagem(db.Model):
         UUID(as_uuid=True), db.ForeignKey("onibus.id", ondelete="RESTRICT"), nullable=True
     )
 
-    status = db.Column(db.Enum(StatusViagem, name="status_viagem"), default=StatusViagem.AGENDADA)
+    status = db.Column(
+        db.Enum(StatusViagem, name="status_viagem"),
+        default=StatusViagem.AGENDADA,
+        server_default="AGENDADA",
+    )
 
     inicio_real = db.Column(db.DateTime(timezone=True), nullable=True)
     fim_real = db.Column(db.DateTime(timezone=True), nullable=True)

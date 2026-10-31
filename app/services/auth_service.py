@@ -108,26 +108,6 @@ def login_user(data: dict[str, Any]) -> dict[str, Any]:
         )
         raise ForbiddenError("Seu cadastro aguarda aprovação do gestor.")
 
-    # Block minors whose guardian has not yet consented
-    if (
-        user.role == UserRole.ALUNO
-        and hasattr(user, "status")
-        and user.status == UserStatus.PENDING_SIGNUP
-    ):
-        aluno = db.session.get(Aluno, str(user.id))
-        if aluno and aluno.email_responsavel and not aluno.guardian_consented_at:
-            audit_logger.log_auth(
-                action="login_attempt",
-                user_id=str(user.id),
-                email=email,
-                success=False,
-                details={"reason": "pending_guardian_consent"},
-            )
-            raise ForbiddenError(
-                f"Seu cadastro aguarda a confirmação do responsável legal. "
-                f"Um e-mail foi enviado para {aluno.email_responsavel}."
-            )
-
     access_token = create_access_token(
         identity=str(user.id), additional_claims={"role": str(user.role)}
     )

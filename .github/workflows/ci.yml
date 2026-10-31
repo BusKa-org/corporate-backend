@@ -188,6 +188,14 @@ jobs:
     if: needs.meta.outputs.should_run_tests == 'true'
     env:
       RESOLVED_REF: ${{ needs.meta.outputs.resolved_ref }}
+      ENV: test
+      DB_USER: buska_user
+      DB_PASSWORD: buska_pass
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_NAME: buska_db
+      PGPASSWORD: buska_pass
+      JWT_SECRET_KEY: test_secret
     services:
       postgres:
         image: postgis/postgis:16-3.4
@@ -246,18 +254,30 @@ jobs:
             sleep 2
           done
 
+      # Tests build tables with db.create_all(), so migrations are checked here
+      # on their own empty database.
+      - name: "Check Alembic migrations"
+        env:
+          DB_NAME: ci_migr_check
+        run: |
+          set -euo pipefail
+          psql -h localhost -U buska_user -d buska_db -v ON_ERROR_STOP=1 -c "CREATE DATABASE ci_migr_check"
+          # The initial migration expects these extensions to exist already.
+          psql -h localhost -U buska_user -d ci_migr_check -v ON_ERROR_STOP=1 \
+            -c "CREATE EXTENSION IF NOT EXISTS postgis" \
+            -c 'CREATE EXTENSION IF NOT EXISTS "uuid-ossp"'
+
+          # upgrade head also fails when there is more than one head.
+          uv run alembic upgrade head
+          uv run alembic check
+          uv run alembic downgrade base
+          uv run alembic upgrade head
+
       - name: "Run Integration (DB) with Coverage"
         id: coverage
         env:
-          ENV: test
-          DB_USER: buska_user
-          DB_PASSWORD: buska_pass
-          DB_HOST: localhost
-          DB_PORT: 5432
-          DB_NAME: buska_db
           POSTGRES_USER: buska_user
           POSTGRES_PASSWORD: buska_pass
-          JWT_SECRET_KEY: test_secret
           REDIS_URL: redis://localhost:6379/0
         run: |
           uv run pytest -m "not e2e" \

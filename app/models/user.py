@@ -12,7 +12,12 @@ class User(db.Model):
     __tablename__ = "usuario"
     __table_args__ = (db.Index("idx_usuario_organizacao", "organizacao_id"),)
 
-    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = db.Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        server_default=db.text("uuid_generate_v4()"),
+    )
     organizacao_id = db.Column(
         UUID(as_uuid=True), db.ForeignKey("organizacao.id", ondelete="CASCADE"), nullable=False
     )
@@ -25,7 +30,12 @@ class User(db.Model):
 
     fcm_token = db.Column(db.String(255), nullable=True)
 
-    role = db.Column(db.Enum(UserRole, name="user_role"), nullable=False, default=UserRole.ALUNO)
+    role = db.Column(
+        db.Enum(UserRole, name="user_role"),
+        nullable=False,
+        default=UserRole.ALUNO,
+        server_default="ALUNO",
+    )
     status = db.Column(
         db.Enum(UserStatus, name="user_status"), nullable=False, default=UserStatus.PENDING_SIGNUP
     )
@@ -105,11 +115,7 @@ class Aluno(User):
     nome_responsavel = db.Column(db.String(100))
     cpf_responsavel = db.Column(db.String(14))
 
-    # Minor / guardian consent flow
     data_nascimento = db.Column(db.Date)
-    email_responsavel = db.Column(db.String(120))
-    guardian_token = db.Column(db.String(64), unique=True)
-    guardian_consented_at = db.Column(db.DateTime(timezone=True))
 
     instituicao_id = db.Column(UUID(as_uuid=True), db.ForeignKey("instituicao.id"))
     ponto_casa_id = db.Column(UUID(as_uuid=True), db.ForeignKey("ponto.id"))

@@ -284,6 +284,11 @@ rede: com o `qr_segredo` o app confere o código do QR sem conexão, e as fotos 
   sem uso, porque pode chegar depois do embarque manual do passageiro real.
 - `EMBARQUE_MANUAL`, `CHEGADA_PONTO` e `POSICAO` sem mudança.
 
+O `evento_id` é um texto livre (1 a 64 caracteres) e só precisa ser único dentro da fila da
+viagem: o mesmo `evento_id` em outra viagem é outro evento.
+Use um UUID gerado no aparelho: se o app for reinstalado no meio da viagem e a numeração
+recomeçar em "1", uma recusa real seria respondida `ja_aplicado` e perdida.
+
 Os eventos são aplicados em ordem de `ocorrido_em` (empate: ordem da fila) e `resultados` sai
 nessa ordem. Uma `RECUSA` bloqueia qualquer embarque posterior do mesmo QR, no mesmo lote ou
 num lote seguinte (`CREDENCIAL_RECUSADA`). O `ocorrido_em` é limitado: mais de
@@ -399,6 +404,11 @@ Counting key depends on the route:
   the reset `token` (JSON or form). `GET /v1/auth/reset-password` and
   `GET`/`POST /v1/convites/aceite/<token>`: the token. No token: one shared
   `sem-token` bucket.
+- E-mails, tokens and IPs are stored in the key as a keyed hash
+  (HMAC-SHA256 with `JWT_SECRET_KEY`, first 32 hex chars), never in clear
+  text, so reset links, invitation tokens, e-mails and IPs do not show up in
+  Redis key names and cannot be guessed back by dictionary. Counting is the
+  same. Rotating the secret only resets the current counters.
 - Every other route (`change-password`, realtime and the default limit): the JWT
   identity when the request has a valid token, otherwise the connection IP
   (`request.remote_addr`). IP is only left as the key for anonymous routes with
