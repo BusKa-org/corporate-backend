@@ -330,7 +330,8 @@ def request_password_reset(email_raw: str, base_url: str) -> None:
 
 def reset_password(token: str, new_password: str) -> None:
     """Reset user password using a valid token. Invalidates the token."""
-    record = PasswordResetToken.query.filter_by(token=token).first()
+    # Trava o link: o segundo uso simultâneo espera e não encontra mais o registro.
+    record = PasswordResetToken.query.filter_by(token=token).with_for_update().first()
     if not record:
         raise ValidationError("Link inválido ou expirado")
     if record.is_expired():

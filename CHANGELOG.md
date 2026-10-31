@@ -99,6 +99,8 @@ All notable changes to this project will be documented in this file.
   Invitations replace all of them: nobody signs up on their own.
 
 ### Fixed
+- `POST /v1/auth/reset-password`: the same link used twice at the same time changed the
+  password twice (or failed with 500). The token row is locked, so the second use gets 400.
 - `PUT /v1/alunos/me/foto`: a PNG and a JPEG uploaded at the same time could delete each
   other and leave the student with no photo file. Uploads of the same student now run one at a time.
 - `DELETE /v1/users/me` sent twice at the same time returned 500 for one of them; the account
