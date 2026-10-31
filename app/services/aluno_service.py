@@ -13,9 +13,10 @@ from app.core.exceptions import (
     ValidationError,
 )
 from app.models.base import db
-from app.models.enum import UserRole, UserStatus
+from app.models.enum import StatusViagem, UserRole, UserStatus
 from app.models.geo import Endereco, Ponto
 from app.models.user import Aluno, User
+from app.models.viagem import AlunosConfirmados, Viagem
 from app.services.user_service import _get_gestor_or_403, _get_user_or_404
 from app.utils.validators import validate_uuid
 
@@ -206,10 +207,26 @@ def salvar_foto(user_id: str, arquivo: IO[bytes]) -> Aluno:
     return aluno
 
 
+def _e_passageiro_do_motorista(aluno_id, motorista_id) -> bool:
+    registro = (
+        db.session.query(AlunosConfirmados)
+        .join(Viagem, Viagem.id == AlunosConfirmados.viagem_id)
+        .filter(
+            AlunosConfirmados.aluno_id == aluno_id,
+            AlunosConfirmados.confirmacao.is_(True),
+            Viagem.motorista_id == motorista_id,
+            Viagem.status.in_([StatusViagem.AGENDADA, StatusViagem.EM_ANDAMENTO]),
+        )
+        .first()
+    )
+    return registro is not None
+
+
 def buscar_foto(user_id: str, aluno_id: str) -> tuple[str, str]:
     """
-    Caminho e tipo do arquivo da foto. Podem ver: o próprio aluno, e gestor ou
-    motorista da mesma organização.
+    Caminho e tipo do arquivo da foto. Podem ver: o próprio aluno, o gestor da
+    organização e o motorista de uma viagem ainda não encerrada em que o aluno
+    confirmou presença (é quem confere o embarque).
 
     Raises: NotFoundError, ForbiddenError
     """
@@ -223,6 +240,10 @@ def buscar_foto(user_id: str, aluno_id: str) -> tuple[str, str]:
             raise ForbiddenError("Sem permissão para ver esta foto")
         if quem_pede.organizacao_id != aluno.organizacao_id:
             raise ForbiddenError("Aluno não pertence à sua organização")
+        if quem_pede.role == UserRole.MOTORISTA and not _e_passageiro_do_motorista(
+            aluno.id, quem_pede.id
+        ):
+            raise ForbiddenError("Aluno não é passageiro de uma viagem sua")
 
     for tipo, extensao in EXTENSOES_FOTO.items():
         caminho = _caminho_foto(str(aluno.id), extensao)
