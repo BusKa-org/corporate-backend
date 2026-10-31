@@ -148,19 +148,27 @@ class Settings:
         self, key: str, default: int, min_val: int | None = None, max_val: int | None = None
     ) -> int:
         """Get an integer value with optional range validation."""
+        # The fallback stays in range: max_val can come from another setting
+        # (e.g. ROTA_BUFFER_MINUTOS_MAX=3 with the default PADRAO of 5).
+        fallback = default
+        if max_val is not None and fallback > max_val:
+            fallback = max_val
+        if min_val is not None and fallback < min_val:
+            fallback = min_val
+
         raw = os.getenv(key, str(default))
         try:
             value = int(raw)
         except ValueError:
             self._errors.append(f"{key} must be an integer, got '{raw}'")
-            return default
+            return fallback
 
         if min_val is not None and value < min_val:
             self._errors.append(f"{key} must be >= {min_val}, got {value}")
-            return default
+            return fallback
         if max_val is not None and value > max_val:
             self._errors.append(f"{key} must be <= {max_val}, got {value}")
-            return default
+            return fallback
 
         return value
 

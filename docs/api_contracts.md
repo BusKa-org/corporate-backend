@@ -187,7 +187,10 @@ is `EM_ANDAMENTO`. The buffer end is `buffer_fim` (was `buffer_expira_em`), and 
 length is set per route (`buffer_minutos`), not per window. A route created without
 `buffer_minutos` / `prazo_inicio_minutos` gets `ROTA_BUFFER_MINUTOS_PADRAO` (5) /
 `ROTA_PRAZO_INICIO_MINUTOS_PADRAO` (10); values above `ROTA_BUFFER_MINUTOS_MAX` (30) /
-`ROTA_PRAZO_INICIO_MINUTOS_MAX` (120) are rejected with 400.
+`ROTA_PRAZO_INICIO_MINUTOS_MAX` (120) are rejected with 400. A `PADRAO` above its `MAX`
+is a configuration error: production refuses to start, so lowering a `MAX` below the
+default `PADRAO` requires setting the `PADRAO` too (development only logs it and caps the
+`PADRAO` at the `MAX`).
 
 ## Embarque por QR com conferência da foto (RF-15 a RF-18)
 
