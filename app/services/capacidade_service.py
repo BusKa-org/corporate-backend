@@ -124,6 +124,8 @@ def validar_e_reservar(
             select(Viagem)
             .where(Viagem.id == validate_uuid(str(viagem_id), "ID da viagem"))
             .with_for_update(key_share=True)
+            # Quem esperou o lock precisa ver o status gravado por quem o segurava.
+            .execution_options(populate_existing=True)
         ).scalar_one_or_none()
         if not viagem:
             raise NotFoundError("Viagem não encontrada")

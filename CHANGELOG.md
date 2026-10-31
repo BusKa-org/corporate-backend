@@ -99,6 +99,8 @@ All notable changes to this project will be documented in this file.
   Invitations replace all of them: nobody signs up on their own.
 
 ### Fixed
+- `POST /v1/viagens/<id>/declaracao` reloads the trip after taking its lock, so a declaration
+  that waited for the buffer close job sees the new status (400) instead of a stale one (404).
 - The buffer close job locks the trips it closes. Before, a cancellation running at the same
   time could still turn the student into a confirmed passenger with a boarding credential.
 - `DELETE /v1/viagens/<id>/solicitacao` now locks the vehicle and the trip. Before, cancelling
