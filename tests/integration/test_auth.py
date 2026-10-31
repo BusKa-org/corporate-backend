@@ -1,4 +1,9 @@
+from datetime import date
+
 import pytest
+
+from app.models.enum import UserStatus
+from tests.factories.user_factory import SENHA_PADRAO, AlunoFactory
 
 
 @pytest.mark.integration
@@ -34,3 +39,20 @@ def test_login_success_returns_token(client, gestor):
         data.get("user").get("nome") == gestor.user.nome
     ), f"User name mismatch: {data.get('user')}"
     assert data["user"]["role"] == gestor.user.role.value, f"User role mismatch: {data.get('user')}"
+
+
+@pytest.mark.integration
+def test_login_minor_pending_signup_is_not_blocked(client, _db, organizacao):
+    # Antes, menor em PENDING_SIGNUP com e-mail do responsável e sem consentimento
+    # ficava travado no login para sempre: nenhum fluxo grava mais esse consentimento.
+    # As colunas saíram (migration e4f5a6b7c8d9); aqui fica o mesmo cenário sem elas.
+    aluno = AlunoFactory(
+        organizacao_id=organizacao.id,
+        status=UserStatus.PENDING_SIGNUP,
+        data_nascimento=date(date.today().year - 15, 1, 1),
+    )
+    _db.session.add(aluno)
+    _db.session.commit()
+
+    r = client.post("/v1/auth/login", json={"email": aluno.email, "password": SENHA_PADRAO})
+    assert r.status_code == 200, r.get_data(as_text=True)
