@@ -109,6 +109,8 @@ All notable changes to this project will be documented in this file.
   single and batch approval endpoints (`POST /v1/alunos/<id>/aprovar`, `POST /v1/alunos/aprovar`)
   and the gestor-creates-account-with-password endpoint (`POST /v1/users/alunos`).
   Invitations replace all of them: nobody signs up on their own.
+- The `aluno.guardian_token` column, dead since the guardian consent endpoints went away.
+  CI now runs the Alembic migrations on an empty database and fails on model drift.
 
 ### Fixed
 - After `DELETE /v1/users/me` the old JWT kept working for up to 2 hours. Every authenticated

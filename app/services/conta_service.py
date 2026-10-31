@@ -82,7 +82,6 @@ def _anonimizar(user: User) -> None:
         user.nome_responsavel = None
         user.cpf_responsavel = None
         user.email_responsavel = None
-        user.guardian_token = None
         user.guardian_consented_at = None
 
 

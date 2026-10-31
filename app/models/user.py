@@ -108,7 +108,6 @@ class Aluno(User):
     # Minor / guardian consent flow
     data_nascimento = db.Column(db.Date)
     email_responsavel = db.Column(db.String(120))
-    guardian_token = db.Column(db.String(64), unique=True)
     guardian_consented_at = db.Column(db.DateTime(timezone=True))
 
     instituicao_id = db.Column(UUID(as_uuid=True), db.ForeignKey("instituicao.id"))
