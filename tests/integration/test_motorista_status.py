@@ -3,6 +3,7 @@ from contextlib import contextmanager
 from datetime import UTC, date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
+import pytest
 from sqlalchemy import event
 
 from app.models.enum import StatusMotorista, StatusViagem
@@ -370,6 +371,7 @@ def test_iniciar_mesma_viagem_duas_vezes_e_recusado(
     assert _status(_db, motorista.user.id) == StatusMotorista.EM_ROTA
 
 
+@pytest.mark.concurrency
 def test_dois_inicios_simultaneos_so_um_passa(
     app, _db, motorista, horario_rota, viagem_futura_agendada_com_motorista
 ):

@@ -523,6 +523,7 @@ def test_credencial_de_ponto_antigo_e_recusada(_db, rodada, motorista, aluno, po
 
 
 @pytest.mark.integration
+@pytest.mark.concurrency
 def test_duas_confirmacoes_simultaneas_embarcam_uma_vez(app, _db, rodada, motorista, aluno):
     _com_foto(_db, aluno)
     qr = _qr(_db, rodada, aluno)

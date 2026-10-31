@@ -37,6 +37,7 @@ def dois_alunos(_db, organizacao, rodada_com_um_assento):
     return dupla
 
 
+@pytest.mark.concurrency
 def test_duas_declaracoes_simultaneas_nao_estouram_a_capacidade(
     app, _db, rodada_com_um_assento, pontos_circuito, dois_alunos
 ):

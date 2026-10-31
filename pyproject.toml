@@ -101,6 +101,7 @@ markers = [
   "unit: fast tests without DB",
   "integration: API/DB integration tests",
   "e2e: full flows, slowest",
+  "concurrency: race-condition tests, real threads against Postgres",
 ]
 filterwarnings = [
   "ignore:pythonjsonlogger\\.jsonlogger has been moved:DeprecationWarning",
