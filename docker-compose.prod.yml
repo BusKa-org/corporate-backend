@@ -56,6 +56,9 @@ services:
       # São 4 workers do gunicorn. Se cada um subisse o próprio scheduler, as
       # notificações sairiam quadruplicadas.
       RUN_SCHEDULER: "false"
+    volumes:
+      # Fotos dos alunos (FOTOS_ALUNO_DIR vazio = /app/instance/fotos_aluno).
+      - fotos_aluno:/app/instance/fotos_aluno
     depends_on:
       db:
         condition: service_healthy
@@ -81,6 +84,8 @@ services:
 
 volumes:
   postgres_data:
+    driver: local
+  fotos_aluno:
     driver: local
 
 networks:

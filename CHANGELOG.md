@@ -33,6 +33,14 @@ All notable changes to this project will be documented in this file.
   during rest or outside working hours. It locks the trip and driver rows, so two
   simultaneous starts can't both pass.
   New settings `MOTORISTA_HORAS_MAX_DIRECAO`, `MOTORISTA_DESCANSO_MINUTOS` and `TIMEZONE`.
+- Passenger accessibility needs (`necessidades_acessibilidade`, `observacao_acessibilidade`)
+  on registration and `PUT /v1/alunos/me`, shown to the gestor and to the driver of the trip.
+- Passenger photo: `PUT /v1/alunos/me/foto` (multipart, JPEG/PNG/WEBP, EXIF/GPS and text
+  metadata removed) and `GET /v1/alunos/<id>/foto` for the passenger, the organization's
+  gestor, and the driver of a scheduled or in-progress trip the passenger confirmed.
+  Photos over `FOTO_ALUNO_MAX_PIXELS` (default 25 MP) are rejected with a 400.
+  New settings `FOTOS_ALUNO_DIR`, `FOTO_ALUNO_MAX_BYTES` and `FOTO_ALUNO_MAX_PIXELS`; production keeps photos in the
+  `fotos_aluno` volume. Account deletion removes the photo file and the accessibility data.
 
 ### Removed
 - Passenger self-signup (`POST /v1/alunos/signup`), the guardian consent endpoints, the

@@ -96,7 +96,7 @@ def login_user(data: dict[str, Any]) -> dict[str, Any]:
             success=False,
             details={"reason": "account_disabled"},
         )
-        raise ForbiddenError("Sua conta está desativada. Entre em contato com o gestor municipal.")
+        raise ForbiddenError("Sua conta está desativada. Entre em contato com o gestor.")
 
     if user.status == UserStatus.PENDING_APPROVAL:
         audit_logger.log_auth(
@@ -299,8 +299,6 @@ def request_password_reset(email_raw: str, base_url: str) -> None:
         raise ValidationError("Formato de email inválido")
 
     user = User.query.filter_by(email=email).first()
-    print(user)
-    print(email)
     if not user:
         logger.info("Password reset requested for unknown email: %s", email)
         return

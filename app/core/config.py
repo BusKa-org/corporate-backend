@@ -66,6 +66,16 @@ class Settings:
         )
         # Fuso usado para comparar o horário de trabalho do motorista com o relógio
         self.TIMEZONE = os.getenv("TIMEZONE", "America/Sao_Paulo")
+        # Fotos dos alunos (RF-15/RF-17). Vazio = <instance_path>/fotos_aluno.
+        self.FOTOS_ALUNO_DIR = os.getenv("FOTOS_ALUNO_DIR", "")
+        self.FOTO_ALUNO_MAX_BYTES = self._get_int(
+            "FOTO_ALUNO_MAX_BYTES", default=5 * 1024 * 1024, min_val=1024
+        )
+        # Largura x altura. 25 MP cobre foto de celular e barra imagem pequena em bytes
+        # que ocupa gigabytes de memória ao ser aberta (bomba de descompressão).
+        self.FOTO_ALUNO_MAX_PIXELS = self._get_int(
+            "FOTO_ALUNO_MAX_PIXELS", default=25_000_000, min_val=1
+        )
 
         # CORS settings
         self.CORS_ORIGINS = self._parse_cors_origins()

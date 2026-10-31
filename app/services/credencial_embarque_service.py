@@ -32,17 +32,26 @@ def gerar_credencial(viagem_id: str, aluno_id: str, ponto_embarque_id: str) -> C
         if viagem.status in (StatusViagem.CANCELADA, StatusViagem.FINALIZADA):
             raise ValidationError("Viagem cancelada ou finalizada não emite credencial de embarque")
 
-        credencial = CredencialEmbarque(
-            viagem_id=viagem_id,
-            aluno_id=aluno_id,
-            ponto_embarque_id=ponto_embarque_id,
-            token=secrets.token_urlsafe(32),
-            expires_at=datetime.now(UTC) + EXPIRACAO_PADRAO,
-        )
-        db.session.add(credencial)
-        db.session.flush()
+        return criar_credencial(viagem_id, aluno_id, ponto_embarque_id)
 
-        return credencial
+
+def criar_credencial(viagem_id, aluno_id, ponto_embarque_id) -> CredencialEmbarque:
+    """
+    Cria a credencial na transação de quem chamou, sem commit.
+
+    Usada pela consolidação do buffer da rodada sob demanda, que emite todas as
+    credenciais da rodada numa transação só.
+    """
+    credencial = CredencialEmbarque(
+        viagem_id=viagem_id,
+        aluno_id=aluno_id,
+        ponto_embarque_id=ponto_embarque_id,
+        token=secrets.token_urlsafe(32),
+        expires_at=datetime.now(UTC) + EXPIRACAO_PADRAO,
+    )
+    db.session.add(credencial)
+    db.session.flush()
+    return credencial
 
 
 def buscar_credencial_do_aluno(user_id: str, viagem_id: str) -> CredencialEmbarque:

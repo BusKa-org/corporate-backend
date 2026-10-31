@@ -23,13 +23,16 @@ from .api.controllers.auth_controller import api as auth_ns
 from .api.controllers.consentimento_controller import api as consentimento_ns
 from .api.controllers.convite_controller import api as convites_ns
 from .api.controllers.dashboard_controller import api as dashboard_ns
+from .api.controllers.embarque_controller import api as embarque_ns
 from .api.controllers.instituicao_controller import api as inst_ns
+from .api.controllers.janelas_controller import api as janelas_ns
 from .api.controllers.notificacao_controller import api as notificacoes_ns
 from .api.controllers.ocorrencia_controller import api as ocorrencias_ns
 from .api.controllers.onibus_controller import api as onibus_ns
 from .api.controllers.pontos_controller import api as pontos_ns
 from .api.controllers.rotas_controller import api as rotas_ns
 from .api.controllers.routing_controller import api as routing_ns
+from .api.controllers.telemetria_controller import api as telemetria_ns
 from .api.controllers.user_controller import api as user_ns
 from .api.controllers.viagens_controller import api as viagem_ns
 from .core.config import Settings
@@ -108,6 +111,11 @@ def create_app(
     app.config["MOTORISTA_HORAS_MAX_DIRECAO"] = settings.MOTORISTA_HORAS_MAX_DIRECAO
     app.config["MOTORISTA_DESCANSO_MINUTOS"] = settings.MOTORISTA_DESCANSO_MINUTOS
     app.config["TIMEZONE"] = settings.TIMEZONE
+    app.config["FOTOS_ALUNO_DIR"] = settings.FOTOS_ALUNO_DIR or os.path.join(
+        app.instance_path, "fotos_aluno"
+    )
+    app.config["FOTO_ALUNO_MAX_BYTES"] = settings.FOTO_ALUNO_MAX_BYTES
+    app.config["FOTO_ALUNO_MAX_PIXELS"] = settings.FOTO_ALUNO_MAX_PIXELS
 
     # Maximum request size (16MB)
     app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024
@@ -218,6 +226,10 @@ Inclua o header: `Authorization: Bearer <seu_token>`
     api.add_namespace(alunos_ns, path="/v1/alunos")
     api.add_namespace(ocorrencias_ns, path="/v1/ocorrencias")
     api.add_namespace(dashboard_ns, path="/v1/dashboard")
+    api.add_namespace(janelas_ns, path="/v1/janelas")
+    api.add_namespace(consentimento_ns, path="/v1/consentimento")
+    api.add_namespace(embarque_ns, path="/v1/embarque")
+    api.add_namespace(telemetria_ns, path="/v1/telemetria")
 
     # Client-specific extensions — see `plugins` param contract on the signature.
     for register in (_discover_plugins() if plugins is None else plugins):

@@ -1,7 +1,7 @@
 """add horario de trabalho and descanso_ate to motorista
 
 Revision ID: a7b8c9d0e1f2
-Revises: e5f6a7b8c9d0
+Revises: b8c9d0e1f2a3
 Create Date: 2026-10-21 12:00:00.000000+00:00
 """
 
@@ -12,7 +12,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision: str = "a7b8c9d0e1f2"
-down_revision: Union[str, None] = "e5f6a7b8c9d0"
+down_revision: Union[str, None] = "b8c9d0e1f2a3"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

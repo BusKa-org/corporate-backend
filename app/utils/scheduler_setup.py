@@ -7,6 +7,7 @@ from flask_apscheduler import APScheduler
 from app.tasks.convite_tasks import enviar_convites_pendentes
 from app.tasks.notificacao_tasks import verificar_viagens_10min, verificar_viagens_24h
 from app.tasks.retencao_tasks import job_anonimizar_retencoes
+from app.tasks.viagem_tasks import processar_rodadas
 
 
 def init_scheduler(app: Flask, scheduler: APScheduler):
@@ -38,6 +39,18 @@ def init_scheduler(app: Flask, scheduler: APScheduler):
         args=[app],
         trigger="interval",
         minutes=10,
+        replace_existing=True,
+    )
+
+    # Rodada sob demanda: fecha buffers vencidos (RF-15) e cobra o motorista
+    # que não iniciou o percurso (RF-11). O minuto é a granularidade útil —
+    # o buffer é contado em minutos.
+    scheduler.add_job(
+        id="job_rodadas",
+        func=processar_rodadas,
+        args=[app],
+        trigger="interval",
+        minutes=1,
         replace_existing=True,
     )
 

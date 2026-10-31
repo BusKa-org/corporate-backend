@@ -1,5 +1,6 @@
-from marshmallow import fields
+from marshmallow import fields, validate
 
+from app.models.enum import NecessidadeAcessibilidade
 from app.schemas.common import BaseSchema
 from app.schemas.endereco_schema import EnderecoInputSchema
 from app.schemas.validators import (
@@ -9,7 +10,16 @@ from app.schemas.validators import (
 )
 
 
-class AlunoMeUpdateRequestSchema(BaseSchema):
+class AcessibilidadeInputSchema(BaseSchema):
+    """Campos de acessibilidade, aceitos no cadastro (convite) e na edição do perfil."""
+
+    necessidades_acessibilidade = fields.List(
+        fields.String(validate=validate.OneOf([n.name for n in NecessidadeAcessibilidade]))
+    )
+    observacao_acessibilidade = fields.String(allow_none=True, validate=validate.Length(max=500))
+
+
+class AlunoMeUpdateRequestSchema(AcessibilidadeInputSchema):
     """Aluno updates their profile (partial update).
 
     Campo omitido não é tocado. Não há `load_default`: um default None faria o serviço
@@ -47,6 +57,10 @@ class AlunoResponseSchema(BaseSchema):
     nome_responsavel = fields.String(dump_default=None)
     cpf_responsavel = fields.String(dump_default=None)
     guardian_consented_at = fields.DateTime(dump_default=None)
+
+    foto_url = fields.String(dump_default=None)
+    necessidades_acessibilidade = fields.List(fields.String())
+    observacao_acessibilidade = fields.String(dump_default=None)
 
 
 class AlunoListResponseSchema(BaseSchema):

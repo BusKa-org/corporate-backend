@@ -332,6 +332,45 @@ def test_concluir_cria_passageiro_ativo_que_consegue_entrar(gestor, client, inst
     assert login.status_code == 200
 
 
+def test_concluir_guarda_a_acessibilidade_informada(gestor, client, instituicao, _db):
+    _convidar(gestor, [{"email": "lia@parque.test"}])
+    convite = _convite(_db, "lia@parque.test")
+
+    resposta = _concluir(
+        client,
+        convite.token,
+        nome="Lia Souza",
+        cpf=CPF_A,
+        instituicao_id=str(instituicao.id),
+        senha=SENHA,
+        necessidades_acessibilidade=["CADEIRA_DE_RODAS"],
+        observacao_acessibilidade="Cadeira motorizada",
+    )
+
+    assert resposta.status_code == 201, resposta.get_data(as_text=True)
+    aluno = Aluno.query.filter_by(email="lia@parque.test").one()
+    assert aluno.necessidades_acessibilidade == ["CADEIRA_DE_RODAS"]
+    assert aluno.observacao_acessibilidade == "Cadeira motorizada"
+
+
+def test_convite_aceite_com_necessidade_invalida_400(gestor, client, instituicao, _db):
+    _convidar(gestor, [{"email": "rui@parque.test"}])
+    convite = _convite(_db, "rui@parque.test")
+
+    resposta = _concluir(
+        client,
+        convite.token,
+        nome="Rui Lima",
+        cpf=CPF_A,
+        instituicao_id=str(instituicao.id),
+        senha=SENHA,
+        necessidades_acessibilidade=["VOAR"],
+    )
+
+    assert resposta.status_code == 400
+    assert Aluno.query.filter_by(email="rui@parque.test").first() is None
+
+
 def test_concluir_com_dados_do_gestor_aceita_correcao(gestor, client, instituicao, _db, caplog):
     _convidar(
         gestor,
