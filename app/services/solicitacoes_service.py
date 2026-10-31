@@ -67,6 +67,10 @@ def solicitar_viagem(user_id: str, rota_id: str) -> SolicitacaoViagem:
     with transactional():
         # Serializa as primeiras solicitações concorrentes: só uma cria a viagem.
         db.session.execute(select(Onibus.id).where(Onibus.id == veiculo_id).with_for_update())
+        # E as do mesmo aluno em rotas de veículos diferentes: só uma fica ativa.
+        db.session.execute(
+            select(User.id).where(User.id == aluno.usuario_id).with_for_update(key_share=True)
+        )
 
         agora_local = tempo.agora_local()
         janela = janelas_service.buscar_janela_ativa(veiculo_id, agora_local)

@@ -99,6 +99,8 @@ All notable changes to this project will be documented in this file.
   Invitations replace all of them: nobody signs up on their own.
 
 ### Fixed
+- `POST /v1/rotas/<id>/solicitacoes`: a student requesting two routes served by different
+  vehicles at the same time ended up with two active requests. The student row is now locked.
 - `PUT /v1/rotas/<id>` with a different `tipo` returns 400 instead of 200 doing nothing; the
   route type can't be changed (send the current one or leave it out).
 - `PUT /v1/viagens/<id>/cancelar` checks that the trip belongs to the gestor's
