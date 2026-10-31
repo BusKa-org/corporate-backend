@@ -1050,3 +1050,63 @@ def test_aluno_sem_foto_nao_embarca_pelo_qr_offline(_db, rodada, motorista, alun
 
     assert corpo["resultados"][0]["codigo"] == "SEM_FOTO_EXIGE_MANUAL"
     assert _registro(_db, rodada, aluno).embarcou is False
+
+
+def _outra_rodada(_db, rodada, motorista, onibus, circuito, pontos_circuito, actor):
+    """Uma segunda viagem consolidada, com credencial para `actor`."""
+    outra = ViagemFactory(
+        data=rodada.data,
+        rota_id=circuito.id,
+        motorista_id=motorista.user.id,
+        veiculo_id=onibus.id,
+        status=StatusViagem.SOLICITADA,
+    )
+    _db.session.add(outra)
+    _db.session.commit()
+    _consolidar(_db, outra, [(actor.user.id, pontos_circuito[0], pontos_circuito[2])])
+    for credencial in _db.session.query(CredencialEmbarque).filter_by(viagem_id=outra.id):
+        credencial.created_at = datetime.now(UTC) - timedelta(hours=1)
+    _db.session.commit()
+    return outra
+
+
+@pytest.mark.integration
+def test_mesmo_evento_id_de_recusa_em_viagens_diferentes(
+    _db, rodada, motorista, onibus, circuito, pontos_circuito, aluno, aluno3
+):
+    """Cada app numera a própria fila; o "1" de uma viagem não é o "1" de outra."""
+    outra = _outra_rodada(_db, rodada, motorista, onibus, circuito, pontos_circuito, aluno3)
+    na_rodada = [_recusa_offline(_db, rodada, aluno, pontos_circuito, evento_id="1")]
+    na_outra = [_recusa_offline(_db, outra, aluno3, pontos_circuito, evento_id="1")]
+
+    assert _sincronizar(motorista, rodada, na_rodada).get_json()["aplicados"] == 1
+    assert _sincronizar(motorista, outra, na_outra).get_json()["aplicados"] == 1
+    assert _sincronizar(motorista, outra, na_outra).get_json()["ja_aplicados"] == 1
+
+    assert len(_ocorrencias(_db, rodada)) == 1
+    assert len(_ocorrencias(_db, outra)) == 1
+    assert _credencial(_db, rodada, aluno).recusada_em is not None
+    assert _credencial(_db, outra, aluno3).recusada_em is not None
+
+
+@pytest.mark.integration
+def test_mesmo_evento_id_de_posicao_em_viagens_diferentes(
+    _db, rodada, motorista, onibus, circuito, pontos_circuito, aluno3
+):
+    outra = _outra_rodada(_db, rodada, motorista, onibus, circuito, pontos_circuito, aluno3)
+    posicao = [
+        {
+            "evento_id": "1",
+            "tipo": "POSICAO",
+            "ocorrido_em": datetime.now(UTC).isoformat(),
+            "latitude": "-7.21",
+            "longitude": "-35.88",
+        }
+    ]
+
+    assert _sincronizar(motorista, rodada, posicao).get_json()["aplicados"] == 1
+    assert _sincronizar(motorista, outra, posicao).get_json()["aplicados"] == 1
+    assert _sincronizar(motorista, outra, posicao).get_json()["ja_aplicados"] == 1
+
+    assert _db.session.query(TelemetriaViagem).filter_by(viagem_id=rodada.id).count() == 1
+    assert _db.session.query(TelemetriaViagem).filter_by(viagem_id=outra.id).count() == 1

@@ -113,6 +113,9 @@ All notable changes to this project will be documented in this file.
   CI now runs the Alembic migrations on an empty database and fails on model drift.
 
 ### Fixed
+- Rate limit keys no longer hold the raw password reset / invitation token, the
+  e-mail or the client IP: all are stored as an HMAC-SHA256 keyed with
+  `JWT_SECRET_KEY`, so they no longer appear in Redis key names.
 - After `DELETE /v1/users/me` the old JWT kept working for up to 2 hours. Every authenticated
   request now loads the user and returns 401 `TOKEN_REVOKED` when the user no longer exists or
   has a status login refuses (`DELETED`, `DISABLED`, `PENDING_APPROVAL`). The rate limiter
@@ -142,6 +145,11 @@ All notable changes to this project will be documented in this file.
 - `POST /v1/embarque/viagens/<id>/sincronizacao`: the same offline queue sent twice at the
   same time answered `recusado`/`CONFLICT` for `RECUSA` and `POSICAO` events instead of
   `ja_aplicado`. The duplicate check now runs after the row lock.
+- `POST /v1/embarque/viagens/<id>/sincronizacao`: `RECUSA` and `POSICAO` were deduplicated by
+  `evento_id` across all trips, so a `RECUSA` "1" on one trip came back `ja_aplicado` when
+  another trip already had a "1": the QR was not closed and no incident reached the gestor
+  (same for GPS points). The dedupe key now includes the trip; `evento_id` only needs to be
+  unique within the trip's queue.
 - `POST /v1/viagens/<id>/declaracao` reloads the trip after taking its lock, so a declaration
   that waited for the buffer close job sees the new status (400) instead of a stale one (404).
 - The buffer close job locks the trips it closes. Before, a cancellation running at the same
