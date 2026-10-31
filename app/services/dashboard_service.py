@@ -14,8 +14,15 @@ from app.models.enum import StatusSolicitacao, StatusViagem
 from app.models.geo import Ponto
 from app.models.onibus import Onibus
 from app.models.rota import HorarioRota, Rota
-from app.models.viagem import AlunosConfirmados, TelemetriaViagem, Viagem, ViagemPonto
+from app.models.viagem import (
+    AlunosConfirmados,
+    SolicitacaoViagem,
+    TelemetriaViagem,
+    Viagem,
+    ViagemPonto,
+)
 from app.services.user_service import _get_gestor_or_403
+from app.services.viagens_service import juntar_rota
 
 logger = logging.getLogger(__name__)
 
@@ -26,9 +33,7 @@ def obter_progresso_viagem(gestor_id: str, viagem_id: str) -> list[dict]:
     gestor = _get_gestor_or_403(gestor_id, "Apenas gestores podem auditar o trajeto de viagens")
 
     viagem = (
-        db.session.query(Viagem)
-        .join(HorarioRota)
-        .join(Rota)
+        juntar_rota(db.session.query(Viagem))
         .filter(Viagem.id == viagem_id, Rota.organizacao_id == gestor.organizacao_id)
         .first()
     )
@@ -62,12 +67,12 @@ def relatorio_periodo_gestor(gestor_id: str, data_inicio: str, data_fim: str) ->
 
     try:
         stats_viagem = (
-            db.session.query(
-                func.count(Viagem.id).label("total_viagens"),
-                func.sum(Viagem.km_real).label("km_total_rodado"),
+            juntar_rota(
+                db.session.query(
+                    func.count(Viagem.id).label("total_viagens"),
+                    func.sum(Viagem.km_real).label("km_total_rodado"),
+                ).select_from(Viagem)
             )
-            .join(HorarioRota, Viagem.horario_rota_id == HorarioRota.id)
-            .join(Rota, HorarioRota.rota_id == Rota.id)
             .filter(
                 Rota.organizacao_id == gestor.organizacao_id,
                 Viagem.data >= data_inicio,
@@ -94,8 +99,8 @@ def relatorio_periodo_gestor(gestor_id: str, data_inicio: str, data_fim: str) ->
                 ).label("total_desperdicio"),
             )
             .select_from(Viagem)
-            .join(HorarioRota, Viagem.horario_rota_id == HorarioRota.id)
-            .join(Rota, HorarioRota.rota_id == Rota.id)
+            .outerjoin(HorarioRota, Viagem.horario_rota_id == HorarioRota.id)
+            .join(Rota, Rota.id == func.coalesce(Viagem.rota_id, HorarioRota.rota_id))
             .join(AlunosConfirmados, Viagem.id == AlunosConfirmados.viagem_id)
             .filter(
                 Rota.organizacao_id == gestor.organizacao_id,
@@ -133,9 +138,7 @@ def obter_telemetria_viagem(gestor_id: str, viagem_id: str) -> list[dict]:
     gestor = _get_gestor_or_403(gestor_id, "Apenas gestores podem auditar a telemetria de viagens")
 
     viagem = (
-        db.session.query(Viagem)
-        .join(HorarioRota)
-        .join(Rota)
+        juntar_rota(db.session.query(Viagem))
         .filter(Viagem.id == viagem_id, Rota.organizacao_id == gestor.organizacao_id)
         .first()
     )
@@ -177,10 +180,10 @@ def obter_telemetria_viagem(gestor_id: str, viagem_id: str) -> list[dict]:
 #   consulta junta de volta com identidade. As únicas entidades nomeadas nas
 #   respostas são pontos de embarque.
 
-# Só viagens que de fato rodaram entram em ocupação e IPK. Uma rodada OCIOSA
-# ou CANCELADA não é operação: contá-la afundaria a ocupação média e sugeriria
+# Só viagens que de fato rodaram entram em ocupação e IPK. Uma viagem
+# CANCELADA não é operação: contá-la afundaria a ocupação média e sugeriria
 # uma frota superdimensionada.
-_STATUS_OPERADAS = (StatusViagem.EM_ROTA, StatusViagem.EM_ANDAMENTO, StatusViagem.FINALIZADA)
+_STATUS_OPERADAS = (StatusViagem.EM_ANDAMENTO, StatusViagem.FINALIZADA)
 
 
 def _viagens_periodo(organizacao_id: Any, inicio: date, fim: date, operadas: bool = False) -> Any:
@@ -244,12 +247,12 @@ def _negacoes_por_ponto(viagens: Any) -> list[dict]:
     """
     total = func.count().label("negacoes")
     linhas = db.session.execute(
-        select(AlunosConfirmados.ponto_embarque_id, Ponto.apelido, total)
-        .select_from(AlunosConfirmados)
-        .join(viagens, viagens.c.id == AlunosConfirmados.viagem_id)
-        .join(Ponto, Ponto.id == AlunosConfirmados.ponto_embarque_id)
-        .where(AlunosConfirmados.status == StatusSolicitacao.NEGADO)
-        .group_by(AlunosConfirmados.ponto_embarque_id, Ponto.apelido)
+        select(SolicitacaoViagem.ponto_embarque_id, Ponto.apelido, total)
+        .select_from(SolicitacaoViagem)
+        .join(viagens, viagens.c.id == SolicitacaoViagem.viagem_id)
+        .join(Ponto, Ponto.id == SolicitacaoViagem.ponto_embarque_id)
+        .where(SolicitacaoViagem.status == StatusSolicitacao.NEGADA)
+        .group_by(SolicitacaoViagem.ponto_embarque_id, Ponto.apelido)
         .order_by(total.desc(), Ponto.apelido)
     ).all()
     return [

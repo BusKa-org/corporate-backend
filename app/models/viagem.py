@@ -16,20 +16,10 @@ class Viagem(db.Model):
     horario_rota_id = db.Column(
         UUID(as_uuid=True), db.ForeignKey("horario_rota.id", ondelete="SET NULL"), nullable=True
     )
-
-    # Rodada sob demanda: não nasce de uma grade de horários, então aponta
-    # direto para o circuito. Viagens programadas herdadas continuam chegando
-    # pelo horario_rota_id acima, com rota_id nulo.
+    # Viagem sob demanda não tem horario_rota, então a rota fica aqui também.
     rota_id = db.Column(
-        UUID(as_uuid=True), db.ForeignKey("rota.id", ondelete="CASCADE"), nullable=True
+        UUID(as_uuid=True), db.ForeignKey("rota.id", ondelete="SET NULL"), nullable=True, index=True
     )
-    janela_id = db.Column(
-        UUID(as_uuid=True),
-        db.ForeignKey("janela_disponibilidade.id", ondelete="SET NULL"),
-        nullable=True,
-    )
-    # RF-11: fim da contagem regressiva do buffer. Nulo fora de BUFFER_ABERTO.
-    buffer_expira_em = db.Column(db.DateTime(timezone=True), nullable=True)
 
     motorista_id = db.Column(
         UUID(as_uuid=True),
@@ -53,6 +43,12 @@ class Viagem(db.Model):
     aviso_24h_enviado = db.Column(db.Boolean, default=False, nullable=False)
     aviso_10min_enviado = db.Column(db.Boolean, default=False, nullable=False)
 
+    buffer_fim = db.Column(db.DateTime(timezone=True), nullable=True)
+    # Gestor avisado de que o motorista não iniciou dentro do prazo (RF-11, fluxo secundário).
+    aviso_prazo_enviado = db.Column(
+        db.Boolean, default=False, server_default="false", nullable=False
+    )
+
     created_at = db.Column(db.DateTime(timezone=True), server_default=db.func.now())
     updated_at = db.Column(
         db.DateTime(timezone=True), server_default=db.func.now(), onupdate=db.func.now()
@@ -60,7 +56,6 @@ class Viagem(db.Model):
 
     horario_rota = relationship("HorarioRota")
     rota = relationship("Rota")
-    janela = relationship("JanelaDisponibilidade")
     motorista = relationship("Motorista")
     veiculo = relationship("Onibus")
 
@@ -74,6 +69,57 @@ class Viagem(db.Model):
     alunos_confirmados = relationship(
         "AlunosConfirmados", back_populates="viagem", cascade="all, delete-orphan"
     )
+
+    solicitacoes = relationship(
+        "SolicitacaoViagem", back_populates="viagem", cascade="all, delete-orphan"
+    )
+
+
+class SolicitacaoViagem(db.Model):
+    """Interesse de um aluno numa viagem sob demanda (RF-10, RF-19).
+
+    Durante o buffer o aluno declara origem e destino (RF-13); a capacidade decide
+    se o trajeto cabe (RF-14). No fim do buffer quem declarou vira AlunosConfirmados.
+    """
+
+    __tablename__ = "solicitacao_viagem"
+    __table_args__ = (
+        db.Index(
+            "uq_solicitacao_ativa",
+            "viagem_id",
+            "aluno_id",
+            unique=True,
+            postgresql_where=db.text("status = 'ATIVA'"),
+        ),
+    )
+
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    viagem_id = db.Column(
+        UUID(as_uuid=True), db.ForeignKey("viagem.id", ondelete="CASCADE"), nullable=False
+    )
+    aluno_id = db.Column(
+        UUID(as_uuid=True),
+        db.ForeignKey("aluno.usuario_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    status = db.Column(
+        db.Enum(StatusSolicitacao, name="status_solicitacao"),
+        nullable=False,
+        default=StatusSolicitacao.ATIVA,
+        server_default=StatusSolicitacao.ATIVA.value,
+    )
+    created_at = db.Column(db.DateTime(timezone=True), server_default=db.func.now())
+    cancelada_em = db.Column(db.DateTime(timezone=True), nullable=True)
+
+    ponto_embarque_id = db.Column(UUID(as_uuid=True), db.ForeignKey("ponto.id"), nullable=True)
+    ponto_destino_id = db.Column(UUID(as_uuid=True), db.ForeignKey("ponto.id"), nullable=True)
+    declarada_em = db.Column(db.DateTime(timezone=True), nullable=True)
+
+    viagem = relationship("Viagem", back_populates="solicitacoes")
+    aluno = relationship("Aluno")
+    ponto_embarque = relationship("Ponto", foreign_keys=[ponto_embarque_id])
+    ponto_destino = relationship("Ponto", foreign_keys=[ponto_destino_id])
 
 
 class ViagemPonto(db.Model):
@@ -103,13 +149,8 @@ class ViagemPonto(db.Model):
 
 
 class AlunosConfirmados(db.Model):
-    """Participação de um aluno numa viagem.
-
-    No fluxo sob demanda esta linha é a solicitação da rodada: nasce como
-    INTERESSADO em RF-10, ganha origem/destino em RF-13, e vira CONFIRMADO ou
-    NEGADO na validação de capacidade (RF-14). As linhas NEGADO são mantidas —
-    são elas que alimentam as negações por ponto do dashboard (RF-21).
-    """
+    """Passageiro de uma viagem: quem confirmou presença na viagem fixa, ou quem
+    teve o trajeto aceito na sob demanda (criado no fim do buffer)."""
 
     __tablename__ = "alunos_confirmados"
 
@@ -141,15 +182,6 @@ class AlunosConfirmados(db.Model):
     aluno_lat = db.Column(db.Numeric(10, 8), nullable=True)
     aluno_lon = db.Column(db.Numeric(11, 8), nullable=True)
     aluno_gps_hora = db.Column(db.DateTime(timezone=True), nullable=True)
-
-    status = db.Column(
-        db.Enum(StatusSolicitacao, name="status_solicitacao"),
-        nullable=False,
-        server_default=StatusSolicitacao.INTERESSADO.value,
-        default=StatusSolicitacao.INTERESSADO,
-    )
-    solicitado_em = db.Column(db.DateTime(timezone=True), server_default=db.func.now())
-    declarado_em = db.Column(db.DateTime(timezone=True), nullable=True)
 
     embarcado_em = db.Column(db.DateTime(timezone=True), nullable=True)
 

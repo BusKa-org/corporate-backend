@@ -1,6 +1,7 @@
 import logging
 import os
 import re
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +56,24 @@ class Settings:
         # Link de download do app, incluído no e-mail de convite (opcional)
         self.APP_DOWNLOAD_URL = os.getenv("APP_DOWNLOAD_URL", "")
 
+        # Fuso da organização: hora local das janelas de disponibilidade (RF-05) e da
+        # jornada do motorista. Paraíba não segue o fuso de São Paulo.
+        self.TIMEZONE = os.getenv("TIMEZONE", "America/Fortaleza")
+        try:
+            ZoneInfo(self.TIMEZONE)
+        except (ZoneInfoNotFoundError, ValueError):
+            self._errors.append(f"TIMEZONE is not a valid IANA timezone: '{self.TIMEZONE}'")
+            self.TIMEZONE = "UTC"
+
+        # Intervalos dos jobs de viagem sob demanda: fechar buffer expirado e
+        # avisar o gestor quando o motorista estoura o prazo de início (RF-11)
+        self.JOB_BUFFER_INTERVALO_SEGUNDOS = self._get_int(
+            "JOB_BUFFER_INTERVALO_SEGUNDOS", default=30, min_val=5, max_val=3600
+        )
+        self.JOB_PRAZO_INICIO_INTERVALO_SEGUNDOS = self._get_int(
+            "JOB_PRAZO_INICIO_INTERVALO_SEGUNDOS", default=60, min_val=5, max_val=3600
+        )
+
         # Jornada do motorista. Padrão do CTB (Lei 9.503/97) art. 67-C §1º-A, incluído pela
         # Lei 13.103/2015: no transporte de passageiros, 30 min de descanso a cada 4 h de
         # direção (fracionamento permitido).
@@ -64,8 +83,6 @@ class Settings:
         self.MOTORISTA_DESCANSO_MINUTOS = self._get_int(
             "MOTORISTA_DESCANSO_MINUTOS", default=30, min_val=1, max_val=1440
         )
-        # Fuso usado para comparar o horário de trabalho do motorista com o relógio
-        self.TIMEZONE = os.getenv("TIMEZONE", "America/Sao_Paulo")
         # Fotos dos alunos (RF-15/RF-17). Vazio = <instance_path>/fotos_aluno.
         self.FOTOS_ALUNO_DIR = os.getenv("FOTOS_ALUNO_DIR", "")
         self.FOTO_ALUNO_MAX_BYTES = self._get_int(

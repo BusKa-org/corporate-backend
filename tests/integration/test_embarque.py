@@ -12,14 +12,13 @@ import pytest
 from flask_jwt_extended import create_access_token
 
 from app.models.credencial_embarque import CredencialEmbarque
-from app.models.enum import StatusSolicitacao, StatusViagem, TipoOcorrencia
+from app.models.enum import StatusViagem, TipoOcorrencia
 from app.models.ocorrencia import Ocorrencia
 from app.models.viagem import AlunosConfirmados, TelemetriaViagem, Viagem, ViagemPonto
-from app.services import capacidade_service, consentimento_service
-from app.tasks.viagem_tasks import consolidar_buffers_expirados
-from tests.conftest import Actor, AuthenticatedClient
+from app.services import buffer_service, consentimento_service
+from tests.conftest import Actor, AuthenticatedClient, reservar_trajeto
 from tests.factories.user_factory import AlunoFactory
-from tests.factories.viagem_factory import ViagemFactory
+from tests.factories.viagem_factory import SolicitacaoViagemFactory, ViagemFactory
 
 
 def _aluno(client, app, _db, organizacao) -> Actor:
@@ -48,26 +47,26 @@ def _consolidar(_db, viagem, reservas):
     # sorteio baixo nega os trajetos que se cruzam.
     viagem.veiculo.capacidade = 17
     viagem.status = StatusViagem.BUFFER_ABERTO
-    viagem.buffer_expira_em = datetime.now(UTC) + timedelta(minutes=5)
+    viagem.buffer_fim = datetime.now(UTC) + timedelta(minutes=5)
     _db.session.commit()
 
     for aluno_id, origem, destino in reservas:
-        capacidade_service.validar_e_reservar(viagem.id, aluno_id, origem.id, destino.id)
+        reservar_trajeto(_db, viagem, aluno_id, origem.id, destino.id)
 
-    viagem.buffer_expira_em = datetime.now(UTC) - timedelta(seconds=1)
+    viagem.buffer_fim = datetime.now(UTC) - timedelta(seconds=1)
     _db.session.commit()
 
-    consolidar_buffers_expirados()
+    buffer_service.fechar_buffers_expirados()
     _db.session.refresh(viagem)
     return viagem
 
 
 @pytest.fixture()
-def rodada(_db, viagem_ociosa, pontos_circuito, aluno, aluno2, aluno3):
+def rodada(_db, viagem_buffer_aberto, pontos_circuito, aluno, aluno2, aluno3):
     p1, p2, p3, p4 = pontos_circuito
     return _consolidar(
         _db,
-        viagem_ociosa,
+        viagem_buffer_aberto,
         [
             (aluno.user.id, p1, p3),
             (aluno2.user.id, p2, p4),
@@ -117,23 +116,18 @@ def test_consolidacao_materializa_o_roteiro(_db, rodada, pontos_circuito):
 
 @pytest.mark.integration
 def test_interessado_que_nao_declarou_trajeto_nao_recebe_credencial(
-    _db, viagem_ociosa, pontos_circuito, aluno, aluno2
+    _db, viagem_buffer_aberto, pontos_circuito, aluno, aluno2
 ):
     p1, _, p3, _ = pontos_circuito
     _db.session.add(
-        AlunosConfirmados(
-            viagem_id=viagem_ociosa.id,
-            aluno_id=aluno2.user.id,
-            confirmacao=False,
-            status=StatusSolicitacao.INTERESSADO,
-        )
+        SolicitacaoViagemFactory(viagem_id=viagem_buffer_aberto.id, aluno_id=aluno2.user.id)
     )
     _db.session.commit()
 
-    _consolidar(_db, viagem_ociosa, [(aluno.user.id, p1, p3)])
+    _consolidar(_db, viagem_buffer_aberto, [(aluno.user.id, p1, p3)])
 
-    assert _token(_db, viagem_ociosa, aluno)
-    assert _token(_db, viagem_ociosa, aluno2) is None
+    assert _token(_db, viagem_buffer_aberto, aluno)
+    assert _token(_db, viagem_buffer_aberto, aluno2) is None
 
 
 @pytest.mark.integration
@@ -148,14 +142,14 @@ def test_aluno_busca_a_propria_credencial(_db, rodada, aluno, pontos_circuito):
 
 @pytest.mark.integration
 def test_aluno_de_fora_da_rodada_nao_alcanca_credencial_alguma(
-    _db, viagem_ociosa, pontos_circuito, aluno, aluno2
+    _db, viagem_buffer_aberto, pontos_circuito, aluno, aluno2
 ):
     """A busca é sempre pela identidade do JWT: não há como pedir a do outro."""
     p1, _, p3, _ = pontos_circuito
-    _consolidar(_db, viagem_ociosa, [(aluno.user.id, p1, p3)])
+    _consolidar(_db, viagem_buffer_aberto, [(aluno.user.id, p1, p3)])
     consentimento_service.aceitar(str(aluno2.user.id), consentimento_service.VERSAO_TERMO_VIGENTE)
 
-    r = aluno2.client.get(f"/v1/viagens/{viagem_ociosa.id}/credencial-embarque")
+    r = aluno2.client.get(f"/v1/viagens/{viagem_buffer_aberto.id}/credencial-embarque")
     assert r.status_code == 404
 
 
@@ -260,16 +254,15 @@ def test_credencial_desconhecida(rodada, motorista):
 
 @pytest.mark.integration
 def test_credencial_de_outra_viagem(
-    _db, rodada, motorista, onibus, circuito, janela_hoje, pontos_circuito, aluno2
+    _db, rodada, motorista, onibus, circuito, pontos_circuito, aluno2
 ):
     p2, p4 = pontos_circuito[1], pontos_circuito[3]
     outra = ViagemFactory(
         data=rodada.data,
         rota_id=circuito.id,
-        janela_id=janela_hoje.id,
         motorista_id=motorista.user.id,
         veiculo_id=onibus.id,
-        status=StatusViagem.OCIOSA,
+        status=StatusViagem.SOLICITADA,
     )
     _db.session.add(outra)
     _db.session.commit()

@@ -45,8 +45,7 @@ def _tem_viagem_em_andamento(aluno_id) -> bool:
         .filter(
             AlunosConfirmados.aluno_id == aluno_id,
             AlunosConfirmados.confirmacao.is_(True),
-            # EM_ROTA é o "em andamento" da rodada sob demanda.
-            Viagem.status.in_([StatusViagem.EM_ANDAMENTO, StatusViagem.EM_ROTA]),
+            Viagem.status == StatusViagem.EM_ANDAMENTO,
         )
         .first()
     )

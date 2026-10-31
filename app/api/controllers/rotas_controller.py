@@ -4,7 +4,7 @@ from flask import request
 from flask_jwt_extended import get_jwt_identity, jwt_required
 from flask_restx import Namespace, Resource
 
-from app.api.contracts import ponto_contract, rota_contract
+from app.api.contracts import ponto_contract, rota_contract, solicitacao_contract
 from app.schemas.horario_schema import (
     HorarioCreateRequestSchema,
     HorarioListResponseSchema,
@@ -21,13 +21,16 @@ from app.schemas.rota_schema import (
     RotaResponseSchema,
     RotaUpdateRequestSchema,
 )
-from app.services import rotas_service
+from app.schemas.solicitacao_schema import RodadaAtivaResponseSchema, SolicitacaoResponseSchema
+from app.services import rotas_service, solicitacoes_service
+from app.services.consentimento_service import exige_consentimento
 
 api = Namespace("rotas", description="Gestão de Rotas")
 
 # API contracts (Swagger documentation)
 models = rota_contract.register_models(api)
 ponto_models = ponto_contract.register_models(api)
+solicitacao_models = solicitacao_contract.register_models(api)
 
 # Validation schemas (Marshmallow)
 rota_response_schema = RotaResponseSchema()
@@ -37,6 +40,8 @@ rota_detail_response_schema = RotaDetailResponseSchema()
 rota_create_request_schema = RotaCreateRequestSchema()
 rota_update_request_schema = RotaUpdateRequestSchema()
 pontos_add_request_schema = RotaPontosAddRequestSchema()
+solicitacao_response_schema = SolicitacaoResponseSchema()
+rodada_ativa_response_schema = RodadaAtivaResponseSchema()
 
 horario_create_request_schema = HorarioCreateRequestSchema()
 horario_response_schema = HorarioResponseSchema()
@@ -197,3 +202,28 @@ class RotaResource(Resource):
         current_user_id = get_jwt_identity()
         rotas_service.delete_rota(current_user_id, id)
         return {"message": "Rota removida com sucesso"}, 200
+
+
+@api.route("/<string:id>/solicitacoes")
+class RotaSolicitacoesResource(Resource):
+    @api.doc("solicitar_viagem")
+    @api.response(201, "Created", solicitacao_models["solicitacao_response"])
+    @jwt_required()
+    @exige_consentimento
+    def post(self, id: str) -> tuple[dict[str, Any], int]:
+        """(Aluno) Solicita o veículo da rota sob demanda dentro da janela de disponibilidade."""
+        user_id = get_jwt_identity()
+        solicitacao = solicitacoes_service.solicitar_viagem(user_id, id)
+        return solicitacao_response_schema.dump(solicitacao), 201
+
+
+@api.route("/<string:id>/viagem-ativa")
+class RotaViagemAtivaResource(Resource):
+    @api.doc("rodada_ativa")
+    @api.response(200, "Success", solicitacao_models["rodada_ativa_response"])
+    @jwt_required()
+    def get(self, id: str) -> tuple[dict[str, Any], int]:
+        """Rodada ativa da rota sob demanda (viagem null quando ociosa) e as janelas de hoje."""
+        user_id = get_jwt_identity()
+        rodada = solicitacoes_service.buscar_rodada_ativa(user_id, id)
+        return rodada_ativa_response_schema.dump(rodada), 200

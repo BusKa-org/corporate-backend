@@ -13,22 +13,23 @@ from app.core.exceptions import (
     ValidationError,
 )
 from app.models.base import db
-from app.models.enum import DiaDaSemana, SentidoViagem, StatusViagem, UserRole
+from app.models.enum import DiaDaSemana, SentidoViagem, StatusViagem, TipoViagem, UserRole
 from app.models.geo import Ponto
 from app.models.rota import DiasOperacao, HorarioRota, Rota, RotaAluno, RotaPonto
 from app.models.user import User
 from app.models.viagem import Viagem
+from app.schemas.rota_schema import BUFFER_MINUTOS_PADRAO, PRAZO_INICIO_MINUTOS_PADRAO
 from app.utils import audit_logger, validate_uuid
 
 logger = logging.getLogger(__name__)
 
+PARAMETROS_SOB_DEMANDA = ("buffer_minutos", "prazo_inicio_minutos")
+
 # RF-04, fluxo secundário 1: enquanto uma viagem que usa o ponto estiver de pé,
-# a alteração espera. Os estados da rodada sob demanda mais os herdados em curso.
+# a alteração espera.
 STATUS_VIAGEM_ATIVA = (
-    StatusViagem.OCIOSA,
     StatusViagem.SOLICITADA,
     StatusViagem.BUFFER_ABERTO,
-    StatusViagem.EM_ROTA,
     StatusViagem.EM_ANDAMENTO,
 )
 
@@ -132,6 +133,24 @@ def create_rota(gestor_id: str, data: dict[str, Any]) -> Rota:
     if not nome:
         raise ValidationError("Nome da rota é obrigatório")
 
+    tipo = data.get("tipo", TipoViagem.FIXA)
+    parametros = {}
+    if tipo == TipoViagem.SOB_DEMANDA:
+        if data.get("horarios"):
+            raise ValidationError("Rotas sob demanda não possuem grade de horários")
+        buffer_minutos = data.get("buffer_minutos")
+        prazo_inicio_minutos = data.get("prazo_inicio_minutos")
+        parametros = {
+            "buffer_minutos": BUFFER_MINUTOS_PADRAO if buffer_minutos is None else buffer_minutos,
+            "prazo_inicio_minutos": (
+                PRAZO_INICIO_MINUTOS_PADRAO
+                if prazo_inicio_minutos is None
+                else prazo_inicio_minutos
+            ),
+        }
+    elif any(data.get(k) is not None for k in PARAMETROS_SOB_DEMANDA):
+        raise ValidationError("Parâmetros de buffer só se aplicam a rotas sob demanda")
+
     try:
         # If a driver creates a route, automatically assign themselves as the default driver
         motorista_id = data.get("motorista_padrao_id")
@@ -140,6 +159,8 @@ def create_rota(gestor_id: str, data: dict[str, Any]) -> Rota:
 
         rota = Rota(
             nome=nome,
+            tipo=tipo,
+            **parametros,
             motorista_padrao_id=motorista_id,
             veiculo_padrao_id=data.get("veiculo_padrao_id"),
             organizacao_id=user.organizacao_id,
@@ -333,6 +354,9 @@ def add_horario(gestor_id: str, rota_id: str, data: dict[str, Any]) -> HorarioRo
     if rota.organizacao_id != user.organizacao_id:
         raise ForbiddenError("Acesso negado")
 
+    if rota.tipo == TipoViagem.SOB_DEMANDA:
+        raise ValidationError("Rotas sob demanda não possuem grade de horários")
+
     dias_list = data.get("dias", [])
     if not dias_list:
         raise ValidationError("Selecione pelo menos um dia da semana")
@@ -452,6 +476,12 @@ def update_rota(user_id: str, rota_id: str, data: dict[str, Any]) -> Rota:
         )
         raise ForbiddenError("Acesso negado")
 
+    if "tipo" in data and data["tipo"] != rota.tipo:
+        raise ValidationError("O tipo da rota não pode ser alterado; crie uma nova rota")
+
+    if rota.tipo != TipoViagem.SOB_DEMANDA and any(k in data for k in PARAMETROS_SOB_DEMANDA):
+        raise ValidationError("Parâmetros de buffer só se aplicam a rotas sob demanda")
+
     updated_fields: list[str] = []
 
     try:
@@ -466,6 +496,11 @@ def update_rota(user_id: str, rota_id: str, data: dict[str, Any]) -> Rota:
         if "veiculo_padrao_id" in data:
             rota.veiculo_padrao_id = data.get("veiculo_padrao_id")
             updated_fields.append("veiculo_padrao_id")
+
+        for campo in PARAMETROS_SOB_DEMANDA:
+            if campo in data:
+                setattr(rota, campo, data[campo])
+                updated_fields.append(campo)
 
         db.session.commit()
 

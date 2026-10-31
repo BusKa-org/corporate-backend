@@ -54,6 +54,35 @@
         ]
       }
     },
+    "/v1/alunos/me/foto": {
+      "put": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/AlunoResponse"
+            }
+          }
+        },
+        "summary": "Aluno envia a própria foto (multipart, campo `foto`)",
+        "operationId": "aluno_upload_foto",
+        "parameters": [
+          {
+            "name": "foto",
+            "in": "formData",
+            "type": "file",
+            "required": true,
+            "description": "JPEG, PNG ou WEBP"
+          }
+        ],
+        "consumes": [
+          "multipart/form-data"
+        ],
+        "tags": [
+          "alunos"
+        ]
+      }
+    },
     "/v1/alunos/{aluno_id}": {
       "parameters": [
         {
@@ -74,6 +103,33 @@
         },
         "summary": "(Gestor) Obtém detalhes completos de um aluno",
         "operationId": "get_aluno_detail",
+        "tags": [
+          "alunos"
+        ]
+      }
+    },
+    "/v1/alunos/{aluno_id}/foto": {
+      "parameters": [
+        {
+          "name": "aluno_id",
+          "in": "path",
+          "required": true,
+          "type": "string"
+        }
+      ],
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "Foto do aluno (o próprio aluno, gestor da organização ou motorista da viagem)",
+        "operationId": "get_aluno_foto",
+        "produces": [
+          "image/jpeg",
+          "image/png",
+          "image/webp"
+        ],
         "tags": [
           "alunos"
         ]
@@ -161,18 +217,6 @@
           "consentimento"
         ]
       },
-      "get": {
-        "responses": {
-          "200": {
-            "description": "Estado do consentimento do usuário logado"
-          }
-        },
-        "summary": "Versão vigente do termo e se o usuário logado ainda precisa aceitar",
-        "operationId": "get_consentimento",
-        "tags": [
-          "consentimento"
-        ]
-      },
       "post": {
         "responses": {
           "200": {
@@ -188,25 +232,21 @@
         "tags": [
           "consentimento"
         ]
-      }
-    },
-    "/v1/convites": {
+      },
       "get": {
         "responses": {
           "200": {
-            "description": "Convites da organização"
-          },
-          "403": {
-            "description": "Não é gestor"
+            "description": "Estado do consentimento do usuário logado"
           }
         },
-        "summary": "(Gestor) Lista os convites da organização",
-        "description": "Filtro opcional: ?estado=",
-        "operationId": "listar_convites",
+        "summary": "Versão vigente do termo e se o usuário logado ainda precisa aceitar",
+        "operationId": "get_consentimento",
         "tags": [
-          "convites"
+          "consentimento"
         ]
-      },
+      }
+    },
+    "/v1/convites": {
       "post": {
         "responses": {
           "200": {
@@ -225,6 +265,22 @@
         "tags": [
           "convites"
         ]
+      },
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Convites da organização"
+          },
+          "403": {
+            "description": "Não é gestor"
+          }
+        },
+        "summary": "(Gestor) Lista os convites da organização",
+        "description": "Filtro opcional: ?estado=",
+        "operationId": "listar_convites",
+        "tags": [
+          "convites"
+        ]
       }
     },
     "/v1/convites/aceite/{token}": {
@@ -236,21 +292,6 @@
           "type": "string"
         }
       ],
-      "get": {
-        "responses": {
-          "200": {
-            "description": "Dados do convite"
-          },
-          "404": {
-            "description": "Convite inválido ou expirado"
-          }
-        },
-        "summary": "(Público) Dados preenchidos pelo gestor e os campos que ainda faltam",
-        "operationId": "consultar_convite",
-        "tags": [
-          "convites"
-        ]
-      },
       "post": {
         "responses": {
           "201": {
@@ -267,8 +308,23 @@
           }
         },
         "summary": "(Público) Conclui o cadastro",
-        "description": "Corpo: nome, cpf, telefone, instituicao_id, senha",
+        "description": "Corpo: nome, cpf, telefone, instituicao_id, senha,\nnecessidades_acessibilidade, observacao_acessibilidade",
         "operationId": "concluir_convite",
+        "tags": [
+          "convites"
+        ]
+      },
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Dados do convite"
+          },
+          "404": {
+            "description": "Convite inválido ou expirado"
+          }
+        },
+        "summary": "(Público) Dados preenchidos pelo gestor e os campos que ainda faltam",
+        "operationId": "consultar_convite",
         "tags": [
           "convites"
         ]
@@ -716,20 +772,6 @@
       }
     },
     "/v1/instituicoes/": {
-      "get": {
-        "responses": {
-          "200": {
-            "description": "Success",
-            "schema": {
-              "$ref": "#/definitions/InstituicaoListResponse"
-            }
-          }
-        },
-        "operationId": "list_instituicoes",
-        "tags": [
-          "instituicoes"
-        ]
-      },
       "post": {
         "responses": {
           "201": {
@@ -751,6 +793,20 @@
             }
           }
         ],
+        "tags": [
+          "instituicoes"
+        ]
+      },
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/InstituicaoListResponse"
+            }
+          }
+        },
+        "operationId": "list_instituicoes",
         "tags": [
           "instituicoes"
         ]
@@ -822,128 +878,7 @@
         ]
       }
     },
-    "/v1/janelas/": {
-      "get": {
-        "responses": {
-          "200": {
-            "description": "Success",
-            "schema": {
-              "$ref": "#/definitions/JanelaListResponse"
-            }
-          }
-        },
-        "summary": "Lista as janelas de disponibilidade da organização (Gestor)",
-        "operationId": "list_janelas",
-        "tags": [
-          "janelas"
-        ]
-      },
-      "post": {
-        "responses": {
-          "201": {
-            "description": "Created",
-            "schema": {
-              "$ref": "#/definitions/JanelaResponse"
-            }
-          }
-        },
-        "summary": "Cria uma janela de disponibilidade (Gestor)",
-        "operationId": "create_janela",
-        "parameters": [
-          {
-            "name": "payload",
-            "required": true,
-            "in": "body",
-            "schema": {
-              "$ref": "#/definitions/JanelaRequest"
-            }
-          }
-        ],
-        "tags": [
-          "janelas"
-        ]
-      }
-    },
-    "/v1/janelas/vigente": {
-      "get": {
-        "responses": {
-          "200": {
-            "description": "Success",
-            "schema": {
-              "$ref": "#/definitions/JanelaVigenteResponse"
-            }
-          }
-        },
-        "summary": "Janela em vigor agora e horários de operação do dia",
-        "operationId": "get_janela_vigente",
-        "tags": [
-          "janelas"
-        ]
-      }
-    },
-    "/v1/janelas/{id}": {
-      "parameters": [
-        {
-          "name": "id",
-          "in": "path",
-          "required": true,
-          "type": "string"
-        }
-      ],
-      "delete": {
-        "responses": {
-          "200": {
-            "description": "Deleted",
-            "schema": {
-              "$ref": "#/definitions/JanelaMessageResponse"
-            }
-          }
-        },
-        "summary": "Remove uma janela de disponibilidade (Gestor)",
-        "operationId": "delete_janela",
-        "tags": [
-          "janelas"
-        ]
-      },
-      "patch": {
-        "responses": {
-          "200": {
-            "description": "Updated",
-            "schema": {
-              "$ref": "#/definitions/JanelaResponse"
-            }
-          }
-        },
-        "summary": "Atualiza uma janela de disponibilidade (Gestor)",
-        "operationId": "update_janela",
-        "parameters": [
-          {
-            "name": "payload",
-            "required": true,
-            "in": "body",
-            "schema": {
-              "$ref": "#/definitions/JanelaRequest"
-            }
-          }
-        ],
-        "tags": [
-          "janelas"
-        ]
-      }
-    },
     "/v1/notificacoes/": {
-      "get": {
-        "responses": {
-          "200": {
-            "description": "Success"
-          }
-        },
-        "summary": "Lista as notificações do usuário logado",
-        "operationId": "listar_minhas_notificacoes",
-        "tags": [
-          "notificacoes"
-        ]
-      },
       "post": {
         "responses": {
           "200": {
@@ -962,6 +897,18 @@
             }
           }
         ],
+        "tags": [
+          "notificacoes"
+        ]
+      },
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "Lista as notificações do usuário logado",
+        "operationId": "listar_minhas_notificacoes",
         "tags": [
           "notificacoes"
         ]
@@ -990,26 +937,6 @@
       }
     },
     "/v1/ocorrencias/": {
-      "get": {
-        "responses": {
-          "200": {
-            "description": "Success"
-          }
-        },
-        "summary": "(Gestor) Lista ocorrências da organização",
-        "operationId": "listar_ocorrencias",
-        "parameters": [
-          {
-            "in": "query",
-            "description": "Filter by status (ABERTA, RESOLVIDA)",
-            "name": "status",
-            "type": "string"
-          }
-        ],
-        "tags": [
-          "ocorrencias"
-        ]
-      },
       "post": {
         "responses": {
           "201": {
@@ -1029,6 +956,26 @@
             "schema": {
               "$ref": "#/definitions/OcorrenciaInput"
             }
+          }
+        ],
+        "tags": [
+          "ocorrencias"
+        ]
+      },
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "(Gestor) Lista ocorrências da organização",
+        "operationId": "listar_ocorrencias",
+        "parameters": [
+          {
+            "in": "query",
+            "description": "Filter by status (ABERTA, RESOLVIDA)",
+            "name": "status",
+            "type": "string"
           }
         ],
         "tags": [
@@ -1062,21 +1009,6 @@
       }
     },
     "/v1/onibus/": {
-      "get": {
-        "responses": {
-          "200": {
-            "description": "Success",
-            "schema": {
-              "$ref": "#/definitions/OnibusListResponse"
-            }
-          }
-        },
-        "summary": "Lista a frota da organização",
-        "operationId": "list_onibus",
-        "tags": [
-          "onibus"
-        ]
-      },
       "post": {
         "responses": {
           "201": {
@@ -1101,6 +1033,21 @@
         "tags": [
           "onibus"
         ]
+      },
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/OnibusListResponse"
+            }
+          }
+        },
+        "summary": "Lista a frota da organização",
+        "operationId": "list_onibus",
+        "tags": [
+          "onibus"
+        ]
       }
     },
     "/v1/onibus/{id}": {
@@ -1112,6 +1059,31 @@
           "type": "string"
         }
       ],
+      "patch": {
+        "responses": {
+          "200": {
+            "description": "Updated",
+            "schema": {
+              "$ref": "#/definitions/OnibusResponse"
+            }
+          }
+        },
+        "summary": "Atualiza dados de um ônibus",
+        "operationId": "update_onibus",
+        "parameters": [
+          {
+            "name": "payload",
+            "required": true,
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/OnibusUpdateRequest"
+            }
+          }
+        ],
+        "tags": [
+          "onibus"
+        ]
+      },
       "delete": {
         "responses": {
           "200": {
@@ -1138,48 +1110,87 @@
         "tags": [
           "onibus"
         ]
-      },
-      "patch": {
+      }
+    },
+    "/v1/onibus/{id}/janelas": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "type": "string"
+        }
+      ],
+      "post": {
         "responses": {
-          "200": {
-            "description": "Updated",
+          "201": {
+            "description": "Created",
             "schema": {
-              "$ref": "#/definitions/OnibusResponse"
+              "$ref": "#/definitions/JanelaResponse"
             }
           }
         },
-        "summary": "Atualiza dados de um ônibus",
-        "operationId": "update_onibus",
+        "summary": "Cria uma janela de disponibilidade para o ônibus",
+        "operationId": "create_janela",
         "parameters": [
           {
             "name": "payload",
             "required": true,
             "in": "body",
             "schema": {
-              "$ref": "#/definitions/OnibusUpdateRequest"
+              "$ref": "#/definitions/JanelaCreateRequest"
             }
           }
         ],
         "tags": [
           "onibus"
         ]
-      }
-    },
-    "/v1/pontos/": {
+      },
       "get": {
         "responses": {
           "200": {
             "description": "Success",
             "schema": {
-              "$ref": "#/definitions/PontoListResponse"
+              "$ref": "#/definitions/JanelaListResponse"
             }
           }
         },
-        "operationId": "list_pontos",
+        "summary": "Lista as janelas de disponibilidade do ônibus",
+        "operationId": "list_janelas",
         "tags": [
-          "pontos"
+          "onibus"
         ]
-      },
+      }
+    },
+    "/v1/onibus/{id}/janelas/{janela_id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "janela_id",
+          "in": "path",
+          "required": true,
+          "type": "string"
+        }
+      ],
+      "delete": {
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "Remove uma janela de disponibilidade",
+        "operationId": "delete_janela",
+        "tags": [
+          "onibus"
+        ]
+      }
+    },
+    "/v1/pontos/": {
       "post": {
         "responses": {
           "201": {
@@ -1203,6 +1214,20 @@
         "tags": [
           "pontos"
         ]
+      },
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/PontoListResponse"
+            }
+          }
+        },
+        "operationId": "list_pontos",
+        "tags": [
+          "pontos"
+        ]
       }
     },
     "/v1/pontos/{id}": {
@@ -1221,20 +1246,6 @@
           }
         },
         "operationId": "delete_ponto",
-        "tags": [
-          "pontos"
-        ]
-      },
-      "get": {
-        "responses": {
-          "200": {
-            "description": "Success",
-            "schema": {
-              "$ref": "#/definitions/PontoResponse"
-            }
-          }
-        },
-        "operationId": "get_ponto",
         "tags": [
           "pontos"
         ]
@@ -1262,23 +1273,23 @@
         "tags": [
           "pontos"
         ]
-      }
-    },
-    "/v1/rotas/": {
+      },
       "get": {
         "responses": {
           "200": {
             "description": "Success",
             "schema": {
-              "$ref": "#/definitions/RotaListResponse"
+              "$ref": "#/definitions/PontoResponse"
             }
           }
         },
-        "operationId": "list_rotas",
+        "operationId": "get_ponto",
         "tags": [
-          "rotas"
+          "pontos"
         ]
-      },
+      }
+    },
+    "/v1/rotas/": {
       "post": {
         "responses": {
           "201": {
@@ -1299,6 +1310,20 @@
             }
           }
         ],
+        "tags": [
+          "rotas"
+        ]
+      },
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/RotaListResponse"
+            }
+          }
+        },
+        "operationId": "list_rotas",
         "tags": [
           "rotas"
         ]
@@ -1340,20 +1365,6 @@
           "rotas"
         ]
       },
-      "get": {
-        "responses": {
-          "200": {
-            "description": "Success",
-            "schema": {
-              "$ref": "#/definitions/RotaDetailResponse"
-            }
-          }
-        },
-        "operationId": "get_rota",
-        "tags": [
-          "rotas"
-        ]
-      },
       "put": {
         "responses": {
           "200": {
@@ -1374,6 +1385,20 @@
         "tags": [
           "rotas"
         ]
+      },
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/RotaDetailResponse"
+            }
+          }
+        },
+        "operationId": "get_rota",
+        "tags": [
+          "rotas"
+        ]
       }
     },
     "/v1/rotas/{id}/horarios": {
@@ -1385,20 +1410,6 @@
           "type": "string"
         }
       ],
-      "get": {
-        "responses": {
-          "200": {
-            "description": "Success",
-            "schema": {
-              "$ref": "#/definitions/RotaHorarioListResponse"
-            }
-          }
-        },
-        "operationId": "list_rota_horarios",
-        "tags": [
-          "rotas"
-        ]
-      },
       "post": {
         "responses": {
           "201": {
@@ -1422,6 +1433,20 @@
         "tags": [
           "rotas"
         ]
+      },
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/RotaHorarioListResponse"
+            }
+          }
+        },
+        "operationId": "list_rota_horarios",
+        "tags": [
+          "rotas"
+        ]
       }
     },
     "/v1/rotas/{id}/pontos": {
@@ -1433,20 +1458,6 @@
           "type": "string"
         }
       ],
-      "get": {
-        "responses": {
-          "200": {
-            "description": "Success",
-            "schema": {
-              "$ref": "#/definitions/PontoFlatListResponse"
-            }
-          }
-        },
-        "operationId": "list_rota_pontos",
-        "tags": [
-          "rotas"
-        ]
-      },
       "post": {
         "responses": {
           "200": {
@@ -1464,6 +1475,20 @@
             }
           }
         ],
+        "tags": [
+          "rotas"
+        ]
+      },
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/PontoFlatListResponse"
+            }
+          }
+        },
+        "operationId": "list_rota_pontos",
         "tags": [
           "rotas"
         ]
@@ -1491,6 +1516,56 @@
           }
         },
         "operationId": "remove_rota_ponto",
+        "tags": [
+          "rotas"
+        ]
+      }
+    },
+    "/v1/rotas/{id}/solicitacoes": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "type": "string"
+        }
+      ],
+      "post": {
+        "responses": {
+          "201": {
+            "description": "Created",
+            "schema": {
+              "$ref": "#/definitions/SolicitacaoResponse"
+            }
+          }
+        },
+        "summary": "(Aluno) Solicita o veículo da rota sob demanda dentro da janela de disponibilidade",
+        "operationId": "solicitar_viagem",
+        "tags": [
+          "rotas"
+        ]
+      }
+    },
+    "/v1/rotas/{id}/viagem-ativa": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "type": "string"
+        }
+      ],
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/RodadaAtivaResponse"
+            }
+          }
+        },
+        "summary": "Rodada ativa da rota sob demanda (viagem null quando ociosa) e as janelas de hoje",
+        "operationId": "rodada_ativa",
         "tags": [
           "rotas"
         ]
@@ -1743,6 +1818,37 @@
       }
     },
     "/v1/users/me": {
+      "patch": {
+        "responses": {
+          "200": {
+            "description": "Updated",
+            "schema": {
+              "$ref": "#/definitions/UserResponse"
+            }
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "409": {
+            "description": "Conflict"
+          }
+        },
+        "summary": "Atualiza perfil do usuário logado (nome, telefone, receber_notificacoes, cnh)",
+        "operationId": "update_my_profile",
+        "parameters": [
+          {
+            "name": "payload",
+            "required": true,
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/UpdateProfileRequest"
+            }
+          }
+        ],
+        "tags": [
+          "users"
+        ]
+      },
       "delete": {
         "responses": {
           "200": {
@@ -1782,70 +1888,9 @@
         "tags": [
           "users"
         ]
-      },
-      "patch": {
-        "responses": {
-          "200": {
-            "description": "Updated",
-            "schema": {
-              "$ref": "#/definitions/UserResponse"
-            }
-          },
-          "400": {
-            "description": "Validation error"
-          },
-          "409": {
-            "description": "Conflict"
-          }
-        },
-        "summary": "Atualiza perfil do usuário logado (nome, telefone, receber_notificacoes, cnh)",
-        "operationId": "update_my_profile",
-        "parameters": [
-          {
-            "name": "payload",
-            "required": true,
-            "in": "body",
-            "schema": {
-              "$ref": "#/definitions/UpdateProfileRequest"
-            }
-          }
-        ],
-        "tags": [
-          "users"
-        ]
       }
     },
     "/v1/users/motoristas": {
-      "get": {
-        "responses": {
-          "200": {
-            "description": "Success",
-            "schema": {
-              "type": "array",
-              "items": {
-                "$ref": "#/definitions/UserListResponse"
-              }
-            }
-          },
-          "403": {
-            "description": "Forbidden - not a gestor"
-          }
-        },
-        "summary": "Lista motoristas do mesmo município do Gestor",
-        "operationId": "list_motoristas",
-        "parameters": [
-          {
-            "name": "X-Fields",
-            "in": "header",
-            "type": "string",
-            "format": "mask",
-            "description": "An optional fields mask"
-          }
-        ],
-        "tags": [
-          "users"
-        ]
-      },
       "post": {
         "responses": {
           "201": {
@@ -1879,6 +1924,36 @@
         "tags": [
           "users"
         ]
+      },
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/UserListResponse"
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden - not a gestor"
+          }
+        },
+        "summary": "Lista motoristas do mesmo município do Gestor",
+        "operationId": "list_motoristas",
+        "parameters": [
+          {
+            "name": "X-Fields",
+            "in": "header",
+            "type": "string",
+            "format": "mask",
+            "description": "An optional fields mask"
+          }
+        ],
+        "tags": [
+          "users"
+        ]
       }
     },
     "/v1/users/motoristas/{motorista_id}": {
@@ -1890,6 +1965,40 @@
           "type": "string"
         }
       ],
+      "patch": {
+        "responses": {
+          "200": {
+            "description": "Updated",
+            "schema": {
+              "$ref": "#/definitions/UserResponse"
+            }
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        },
+        "summary": "Gestor edita um motorista (dados e horário de trabalho)",
+        "operationId": "update_motorista",
+        "parameters": [
+          {
+            "name": "payload",
+            "required": true,
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/MotoristaUpdateRequest"
+            }
+          }
+        ],
+        "tags": [
+          "users"
+        ]
+      },
       "delete": {
         "responses": {
           "200": {
@@ -1945,6 +2054,30 @@
       }
     },
     "/v1/viagens/": {
+      "post": {
+        "responses": {
+          "201": {
+            "description": "Created",
+            "schema": {
+              "$ref": "#/definitions/ViagemResponse"
+            }
+          }
+        },
+        "operationId": "create_viagem",
+        "parameters": [
+          {
+            "name": "payload",
+            "required": true,
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/ViagemCreateRequest"
+            }
+          }
+        ],
+        "tags": [
+          "viagens"
+        ]
+      },
       "get": {
         "responses": {
           "200": {
@@ -1990,30 +2123,6 @@
         "tags": [
           "viagens"
         ]
-      },
-      "post": {
-        "responses": {
-          "201": {
-            "description": "Created",
-            "schema": {
-              "$ref": "#/definitions/ViagemResponse"
-            }
-          }
-        },
-        "operationId": "create_viagem",
-        "parameters": [
-          {
-            "name": "payload",
-            "required": true,
-            "in": "body",
-            "schema": {
-              "$ref": "#/definitions/ViagemCreateRequest"
-            }
-          }
-        ],
-        "tags": [
-          "viagens"
-        ]
       }
     },
     "/v1/viagens/aluno/agenda": {
@@ -2043,46 +2152,6 @@
           }
         },
         "operationId": "list_my_viagens",
-        "tags": [
-          "viagens"
-        ]
-      }
-    },
-    "/v1/viagens/rodada-ativa": {
-      "get": {
-        "responses": {
-          "200": {
-            "description": "Success",
-            "schema": {
-              "$ref": "#/definitions/RodadaAtivaResponse"
-            }
-          }
-        },
-        "summary": "(Aluno) Rodada em andamento e contagem regressiva do buffer",
-        "operationId": "get_rodada_ativa",
-        "tags": [
-          "viagens"
-        ]
-      }
-    },
-    "/v1/viagens/solicitar": {
-      "post": {
-        "responses": {
-          "201": {
-            "description": "Solicitação registrada",
-            "schema": {
-              "$ref": "#/definitions/RodadaResponse"
-            }
-          },
-          "400": {
-            "description": "Fora da janela de disponibilidade"
-          },
-          "403": {
-            "description": "Sem consentimento vigente"
-          }
-        },
-        "summary": "(Aluno) Solicita o veículo dentro da janela de disponibilidade",
-        "operationId": "solicitar_viagem",
         "tags": [
           "viagens"
         ]
@@ -2212,40 +2281,22 @@
           "type": "string"
         }
       ],
-      "delete": {
-        "responses": {
-          "200": {
-            "description": "Cancelada",
-            "schema": {
-              "$ref": "#/definitions/CancelamentoResponse"
-            }
-          },
-          "404": {
-            "description": "Sem solicitação"
-          }
-        },
-        "summary": "(Aluno) Cancela a solicitação da rodada",
-        "operationId": "cancelar_solicitacao",
-        "tags": [
-          "viagens"
-        ]
-      },
       "post": {
         "responses": {
-          "201": {
-            "description": "Embarque confirmado",
+          "200": {
+            "description": "Trajeto aceito",
             "schema": {
-              "$ref": "#/definitions/DeclaracaoResponse"
+              "$ref": "#/definitions/SolicitacaoResponse"
             }
           },
           "400": {
-            "description": "Rodada não aceita declarações"
+            "description": "Viagem fora do buffer ou pontos inválidos"
           },
           "409": {
-            "description": "Indisponibilidade momentânea"
+            "description": "Sem lugar no trecho"
           }
         },
-        "summary": "(Aluno) Declara origem e destino durante o buffer",
+        "summary": "(Aluno) Declara origem e destino durante o buffer (RF-13/RF-14)",
         "operationId": "declarar_trajeto",
         "parameters": [
           {
@@ -2274,16 +2325,13 @@
       "post": {
         "responses": {
           "200": {
-            "description": "Buffer aberto",
+            "description": "Success",
             "schema": {
-              "$ref": "#/definitions/RodadaResponse"
+              "$ref": "#/definitions/ViagemResponse"
             }
-          },
-          "400": {
-            "description": "Rodada não solicitada"
           }
         },
-        "summary": "(Motorista) Inicia o percurso e abre a janela de buffer",
+        "summary": "(Motorista) Inicia o percurso sob demanda e abre a janela de buffer (RF-11)",
         "operationId": "iniciar_percurso",
         "tags": [
           "viagens"
@@ -2299,18 +2347,6 @@
           "type": "string"
         }
       ],
-      "get": {
-        "responses": {
-          "200": {
-            "description": "Success"
-          }
-        },
-        "summary": "(Aluno/Motorista) Obtém a localização atual do ônibus (viagem em andamento)",
-        "operationId": "obter_localizacao_onibus",
-        "tags": [
-          "viagens"
-        ]
-      },
       "post": {
         "responses": {
           "200": {
@@ -2329,6 +2365,18 @@
             }
           }
         ],
+        "tags": [
+          "viagens"
+        ]
+      },
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "(Aluno/Motorista) Obtém a localização atual do ônibus (viagem em andamento)",
+        "operationId": "obter_localizacao_onibus",
         "tags": [
           "viagens"
         ]
@@ -2354,6 +2402,32 @@
         },
         "summary": "Lista todos os pontos de embarque disponíveis para esta viagem",
         "operationId": "list_pontos_embarque_viagem",
+        "tags": [
+          "viagens"
+        ]
+      }
+    },
+    "/v1/viagens/{id}/solicitacao": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "type": "string"
+        }
+      ],
+      "delete": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/SolicitacaoResponse"
+            }
+          }
+        },
+        "summary": "(Aluno) Cancela a própria solicitação",
+        "description": "Depois do início do percurso vira desistência.",
+        "operationId": "cancelar_solicitacao",
         "tags": [
           "viagens"
         ]
@@ -2477,10 +2551,6 @@
     {
       "name": "dashboard",
       "description": "Métricas e Relatórios para o Gestor"
-    },
-    {
-      "name": "janelas",
-      "description": "Janelas de Disponibilidade do Veículo"
     },
     {
       "name": "embarque",
@@ -2640,6 +2710,30 @@
         "cnh": {
           "type": "string",
           "description": "CNH (motorista)"
+        },
+        "horario_inicio": {
+          "type": "string",
+          "description": "Início do horário de trabalho (HH:MM)"
+        },
+        "horario_fim": {
+          "type": "string",
+          "description": "Fim do horário de trabalho (HH:MM)"
+        },
+        "dias_trabalho": {
+          "type": "array",
+          "description": "Dias de trabalho (SEG..DOM)",
+          "items": {
+            "type": "string"
+          }
+        },
+        "status_motorista": {
+          "type": "string",
+          "description": "Estado do motorista, calculado (ATIVO, EM_ROTA, EM_DESCANSO_OBRIGATORIO)"
+        },
+        "descanso_ate": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Fim do descanso obrigatório (só quando EM_DESCANSO_OBRIGATORIO)"
         }
       },
       "type": "object"
@@ -2661,6 +2755,38 @@
         "cnh": {
           "type": "string",
           "description": "CNH (apenas motoristas)"
+        }
+      },
+      "type": "object"
+    },
+    "MotoristaUpdateRequest": {
+      "properties": {
+        "nome": {
+          "type": "string",
+          "description": "Nome completo"
+        },
+        "telefone": {
+          "type": "string",
+          "description": "Telefone"
+        },
+        "cnh": {
+          "type": "string",
+          "description": "CNH"
+        },
+        "horario_inicio": {
+          "type": "string",
+          "description": "Início do horário de trabalho (HH:MM)"
+        },
+        "horario_fim": {
+          "type": "string",
+          "description": "Fim do horário de trabalho (HH:MM)"
+        },
+        "dias_trabalho": {
+          "type": "array",
+          "description": "Dias de trabalho (SEG..DOM)",
+          "items": {
+            "type": "string"
+          }
         }
       },
       "type": "object"
@@ -2701,6 +2827,21 @@
         "salario": {
           "type": "number",
           "description": "Salário"
+        },
+        "horario_inicio": {
+          "type": "string",
+          "description": "Início do horário de trabalho (HH:MM)"
+        },
+        "horario_fim": {
+          "type": "string",
+          "description": "Fim do horário de trabalho (HH:MM)"
+        },
+        "dias_trabalho": {
+          "type": "array",
+          "description": "Dias de trabalho (SEG..DOM)",
+          "items": {
+            "type": "string"
+          }
         }
       },
       "type": "object"
@@ -2796,21 +2937,6 @@
       },
       "type": "object"
     },
-    "OnibusListResponse": {
-      "properties": {
-        "items": {
-          "type": "array",
-          "items": {
-            "$ref": "#/definitions/OnibusResponse"
-          }
-        },
-        "total": {
-          "type": "integer",
-          "description": "Total de ônibus"
-        }
-      },
-      "type": "object"
-    },
     "OnibusResponse": {
       "properties": {
         "id": {
@@ -2836,6 +2962,21 @@
       },
       "type": "object"
     },
+    "OnibusListResponse": {
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/OnibusResponse"
+          }
+        },
+        "total": {
+          "type": "integer",
+          "description": "Total de ônibus"
+        }
+      },
+      "type": "object"
+    },
     "OnibusUpdateRequest": {
       "properties": {
         "placa": {
@@ -2853,6 +2994,96 @@
       },
       "type": "object"
     },
+    "JanelaCreateRequest": {
+      "required": [
+        "dia",
+        "hora_fim",
+        "hora_inicio",
+        "motorista_id"
+      ],
+      "properties": {
+        "motorista_id": {
+          "type": "string",
+          "description": "UUID do motorista"
+        },
+        "dia": {
+          "type": "string",
+          "description": "Dia da semana",
+          "example": "SEG",
+          "enum": [
+            "SEG",
+            "TER",
+            "QUA",
+            "QUI",
+            "SEX",
+            "SAB",
+            "DOM"
+          ]
+        },
+        "hora_inicio": {
+          "type": "string",
+          "description": "Início (HH:MM, hora local)"
+        },
+        "hora_fim": {
+          "type": "string",
+          "description": "Fim (HH:MM, exclusivo)"
+        }
+      },
+      "type": "object"
+    },
+    "JanelaResponse": {
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "UUID da janela"
+        },
+        "onibus_id": {
+          "type": "string",
+          "description": "UUID do ônibus"
+        },
+        "motorista_id": {
+          "type": "string",
+          "description": "UUID do motorista"
+        },
+        "motorista_nome": {
+          "type": "string",
+          "description": "Nome do motorista"
+        },
+        "dia": {
+          "type": "string",
+          "description": "Dia da semana"
+        },
+        "hora_inicio": {
+          "type": "string",
+          "description": "Início (HH:MM)"
+        },
+        "hora_fim": {
+          "type": "string",
+          "description": "Fim (HH:MM)"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Data de criação"
+        }
+      },
+      "type": "object"
+    },
+    "JanelaListResponse": {
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/JanelaResponse"
+          }
+        },
+        "total": {
+          "type": "integer",
+          "description": "Total de janelas"
+        }
+      },
+      "type": "object"
+    },
     "RotaCreateRequest": {
       "required": [
         "nome"
@@ -2861,6 +3092,23 @@
         "nome": {
           "type": "string",
           "description": "Nome da rota"
+        },
+        "tipo": {
+          "type": "string",
+          "description": "Padrão: FIXA",
+          "example": "FIXA",
+          "enum": [
+            "FIXA",
+            "SOB_DEMANDA"
+          ]
+        },
+        "buffer_minutos": {
+          "type": "integer",
+          "description": "SOB_DEMANDA: duração do buffer (1-30 min), padrão 5"
+        },
+        "prazo_inicio_minutos": {
+          "type": "integer",
+          "description": "SOB_DEMANDA: prazo do motorista para iniciar (1-120 min), padrão 10"
         },
         "motorista_padrao_id": {
           "type": "string",
@@ -2929,21 +3177,6 @@
       },
       "type": "object"
     },
-    "RotaListResponse": {
-      "properties": {
-        "items": {
-          "type": "array",
-          "items": {
-            "$ref": "#/definitions/RotaResponse"
-          }
-        },
-        "total": {
-          "type": "integer",
-          "description": "Total de rotas"
-        }
-      },
-      "type": "object"
-    },
     "RotaResponse": {
       "properties": {
         "id": {
@@ -2953,6 +3186,22 @@
         "nome": {
           "type": "string",
           "description": "Nome"
+        },
+        "tipo": {
+          "type": "string",
+          "example": "FIXA",
+          "enum": [
+            "FIXA",
+            "SOB_DEMANDA"
+          ]
+        },
+        "buffer_minutos": {
+          "type": "integer",
+          "description": "SOB_DEMANDA: duração do buffer (1-30 min)"
+        },
+        "prazo_inicio_minutos": {
+          "type": "integer",
+          "description": "SOB_DEMANDA: prazo do motorista para iniciar (1-120 min)"
         },
         "motorista_id": {
           "type": "string",
@@ -2973,6 +3222,21 @@
         "municipio_uf": {
           "type": "string",
           "description": "UF do município"
+        }
+      },
+      "type": "object"
+    },
+    "RotaListResponse": {
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RotaResponse"
+          }
+        },
+        "total": {
+          "type": "integer",
+          "description": "Total de rotas"
         }
       },
       "type": "object"
@@ -3029,21 +3293,6 @@
       },
       "type": "object"
     },
-    "RotaHorarioListResponse": {
-      "properties": {
-        "items": {
-          "type": "array",
-          "items": {
-            "$ref": "#/definitions/RotaHorarioResponse"
-          }
-        },
-        "total": {
-          "type": "integer",
-          "description": "Total de horários"
-        }
-      },
-      "type": "object"
-    },
     "RotaHorarioResponse": {
       "properties": {
         "id": {
@@ -3068,6 +3317,21 @@
       },
       "type": "object"
     },
+    "RotaHorarioListResponse": {
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RotaHorarioResponse"
+          }
+        },
+        "total": {
+          "type": "integer",
+          "description": "Total de horários"
+        }
+      },
+      "type": "object"
+    },
     "RotaUpdateRequest": {
       "required": [
         "nome"
@@ -3076,6 +3340,23 @@
         "nome": {
           "type": "string",
           "description": "Nome da rota"
+        },
+        "tipo": {
+          "type": "string",
+          "description": "Não pode ser alterado: só o tipo atual é aceito (outro valor dá 400)",
+          "example": "FIXA",
+          "enum": [
+            "FIXA",
+            "SOB_DEMANDA"
+          ]
+        },
+        "buffer_minutos": {
+          "type": "integer",
+          "description": "SOB_DEMANDA: duração do buffer (1-30 min)"
+        },
+        "prazo_inicio_minutos": {
+          "type": "integer",
+          "description": "SOB_DEMANDA: prazo do motorista para iniciar (1-120 min)"
         },
         "motorista_padrao_id": {
           "type": "string",
@@ -3112,6 +3393,22 @@
           "type": "string",
           "description": "Nome"
         },
+        "tipo": {
+          "type": "string",
+          "example": "FIXA",
+          "enum": [
+            "FIXA",
+            "SOB_DEMANDA"
+          ]
+        },
+        "buffer_minutos": {
+          "type": "integer",
+          "description": "SOB_DEMANDA: duração do buffer (1-30 min)"
+        },
+        "prazo_inicio_minutos": {
+          "type": "integer",
+          "description": "SOB_DEMANDA: prazo do motorista para iniciar (1-120 min)"
+        },
         "motorista_id": {
           "type": "string",
           "description": "UUID do motorista padrão"
@@ -3147,6 +3444,218 @@
       },
       "type": "object"
     },
+    "SolicitacaoResponse": {
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "UUID da solicitação"
+        },
+        "viagem_id": {
+          "type": "string",
+          "description": "UUID da viagem"
+        },
+        "status": {
+          "type": "string",
+          "description": "Status da solicitação",
+          "example": "ATIVA",
+          "enum": [
+            "ATIVA",
+            "CANCELADA",
+            "DESISTENCIA",
+            "NEGADA"
+          ]
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Momento da solicitação"
+        },
+        "ponto_embarque_id": {
+          "type": "string",
+          "description": "Origem declarada (RF-13)"
+        },
+        "ponto_destino_id": {
+          "type": "string",
+          "description": "Destino declarado (RF-13)"
+        },
+        "declarada_em": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Momento da declaração do trajeto"
+        },
+        "viagem": {
+          "$ref": "#/definitions/SolicitacaoViagemResumo"
+        }
+      },
+      "type": "object"
+    },
+    "SolicitacaoViagemResumo": {
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "UUID da viagem"
+        },
+        "status": {
+          "type": "string",
+          "description": "Status da viagem",
+          "example": "SOLICITADA",
+          "enum": [
+            "SOLICITADA",
+            "BUFFER_ABERTO",
+            "EM_ANDAMENTO",
+            "FINALIZADA",
+            "CANCELADA"
+          ]
+        },
+        "rota_id": {
+          "type": "string",
+          "description": "UUID da rota"
+        },
+        "motorista_id": {
+          "type": "string",
+          "description": "UUID do motorista da janela"
+        },
+        "buffer_fim": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Fim da janela de buffer, se aberta"
+        }
+      },
+      "type": "object"
+    },
+    "RodadaAtivaResponse": {
+      "properties": {
+        "viagem": {
+          "description": "null quando o veículo está ocioso",
+          "allOf": [
+            {
+              "$ref": "#/definitions/RodadaViagem"
+            }
+          ]
+        },
+        "minha_solicitacao": {
+          "description": "Só para aluno com solicitação ativa",
+          "allOf": [
+            {
+              "$ref": "#/definitions/MinhaSolicitacao"
+            }
+          ]
+        },
+        "janelas_hoje": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/JanelaHoje"
+          }
+        }
+      },
+      "type": "object"
+    },
+    "RodadaViagem": {
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "UUID da viagem"
+        },
+        "status": {
+          "type": "string",
+          "example": "SOLICITADA",
+          "enum": [
+            "SOLICITADA",
+            "BUFFER_ABERTO",
+            "EM_ANDAMENTO"
+          ]
+        },
+        "rota_id": {
+          "type": "string",
+          "description": "UUID da rota"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Momento da primeira solicitação"
+        },
+        "inicio_real": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Início do percurso em rota"
+        },
+        "buffer_fim": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Fim da janela de buffer, se aberta"
+        },
+        "segundos_restantes_buffer": {
+          "type": "integer",
+          "description": "Segundos até o fim do buffer pelo relógio do servidor; null fora do buffer"
+        },
+        "motorista": {
+          "$ref": "#/definitions/PessoaResumo"
+        },
+        "veiculo": {
+          "$ref": "#/definitions/VeiculoResumo"
+        }
+      },
+      "type": "object"
+    },
+    "PessoaResumo": {
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "UUID"
+        },
+        "nome": {
+          "type": "string",
+          "description": "Nome"
+        }
+      },
+      "type": "object"
+    },
+    "VeiculoResumo": {
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "UUID do veículo"
+        },
+        "placa": {
+          "type": "string",
+          "description": "Placa"
+        },
+        "modelo": {
+          "type": "string",
+          "description": "Modelo"
+        }
+      },
+      "type": "object"
+    },
+    "MinhaSolicitacao": {
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "UUID da solicitação ativa do aluno"
+        },
+        "status": {
+          "type": "string",
+          "example": "ATIVA",
+          "enum": [
+            "ATIVA"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "JanelaHoje": {
+      "properties": {
+        "hora_inicio": {
+          "type": "string",
+          "example": "08:00"
+        },
+        "hora_fim": {
+          "type": "string",
+          "example": "12:00"
+        }
+      },
+      "type": "object"
+    },
     "PontoCreateRequest": {
       "required": [
         "latitude",
@@ -3164,21 +3673,6 @@
         "longitude": {
           "type": "number",
           "description": "Longitude"
-        }
-      },
-      "type": "object"
-    },
-    "PontoListResponse": {
-      "properties": {
-        "items": {
-          "type": "array",
-          "items": {
-            "$ref": "#/definitions/PontoResponse"
-          }
-        },
-        "total": {
-          "type": "integer",
-          "description": "Total de pontos"
         }
       },
       "type": "object"
@@ -3208,6 +3702,21 @@
         "instituicao": {
           "type": "string",
           "description": "Instituição vinculada"
+        }
+      },
+      "type": "object"
+    },
+    "PontoListResponse": {
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/PontoResponse"
+          }
+        },
+        "total": {
+          "type": "integer",
+          "description": "Total de pontos"
         }
       },
       "type": "object"
@@ -3262,48 +3771,6 @@
       },
       "type": "object"
     },
-    "RodadaResponse": {
-      "properties": {
-        "viagem_id": {
-          "type": "string",
-          "description": "UUID da rodada"
-        },
-        "status": {
-          "type": "string",
-          "description": "OCIOSA, SOLICITADA, BUFFER_ABERTO, EM_ROTA"
-        },
-        "buffer_expira_em": {
-          "type": "string",
-          "format": "date-time",
-          "description": "Fim da contagem regressiva"
-        },
-        "segundos_restantes": {
-          "type": "integer",
-          "description": "Tempo restante do buffer"
-        },
-        "minha_situacao": {
-          "type": "string",
-          "description": "INTERESSADO, CONFIRMADO, NEGADO"
-        },
-        "motorista_notificado": {
-          "type": "boolean",
-          "description": "Esta solicitação chamou o motorista"
-        }
-      },
-      "type": "object"
-    },
-    "RodadaAtivaResponse": {
-      "properties": {
-        "em_operacao": {
-          "type": "boolean",
-          "description": "Dentro da janela de disponibilidade"
-        },
-        "rodada": {
-          "$ref": "#/definitions/RodadaResponse"
-        }
-      },
-      "type": "object"
-    },
     "DeclaracaoTrajetoRequest": {
       "required": [
         "ponto_destino_id",
@@ -3317,49 +3784,6 @@
         "ponto_destino_id": {
           "type": "string",
           "description": "UUID do ponto de desembarque"
-        }
-      },
-      "type": "object"
-    },
-    "CancelamentoResponse": {
-      "properties": {
-        "message": {
-          "type": "string",
-          "description": "Resultado do cancelamento"
-        },
-        "vaga_liberada": {
-          "type": "boolean",
-          "description": "A vaga voltou para a rodada"
-        }
-      },
-      "type": "object"
-    },
-    "DeclaracaoResponse": {
-      "properties": {
-        "viagem_id": {
-          "type": "string",
-          "description": "UUID da rodada"
-        },
-        "aluno_id": {
-          "type": "string",
-          "description": "UUID do aluno"
-        },
-        "status": {
-          "type": "string",
-          "description": "CONFIRMADO ou NEGADO"
-        },
-        "ponto_embarque_id": {
-          "type": "string",
-          "description": "UUID do ponto de embarque"
-        },
-        "ponto_destino_id": {
-          "type": "string",
-          "description": "UUID do ponto de desembarque"
-        },
-        "declarado_em": {
-          "type": "string",
-          "format": "date-time",
-          "description": "Momento da declaração"
         }
       },
       "type": "object"
@@ -3395,11 +3819,11 @@
         },
         "horario_saida": {
           "type": "string",
-          "description": "Horário"
+          "description": "Horário; null em viagem sob demanda"
         },
         "sentido": {
           "type": "string",
-          "description": "Sentido"
+          "description": "Sentido; null em viagem sob demanda"
         },
         "rota_id": {
           "type": "string",
@@ -3408,6 +3832,10 @@
         "rota_nome": {
           "type": "string",
           "description": "Nome da rota"
+        },
+        "status_viagem": {
+          "type": "string",
+          "description": "Status da viagem"
         },
         "status_confirmacao": {
           "type": "boolean",
@@ -3467,6 +3895,19 @@
           "type": "string",
           "description": "Nome do aluno"
         },
+        "foto_url": {
+          "type": "string",
+          "description": "Caminho da foto (GET autenticado)"
+        },
+        "necessidades_acessibilidade": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "observacao_acessibilidade": {
+          "type": "string"
+        },
         "confirmacao": {
           "type": "boolean",
           "description": "Confirmado"
@@ -3508,6 +3949,62 @@
       },
       "type": "object"
     },
+    "ViagemResponse": {
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "UUID"
+        },
+        "data": {
+          "type": "string",
+          "description": "Data"
+        },
+        "horario_inicio": {
+          "type": "string",
+          "description": "Horário de saída (HH:MM:SS); null em viagem sob demanda"
+        },
+        "tipo": {
+          "type": "string",
+          "description": "Sentido (IDA/VOLTA); null em viagem sob demanda"
+        },
+        "status": {
+          "type": "string",
+          "description": "AGENDADA, SOLICITADA, BUFFER_ABERTO, EM_ANDAMENTO, FINALIZADA, CANCELADA"
+        },
+        "rota_id": {
+          "type": "string",
+          "description": "UUID da rota"
+        },
+        "rota_nome": {
+          "type": "string",
+          "description": "Nome da rota"
+        },
+        "inicio_real": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Início real da viagem"
+        },
+        "horario_fim": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Fim real da viagem"
+        },
+        "buffer_fim": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Fim do buffer de embarque (sob demanda, BUFFER_ABERTO)"
+        },
+        "motorista_nome": {
+          "type": "string",
+          "description": "Nome do motorista"
+        },
+        "veiculo_placa": {
+          "type": "string",
+          "description": "Placa do veículo"
+        }
+      },
+      "type": "object"
+    },
     "ViagemListResponse": {
       "properties": {
         "items": {
@@ -3519,47 +4016,6 @@
         "total": {
           "type": "integer",
           "description": "Total de viagens"
-        }
-      },
-      "type": "object"
-    },
-    "ViagemResponse": {
-      "properties": {
-        "id": {
-          "type": "string",
-          "description": "UUID"
-        },
-        "data": {
-          "type": "string",
-          "description": "Data"
-        },
-        "horario_saida": {
-          "type": "string",
-          "description": "Horário"
-        },
-        "sentido": {
-          "type": "string",
-          "description": "Sentido"
-        },
-        "status": {
-          "type": "string",
-          "description": "AGENDADA, EM_ANDAMENTO, FINALIZADA"
-        },
-        "rota_id": {
-          "type": "string",
-          "description": "UUID da rota"
-        },
-        "rota_nome": {
-          "type": "string",
-          "description": "Nome da rota"
-        },
-        "motorista_id": {
-          "type": "string",
-          "description": "UUID do motorista"
-        },
-        "veiculo_id": {
-          "type": "string",
-          "description": "UUID do veículo"
         }
       },
       "type": "object"
@@ -3715,6 +4171,17 @@
         },
         "endereco_casa": {
           "$ref": "#/definitions/EnderecoInput"
+        },
+        "necessidades_acessibilidade": {
+          "type": "array",
+          "description": "CADEIRA_DE_RODAS, MOBILIDADE_REDUZIDA, DEFICIENCIA_VISUAL, DEFICIENCIA_AUDITIVA, DEFICIENCIA_INTELECTUAL, OUTRA",
+          "items": {
+            "type": "string"
+          }
+        },
+        "observacao_acessibilidade": {
+          "type": "string",
+          "description": "Observação livre sobre acessibilidade"
         }
       },
       "type": "object"
@@ -3827,6 +4294,19 @@
           "type": "string",
           "format": "date-time",
           "description": "Data/hora do consentimento do responsável"
+        },
+        "foto_url": {
+          "type": "string",
+          "description": "Caminho da foto (GET autenticado)"
+        },
+        "necessidades_acessibilidade": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "observacao_acessibilidade": {
+          "type": "string"
         }
       },
       "type": "object"
@@ -4122,141 +4602,6 @@
         "timestamp": {
           "type": "string",
           "description": "Horário exato do registro (ISO)"
-        }
-      },
-      "type": "object"
-    },
-    "JanelaRequest": {
-      "required": [
-        "dia",
-        "hora_fim",
-        "hora_inicio",
-        "motorista_id",
-        "rota_id"
-      ],
-      "properties": {
-        "rota_id": {
-          "type": "string",
-          "description": "UUID do circuito"
-        },
-        "motorista_id": {
-          "type": "string",
-          "description": "UUID do motorista"
-        },
-        "veiculo_id": {
-          "type": "string",
-          "description": "UUID do veículo (opcional)"
-        },
-        "dia": {
-          "type": "string",
-          "description": "SEG, TER, QUA, QUI, SEX, SAB, DOM"
-        },
-        "hora_inicio": {
-          "type": "string",
-          "description": "HH:MM"
-        },
-        "hora_fim": {
-          "type": "string",
-          "description": "HH:MM"
-        },
-        "buffer_minutos": {
-          "type": "integer",
-          "description": "N minutos do buffer (RF-11)"
-        },
-        "ativo": {
-          "type": "boolean",
-          "description": "Janela ativa"
-        }
-      },
-      "type": "object"
-    },
-    "JanelaListResponse": {
-      "properties": {
-        "items": {
-          "type": "array",
-          "items": {
-            "$ref": "#/definitions/JanelaResponse"
-          }
-        },
-        "total": {
-          "type": "integer",
-          "description": "Total de janelas"
-        }
-      },
-      "type": "object"
-    },
-    "JanelaResponse": {
-      "properties": {
-        "id": {
-          "type": "string",
-          "description": "UUID da janela"
-        },
-        "rota_id": {
-          "type": "string",
-          "description": "UUID do circuito"
-        },
-        "rota_nome": {
-          "type": "string",
-          "description": "Nome do circuito"
-        },
-        "motorista_id": {
-          "type": "string",
-          "description": "UUID do motorista"
-        },
-        "motorista_nome": {
-          "type": "string",
-          "description": "Nome do motorista"
-        },
-        "veiculo_id": {
-          "type": "string",
-          "description": "UUID do veículo"
-        },
-        "dia": {
-          "type": "string",
-          "description": "Dia da semana"
-        },
-        "hora_inicio": {
-          "type": "string",
-          "description": "Início da operação"
-        },
-        "hora_fim": {
-          "type": "string",
-          "description": "Fim da operação"
-        },
-        "buffer_minutos": {
-          "type": "integer",
-          "description": "N minutos do buffer"
-        },
-        "ativo": {
-          "type": "boolean",
-          "description": "Janela ativa"
-        }
-      },
-      "type": "object"
-    },
-    "JanelaVigenteResponse": {
-      "properties": {
-        "em_operacao": {
-          "type": "boolean",
-          "description": "Há janela em vigor agora"
-        },
-        "janela": {
-          "$ref": "#/definitions/JanelaResponse"
-        },
-        "horarios_hoje": {
-          "type": "array",
-          "items": {
-            "$ref": "#/definitions/JanelaResponse"
-          }
-        }
-      },
-      "type": "object"
-    },
-    "JanelaMessageResponse": {
-      "properties": {
-        "message": {
-          "type": "string",
-          "description": "Mensagem de confirmação"
         }
       },
       "type": "object"

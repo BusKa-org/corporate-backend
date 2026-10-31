@@ -109,7 +109,7 @@ def test_serie_filtra_o_periodo_nos_dois_limites(app, _db, motorista, onibus, ge
 
 
 def test_consumo_por_viagem_agrega_somente_amostras_com_viagem(
-    app, _db, motorista, onibus, gestor, viagem_ociosa
+    app, _db, motorista, onibus, gestor, viagem_buffer_aberto
 ):
     ts = datetime(2026, 5, 1, 12, 0, tzinfo=UTC)
     motorista.client.post(
@@ -119,14 +119,14 @@ def test_consumo_por_viagem_agrega_somente_amostras_com_viagem(
             "amostras": [
                 _amostra(
                     ts,
-                    viagem_id=str(viagem_ociosa.id),
+                    viagem_id=str(viagem_buffer_aberto.id),
                     nivel_bateria=90.0,
                     consumo_kwh=2.0,
                     odometro_km=1000.0,
                 ),
                 _amostra(
                     ts + timedelta(minutes=10),
-                    viagem_id=str(viagem_ociosa.id),
+                    viagem_id=str(viagem_buffer_aberto.id),
                     nivel_bateria=70.0,
                     consumo_kwh=3.0,
                     odometro_km=1012.0,
@@ -142,7 +142,7 @@ def test_consumo_por_viagem_agrega_somente_amostras_com_viagem(
     body = resp.get_json()
     assert body["total"] == 1
     item = body["items"][0]
-    assert item["viagem_id"] == str(viagem_ociosa.id)
+    assert item["viagem_id"] == str(viagem_buffer_aberto.id)
     assert item["amostras"] == 2
     assert item["consumo_kwh"] == 5.0
     assert item["km"] == 12.0

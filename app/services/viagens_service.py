@@ -6,7 +6,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from flask import current_app
-from sqlalchemy import exists, select
+from sqlalchemy import exists, func, select
 
 from app.core.exceptions import (
     AppError,
@@ -24,28 +24,58 @@ from app.models.enum import (
     StatusMotorista,
     StatusSolicitacao,
     StatusViagem,
+    TipoViagem,
     UserRole,
 )
 from app.models.geo import Ponto
-from app.models.janela import JanelaDisponibilidade
 from app.models.rota import DiasOperacao, HorarioRota, Rota, RotaAluno, RotaPonto
 from app.models.user import Aluno, Motorista, User
-from app.models.viagem import AlunosConfirmados, TelemetriaViagem, Viagem, ViagemPonto
-from app.services import capacidade_service, consentimento_service, janela_service
+from app.models.viagem import (
+    AlunosConfirmados,
+    SolicitacaoViagem,
+    TelemetriaViagem,
+    Viagem,
+    ViagemPonto,
+)
 from app.services.notificacao_service import NotificacaoService
 from app.tasks.viagem_tasks import realizar_auto_checkin
-from app.utils import audit_logger
+from app.utils import audit_logger, tempo
 from app.utils.geo_utils import calcular_distancia_metros
 
 logger = logging.getLogger(__name__)
 
-# Estados em que uma rodada sob demanda ainda aceita novos interessados.
-RODADA_ABERTA = (StatusViagem.OCIOSA, StatusViagem.SOLICITADA, StatusViagem.BUFFER_ABERTO)
-
 
 def _get_dia_semana_enum(data_obj: date) -> DiaDaSemana:
     """Convert weekday (0=Monday) to DiaDaSemana enum."""
-    return janela_service.dia_da_semana(data_obj)
+    dias_map = {
+        0: DiaDaSemana.SEG,
+        1: DiaDaSemana.TER,
+        2: DiaDaSemana.QUA,
+        3: DiaDaSemana.QUI,
+        4: DiaDaSemana.SEX,
+        5: DiaDaSemana.SAB,
+        6: DiaDaSemana.DOM,
+    }
+    dia = dias_map.get(data_obj.weekday())
+    if not dia:
+        raise ValidationError("Data inválida para cálculo do dia da semana")
+    return dia
+
+
+def juntar_rota(query):
+    """Join Rota for any trip: on-demand trips have no horario_rota, only rota_id."""
+    # rota_id is nullable and older fixed trips may only have horario_rota_id
+    return query.outerjoin(HorarioRota, Viagem.horario_rota_id == HorarioRota.id).join(
+        Rota, Rota.id == func.coalesce(Viagem.rota_id, HorarioRota.rota_id)
+    )
+
+
+def _rota_id_da_viagem(viagem: Viagem):
+    if viagem.rota_id:
+        return viagem.rota_id
+    if viagem.horario_rota:
+        return viagem.horario_rota.rota_id
+    return None
 
 
 def _popular_dados_da_viagem(viagem_obj: Viagem, rota_obj: Rota) -> None:
@@ -53,7 +83,7 @@ def _popular_dados_da_viagem(viagem_obj: Viagem, rota_obj: Rota) -> None:
 
     Os passageiros não são mais copiados de uma inscrição permanente: cada
     viagem tem sua própria lista, criada quando o aluno confirma presença
-    (fluxo programado) ou declara o trajeto da rodada (RF-13).
+    (viagem fixa) ou quando o buffer da sob demanda fecha (RF-15).
     """
     pontos_rota = (
         db.session.query(RotaPonto).filter_by(rota_id=rota_obj.id).order_by(RotaPonto.ordem).all()
@@ -77,9 +107,7 @@ def get_proximas_viagens_aluno(user_id: str) -> list[Viagem]:
     hoje = datetime.now(UTC).date()
 
     query = (
-        db.session.query(Viagem)
-        .join(HorarioRota, Viagem.horario_rota_id == HorarioRota.id)
-        .join(Rota, HorarioRota.rota_id == Rota.id)
+        juntar_rota(db.session.query(Viagem))
         .join(RotaAluno, Rota.id == RotaAluno.rota_id)
         .outerjoin(
             AlunosConfirmados,
@@ -96,7 +124,7 @@ def get_proximas_viagens_aluno(user_id: str) -> list[Viagem]:
             Viagem.status.in_([StatusViagem.AGENDADA, StatusViagem.EM_ANDAMENTO]),
             Viagem.data >= hoje,
         )
-        .order_by(Viagem.data.asc(), HorarioRota.horario_saida.asc())
+        .order_by(Viagem.data.asc(), HorarioRota.horario_saida.asc().nulls_last())
     )
 
     viagens = query.all()
@@ -126,22 +154,19 @@ def confirmar_presenca_aluno(
         if not viagem:
             raise NotFoundError("Viagem não encontrada")
 
-        if viagem.rota_id:
-            # Rodada sob demanda: a participação não vem de inscrição na rota,
-            # vem da declaração de origem e destino da rodada (RF-13), que
-            # passa pela validação de capacidade. Confirmar presença aqui
-            # furaria essa validação.
+        if viagem.rota and viagem.rota.tipo == TipoViagem.SOB_DEMANDA:
             raise ValidationError(
-                "Nesta rodada, declare origem e destino em /v1/viagens/<id>/declaracao"
+                "Viagens sob demanda não usam confirmação de presença. "
+                "Solicite a viagem pela rota (POST /v1/rotas/<id>/solicitacoes)."
             )
+
+        horario = viagem.horario_rota
+        if not horario:
+            raise NotFoundError("Horário da viagem não encontrado")
 
         registro = db.session.get(AlunosConfirmados, (viagem.id, aluno.usuario_id))
 
         if not registro:
-            horario = db.session.get(HorarioRota, viagem.horario_rota_id)
-            if not horario:
-                raise NotFoundError("Horário da viagem não encontrado")
-
             inscricao = db.session.get(RotaAluno, (horario.rota_id, aluno.usuario_id))
             if not inscricao:
                 raise ForbiddenError("Você não está inscrito na rota desta viagem")
@@ -156,10 +181,6 @@ def confirmar_presenca_aluno(
             db.session.add(registro)
 
         if confirmacao:
-            horario = db.session.get(HorarioRota, viagem.horario_rota_id)
-            if not horario:
-                raise NotFoundError("Horário da viagem não encontrado")
-
             db.session.execute(select(User.id).where(User.id == aluno.usuario_id).with_for_update())
             inscrito_em_outra = (
                 db.session.query(AlunosConfirmados)
@@ -168,7 +189,7 @@ def confirmar_presenca_aluno(
                     AlunosConfirmados.aluno_id == aluno.usuario_id,
                     AlunosConfirmados.viagem_id != viagem.id,
                     AlunosConfirmados.confirmacao.is_(True),
-                    Viagem.status.in_([StatusViagem.EM_ANDAMENTO, StatusViagem.EM_ROTA]),
+                    Viagem.status == StatusViagem.EM_ANDAMENTO,
                 )
                 .first()
             )
@@ -217,13 +238,11 @@ def listar_pontos_embarque(user_id: str, viagem_id: str) -> list[dict]:
     if not viagem:
         raise NotFoundError("Viagem não encontrada")
 
-    horario = db.session.get(HorarioRota, viagem.horario_rota_id)
-    if not horario:
-        raise AppError("Horário não encontrado", 500)
+    rota_id = _rota_id_da_viagem(viagem)
+    if not rota_id:
+        raise NotFoundError("Rota da viagem não encontrada")
 
-    inscricao = (
-        db.session.query(RotaAluno).filter_by(rota_id=horario.rota_id, aluno_id=aluno.id).first()
-    )
+    inscricao = db.session.query(RotaAluno).filter_by(rota_id=rota_id, aluno_id=aluno.id).first()
 
     if not inscricao:
         raise ForbiddenError("Você não está inscrito na rota desta viagem")
@@ -231,7 +250,7 @@ def listar_pontos_embarque(user_id: str, viagem_id: str) -> list[dict]:
     pontos_query = (
         db.session.query(RotaPonto, Ponto)
         .join(Ponto, RotaPonto.ponto_id == Ponto.id)
-        .filter(RotaPonto.rota_id == horario.rota_id)
+        .filter(RotaPonto.rota_id == rota_id)
         .order_by(RotaPonto.ordem)
         .all()
     )
@@ -275,6 +294,12 @@ def gerar_viagem(user_id: str, data_input: dict) -> Viagem:
     if rota.organizacao_id != user.organizacao_id:
         raise ForbiddenError("Acesso negado")
 
+    if rota.tipo == TipoViagem.SOB_DEMANDA:
+        raise ValidationError(
+            "Viagens de rotas sob demanda são criadas pelas solicitações dos alunos, "
+            "não manualmente."
+        )
+
     dia_semana = _get_dia_semana_enum(data_viagem)
 
     horario_selecionado = (
@@ -300,6 +325,7 @@ def gerar_viagem(user_id: str, data_input: dict) -> Viagem:
         nova_viagem = Viagem(
             data=data_viagem,
             horario_rota_id=horario_selecionado.id,
+            rota_id=rota.id,
             motorista_id=motorista_id,
             veiculo_id=rota.veiculo_padrao_id,
             status=StatusViagem.AGENDADA,
@@ -346,7 +372,7 @@ def calcular_fim_descanso(
 
 def _agora() -> datetime:
     """Current time; a function so tests can patch it."""
-    return datetime.now(UTC)
+    return tempo.agora_utc()
 
 
 def _periodos_de_direcao(
@@ -586,12 +612,7 @@ def list_viagens_gestor(user_id: str, filters: dict[str, Any]) -> list[Viagem]:
     if not user or user.role != UserRole.GESTOR:
         raise ForbiddenError("Apenas gestores podem acessar o histórico completo")
 
-    query = (
-        db.session.query(Viagem)
-        .join(HorarioRota)
-        .join(Rota)
-        .filter(Rota.organizacao_id == user.organizacao_id)
-    )
+    query = juntar_rota(db.session.query(Viagem)).filter(Rota.organizacao_id == user.organizacao_id)
 
     if filters.get("data_inicio"):
         query = query.filter(Viagem.data >= filters.get("data_inicio"))
@@ -621,14 +642,17 @@ def cancelar_viagem(user_id: str, viagem_id: str) -> dict[str, Any]:
     if not viagem:
         raise NotFoundError("Viagem não encontrada")
 
+    rota = db.session.get(Rota, _rota_id_da_viagem(viagem))
+    if not rota or rota.organizacao_id != user.organizacao_id:
+        raise ForbiddenError("Acesso negado")
+
     if viagem.status in (StatusViagem.FINALIZADA, StatusViagem.CANCELADA):
         raise ValidationError(f"Não é possível cancelar uma viagem com status {viagem.status.name}")
 
     try:
-        estava_em_andamento = viagem.status == StatusViagem.EM_ANDAMENTO
         viagem.status = StatusViagem.CANCELADA
-        if estava_em_andamento:
-            # A direção até o cancelamento conta para o descanso
+        # A started trip counts toward the driver's driving time, so it needs an end too.
+        if viagem.inicio_real and not viagem.fim_real:
             viagem.fim_real = _agora()
             db.session.flush()
             if viagem.motorista is not None:
@@ -644,13 +668,28 @@ def cancelar_viagem(user_id: str, viagem_id: str) -> dict[str, Any]:
                 mensagem=f"Atenção! A viagem da rota agendada para o dia {data_formatada} foi cancelada pela organização.",
             )
 
+        solicitacoes = SolicitacaoViagem.query.filter_by(
+            viagem_id=viagem.id, status=StatusSolicitacao.ATIVA
+        ).all()
+        for solicitacao in solicitacoes:
+            solicitacao.status = StatusSolicitacao.CANCELADA
+            solicitacao.cancelada_em = tempo.agora_utc()
+            NotificacaoService._criar_notificacao_interna(
+                usuario_id=solicitacao.aluno_id,
+                titulo="Viagem Cancelada",
+                mensagem="Atenção! A viagem sob demanda que você solicitou foi cancelada pela organização. Faça uma nova solicitação se ainda precisar.",
+            )
+
         db.session.commit()
 
         audit_logger.log_user_action(
             action="cancelar_viagem", user_id=user_id, resource_type="viagem", resource_id=viagem_id
         )
 
-        return {"message": "Viagem cancelada com sucesso", "alunos_notificados": len(confirmados)}
+        return {
+            "message": "Viagem cancelada com sucesso",
+            "alunos_notificados": len(confirmados) + len(solicitacoes),
+        }
     except Exception as e:
         db.session.rollback()
         logger.error(f"Erro ao cancelar viagem: {e}")
@@ -820,247 +859,6 @@ def atualizar_localizacao_aluno(user_id: str, viagem_id: str, data: dict) -> dic
     }
 
 
-# ==========================================
-# Rodada sob demanda — RF-10 a RF-13 e RF-19
-# ==========================================
-
-
-def _aluno_apto(user_id: str) -> Aluno:
-    """RF-10: aluno autenticado e com consentimento vigente (RF-09)."""
-    aluno = db.session.get(Aluno, user_id)
-    if not aluno:
-        raise ForbiddenError("Apenas alunos podem solicitar o veículo")
-
-    if consentimento_service.consentimento_pendente(user_id):
-        raise ForbiddenError("Aceite o termo de uso antes de solicitar o veículo")
-
-    return aluno
-
-
-def _rodada_da_janela(janela: JanelaDisponibilidade, dia: date) -> Viagem:
-    """A rodada corrente da janela, criada ociosa se ainda não existir."""
-    viagem = (
-        db.session.query(Viagem)
-        .filter(
-            Viagem.rota_id == janela.rota_id,
-            Viagem.data == dia,
-            Viagem.status.in_(RODADA_ABERTA),
-        )
-        .order_by(Viagem.created_at.desc())
-        .first()
-    )
-    if viagem:
-        return viagem
-
-    viagem = Viagem(
-        data=dia,
-        rota_id=janela.rota_id,
-        janela_id=janela.id,
-        motorista_id=janela.motorista_id,
-        veiculo_id=janela.veiculo_id or (janela.rota.veiculo_padrao_id if janela.rota else None),
-        status=StatusViagem.OCIOSA,
-    )
-    db.session.add(viagem)
-    db.session.flush()
-    return viagem
-
-
-def rodada_payload(viagem: Viagem, aluno_id: str | None = None) -> dict[str, Any]:
-    """Estado da rodada como os apps mostram: status e contagem regressiva."""
-    restante = 0
-    if viagem.buffer_expira_em:
-        restante = max(0, int((viagem.buffer_expira_em - datetime.now(UTC)).total_seconds()))
-
-    registro = db.session.get(AlunosConfirmados, (viagem.id, aluno_id)) if aluno_id else None
-
-    return {
-        "viagem_id": str(viagem.id),
-        "status": viagem.status.name,
-        "buffer_expira_em": viagem.buffer_expira_em,
-        "segundos_restantes": restante,
-        "minha_situacao": registro.status.name if registro else None,
-    }
-
-
-def solicitar_viagem(user_id: str) -> dict[str, Any]:
-    """RF-10: o aluno chama o veículo.
-
-    A primeira solicitação da rodada não despacha o veículo — ela apenas
-    notifica o motorista, que decide iniciar o percurso (RF-11). Da segunda em
-    diante o aluno entra como interessado da mesma rodada, sem nova
-    notificação.
-    """
-    aluno = _aluno_apto(user_id)
-
-    momento = janela_service.agora_local()
-    janela = janela_service.janela_vigente(aluno.organizacao_id, momento)
-    if not janela:
-        # Fluxo secundário 2: fora da janela nada é registrado; o app recebe os
-        # horários de operação do dia para orientar o aluno.
-        raise ValidationError(
-            "Fora da janela de disponibilidade do veículo",
-            details={
-                "horarios_hoje": [
-                    {
-                        "hora_inicio": j.hora_inicio.strftime("%H:%M"),
-                        "hora_fim": j.hora_fim.strftime("%H:%M"),
-                    }
-                    for j in janela_service.janelas_do_dia(aluno.organizacao_id, momento)
-                ]
-            },
-        )
-
-    with transactional():
-        viagem = _rodada_da_janela(janela, momento.date())
-        primeira = viagem.status == StatusViagem.OCIOSA
-
-        if primeira:
-            viagem.status = StatusViagem.SOLICITADA
-            viagem.janela_id = janela.id
-
-        registro = db.session.get(AlunosConfirmados, (viagem.id, aluno.usuario_id))
-        if not registro:
-            registro = AlunosConfirmados(
-                viagem_id=viagem.id,
-                aluno_id=aluno.usuario_id,
-                confirmacao=False,
-                status=StatusSolicitacao.INTERESSADO,
-                solicitado_em=datetime.now(UTC),
-            )
-            db.session.add(registro)
-        elif registro.status == StatusSolicitacao.CANCELADO:
-            # Desistiu e voltou atrás dentro da mesma rodada.
-            registro.status = StatusSolicitacao.INTERESSADO
-            registro.solicitado_em = datetime.now(UTC)
-
-        if primeira:
-            # Fluxo secundário 1: só a primeira solicitação chama o motorista.
-            NotificacaoService.notificar_motorista_demanda(viagem)
-
-    audit_logger.log_user_action(
-        action="solicitar_viagem",
-        user_id=user_id,
-        resource_type="viagem",
-        resource_id=str(viagem.id),
-    )
-
-    payload = rodada_payload(viagem, user_id)
-    payload["motorista_notificado"] = primeira
-    return payload
-
-
-def rodada_ativa(user_id: str) -> dict[str, Any]:
-    """RF-12 fluxo secundário 1: quem está sem push vê a rodada e a contagem
-    regressiva ao abrir o app."""
-    aluno = db.session.get(Aluno, user_id)
-    if not aluno:
-        raise ForbiddenError("Apenas alunos acompanham a rodada ativa")
-
-    momento = janela_service.agora_local()
-    janela = janela_service.janela_vigente(aluno.organizacao_id, momento)
-    if not janela:
-        return {"em_operacao": False, "rodada": None}
-
-    viagem = (
-        db.session.query(Viagem)
-        .filter(
-            Viagem.rota_id == janela.rota_id,
-            Viagem.data == momento.date(),
-            Viagem.status.in_((StatusViagem.SOLICITADA, StatusViagem.BUFFER_ABERTO)),
-        )
-        .order_by(Viagem.created_at.desc())
-        .first()
-    )
-
-    return {
-        "em_operacao": True,
-        "rodada": rodada_payload(viagem, user_id) if viagem else None,
-    }
-
-
-def iniciar_percurso(user_id: str, viagem_id: str) -> dict[str, Any]:
-    """RF-11: o motorista aciona o início e abre a janela de buffer."""
-    user = db.session.get(User, user_id)
-    if not user or user.role != UserRole.MOTORISTA:
-        raise ForbiddenError("Apenas o motorista pode iniciar o percurso")
-
-    viagem = db.session.get(Viagem, viagem_id)
-    if not viagem:
-        raise NotFoundError("Viagem não encontrada")
-
-    if str(viagem.motorista_id) != str(user.id):
-        raise ForbiddenError("Esta viagem não pertence a você")
-
-    if viagem.status != StatusViagem.SOLICITADA:
-        raise ValidationError(
-            f"Só é possível iniciar o percurso de uma rodada solicitada (status atual: {viagem.status.name})"
-        )
-
-    janela = viagem.janela
-    minutos = janela.buffer_minutos if janela else 5
-
-    with transactional():
-        viagem.status = StatusViagem.BUFFER_ABERTO
-        viagem.buffer_expira_em = datetime.now(UTC) + timedelta(minutes=minutos)
-        # RF-12: broadcast entra na mesma transação da transição de estado.
-        NotificacaoService.notificar_broadcast_buffer(viagem, minutos * 60)
-
-    return rodada_payload(viagem, None)
-
-
-def declarar_trajeto(user_id: str, viagem_id: str, data: dict[str, Any]) -> AlunosConfirmados:
-    """RF-13: declara embarque e desembarque; a capacidade decide (RF-14)."""
-    aluno = _aluno_apto(user_id)
-
-    try:
-        return capacidade_service.validar_e_reservar(
-            viagem_id,
-            aluno.usuario_id,
-            data["ponto_origem_id"],
-            data["ponto_destino_id"],
-        )
-    except ConflictError as e:
-        # RF-13 fluxo secundário 1: indisponibilidade momentânea, com a
-        # orientação de tentar a rodada seguinte.
-        raise ConflictError(f"{e.message}. Tente novamente na próxima rodada.") from e
-
-
-def cancelar_solicitacao(user_id: str, viagem_id: str) -> dict[str, Any]:
-    """RF-19: cancelamento durante o buffer devolve a vaga; depois da partida
-    apenas registra a desistência."""
-    aluno = db.session.get(Aluno, user_id)
-    if not aluno:
-        raise ForbiddenError("Apenas alunos podem cancelar a própria solicitação")
-
-    viagem = db.session.get(Viagem, viagem_id)
-    if not viagem:
-        raise NotFoundError("Viagem não encontrada")
-
-    registro = db.session.get(AlunosConfirmados, (viagem.id, aluno.usuario_id))
-    if not registro or registro.status == StatusSolicitacao.CANCELADO:
-        raise NotFoundError("Solicitação não encontrada")
-
-    if viagem.status in RODADA_ABERTA:
-        capacidade_service.liberar(viagem.id, aluno.usuario_id)
-        return {"message": "Solicitação cancelada e vaga liberada", "vaga_liberada": True}
-
-    if viagem.status in (StatusViagem.EM_ROTA, StatusViagem.EM_ANDAMENTO):
-        # Fluxo secundário 1: a viagem já saiu. O status continua CONFIRMADO de
-        # propósito — é ele que segura a vaga no vetor de carga, e reabri-la
-        # com o veículo em movimento venderia um lugar que ninguém consegue
-        # ocupar. O que muda é a lista de embarque do motorista.
-        with transactional():
-            registro.confirmacao = False
-            NotificacaoService.notificar_motorista_desistencia(viagem, aluno.nome)
-
-        return {
-            "message": "Desistência registrada. A vaga não é reaberta nesta rodada",
-            "vaga_liberada": False,
-        }
-
-    raise ValidationError(f"Não é possível cancelar com a viagem em {viagem.status.name}")
-
-
 def obter_progresso_viagem(gestor_id: str, viagem_id: str):
     """Retorna os pontos pelos quais o motorista já passou, em ordem cronológica."""
     user = db.session.get(User, gestor_id)
@@ -1083,3 +881,23 @@ def obter_progresso_viagem(gestor_id: str, viagem_id: str):
         }
         for vp in pontos_visitados
     ]
+
+
+# Estados em que a rodada sob demanda ocupa o veículo. Sem viagem nesses estados = Ociosa.
+ESTADOS_ATIVOS_SOB_DEMANDA = (
+    StatusViagem.SOLICITADA,
+    StatusViagem.BUFFER_ABERTO,
+    StatusViagem.EM_ANDAMENTO,
+)
+
+
+def buscar_viagem_ativa_do_veiculo(onibus_id) -> Viagem | None:
+    return (
+        db.session.query(Viagem)
+        .filter(
+            Viagem.veiculo_id == onibus_id,
+            Viagem.status.in_(ESTADOS_ATIVOS_SOB_DEMANDA),
+        )
+        .order_by(Viagem.created_at.desc())
+        .first()
+    )

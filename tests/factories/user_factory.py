@@ -3,7 +3,7 @@ import uuid
 import factory
 from werkzeug.security import generate_password_hash
 
-from app.models.enum import UserRole
+from app.models.enum import UserRole, UserStatus
 from app.models.user import Aluno, Gestor, Motorista
 
 SENHA_PADRAO = "StrongPass123!"
@@ -21,6 +21,7 @@ class GestorFactory(factory.Factory):
     cpf = factory.Faker("cpf", locale="pt_BR")
     telefone = factory.Faker("phone_number", locale="pt_BR")
     role = UserRole.GESTOR
+    status = UserStatus.ACTIVE
 
     class Params:
         # Params fica fora dos kwargs do modelo. A versão anterior passava
@@ -46,6 +47,7 @@ class AlunoFactory(factory.Factory):
     cpf = factory.Faker("cpf", locale="pt_BR")
     telefone = factory.Faker("phone_number", locale="pt_BR")
     role = UserRole.ALUNO
+    status = UserStatus.ACTIVE
     matricula = factory.Faker("random_int", min=100000, max=999999)
     instituicao_id = None
     ponto_casa_id = None
@@ -76,6 +78,7 @@ class MotoristaFactory(factory.Factory):
     cpf = factory.Faker("cpf", locale="pt_BR")
     telefone = factory.Faker("phone_number", locale="pt_BR")
     role = UserRole.MOTORISTA
+    status = UserStatus.ACTIVE
 
     cnh = factory.Faker("random_int", min=10000000000, max=99999999999)
 

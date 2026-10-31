@@ -5,11 +5,14 @@ ocupa os segmentos i-1 .. j-2 (índices do vetor, base 0). A solicitação é
 aceita se `PicoTrecho = max(C[i-1:j-1])` for menor que a capacidade do veículo;
 assentos se liberam sozinhos depois do desembarque, então trajetos disjuntos
 reusam o mesmo lugar.
+
+O vetor é derivado das solicitações ATIVA com trajeto declarado. Cancelar
+(CANCELADA) já devolve os segmentos; a desistência depois da partida não reabre
+o lugar porque o buffer já fechou e ninguém mais declara.
 """
 
 import logging
 import uuid
-from datetime import UTC, datetime
 
 from sqlalchemy import select
 
@@ -18,31 +21,23 @@ from app.core.transaction import transactional
 from app.models.base import db
 from app.models.enum import StatusSolicitacao, StatusViagem
 from app.models.rota import Rota
-from app.models.user import Aluno
-from app.models.viagem import AlunosConfirmados, Viagem
+from app.models.viagem import SolicitacaoViagem, Viagem
+from app.utils import tempo
+from app.utils.validators import validate_uuid
 
 logger = logging.getLogger(__name__)
 
 IdLike = str | uuid.UUID
 
 
-def _uuid(valor: IdLike, rotulo: str) -> uuid.UUID:
-    try:
-        return uuid.UUID(str(valor))
-    except (AttributeError, TypeError, ValueError) as e:
-        raise ValidationError(f"{rotulo} inválido") from e
-
-
 def _get_viagem(viagem_id: IdLike) -> Viagem:
-    viagem = db.session.get(Viagem, _uuid(viagem_id, "ID da viagem"))
+    viagem = db.session.get(Viagem, validate_uuid(str(viagem_id), "ID da viagem"))
     if not viagem:
         raise NotFoundError("Viagem não encontrada")
     return viagem
 
 
 def _rota_da_viagem(viagem: Viagem) -> Rota:
-    """A rodada sob demanda aponta direto para o circuito; a viagem programada
-    herdada chega pela grade de horários."""
     rota = viagem.rota or (viagem.horario_rota.rota if viagem.horario_rota else None)
     if not rota:
         raise ValidationError("Viagem sem circuito de pontos definido")
@@ -64,19 +59,23 @@ def _capacidade(viagem: Viagem, rota: Rota) -> int:
 def _carga(
     viagem_id: uuid.UUID,
     pontos: list[uuid.UUID],
-    excluir_aluno_id: uuid.UUID | None = None,
+    excluir_solicitacao_id: uuid.UUID | None = None,
 ) -> list[int]:
-    """Reconstrói o vetor a partir das solicitações CONFIRMADO da viagem."""
+    """Reconstrói o vetor a partir das solicitações ATIVA com trajeto declarado."""
     posicao = {ponto_id: k for k, ponto_id in enumerate(pontos)}
     vetor = [0] * max(len(pontos) - 1, 0)
 
     aceitas = (
-        db.session.query(AlunosConfirmados)
-        .filter_by(viagem_id=viagem_id, status=StatusSolicitacao.CONFIRMADO)
+        db.session.query(SolicitacaoViagem)
+        .filter(
+            SolicitacaoViagem.viagem_id == viagem_id,
+            SolicitacaoViagem.status == StatusSolicitacao.ATIVA,
+            SolicitacaoViagem.ponto_embarque_id.isnot(None),
+        )
         .all()
     )
     for linha in aceitas:
-        if excluir_aluno_id is not None and linha.aluno_id == excluir_aluno_id:
+        if excluir_solicitacao_id is not None and linha.id == excluir_solicitacao_id:
             continue
         i = posicao.get(linha.ponto_embarque_id)
         j = posicao.get(linha.ponto_destino_id)
@@ -89,9 +88,9 @@ def _carga(
 
 
 def _posicao(posicoes: dict[uuid.UUID, int], ponto_id: IdLike, rotulo: str) -> int:
-    k = posicoes.get(_uuid(ponto_id, rotulo))
+    k = posicoes.get(validate_uuid(str(ponto_id), rotulo))
     if k is None:
-        raise ValidationError(f"{rotulo} não pertence ao circuito desta rodada")
+        raise ValidationError(f"{rotulo} não pertence ao circuito desta viagem")
     return k
 
 
@@ -112,38 +111,41 @@ def validar_e_reservar(
     aluno_id: IdLike,
     ponto_origem_id: IdLike,
     ponto_destino_id: IdLike,
-) -> AlunosConfirmados:
-    """RF-13/RF-14. Aceita e devolve a linha AlunosConfirmados CONFIRMADO,
-    ou levanta ConflictError se PicoTrecho já está no limite (a linha é
-    gravada como NEGADO antes de levantar — RF-21 conta negações por ponto)."""
-    negado = False
+) -> SolicitacaoViagem:
+    """RF-13/RF-14. Grava o trajeto na solicitação ATIVA do aluno, ou levanta
+    ConflictError se PicoTrecho já está no limite. A solicitação negada fica como
+    NEGADA antes do erro, porque o RF-21 conta negações por ponto."""
+    negada = False
 
     with transactional():
-        # ponytail: o RF-14 cita Redis, mas aqui o vetor é derivado das linhas
-        # CONFIRMADO e as declarações concorrentes serializam neste lock de
-        # linha — exato, transacional e sem infraestrutura nova. O teto é a
-        # serialização por viagem; se um dia isso virar gargalo, troque por um
-        # contador por segmento em Redis com reconciliação contra o banco.
+        # shortcut: o RF-14 cita Redis; aqui as declarações concorrentes serializam
+        # neste lock da viagem. Trocar por contador por segmento se virar gargalo.
         viagem = db.session.execute(
-            select(Viagem).where(Viagem.id == _uuid(viagem_id, "ID da viagem")).with_for_update()
+            select(Viagem)
+            .where(Viagem.id == validate_uuid(str(viagem_id), "ID da viagem"))
+            .with_for_update()
         ).scalar_one_or_none()
         if not viagem:
             raise NotFoundError("Viagem não encontrada")
 
         if viagem.status != StatusViagem.BUFFER_ABERTO:
-            raise ValidationError("A rodada não está aceitando declarações de trajeto")
+            raise ValidationError("A viagem não está aceitando declarações de trajeto")
 
-        agora = datetime.now(UTC)
-        if not viagem.buffer_expira_em or viagem.buffer_expira_em <= agora:
-            raise ValidationError("O tempo para declarar o trajeto desta rodada já encerrou")
+        agora = tempo.agora_utc()
+        if not viagem.buffer_fim or viagem.buffer_fim <= agora:
+            raise ValidationError("O tempo para declarar o trajeto desta viagem já encerrou")
 
-        aluno = db.session.get(Aluno, _uuid(aluno_id, "ID do aluno"))
-        if not aluno:
-            raise NotFoundError("Aluno não encontrado")
+        solicitacao = (
+            db.session.query(SolicitacaoViagem)
+            .filter_by(viagem_id=viagem.id, aluno_id=aluno_id, status=StatusSolicitacao.ATIVA)
+            .first()
+        )
+        if not solicitacao:
+            raise NotFoundError("Solicite a viagem pela rota antes de declarar o trajeto")
 
         rota = _rota_da_viagem(viagem)
-        if aluno.organizacao_id != rota.organizacao_id:
-            raise ForbiddenError("Aluno não pertence à organização desta rodada")
+        if solicitacao.aluno.organizacao_id != rota.organizacao_id:
+            raise ForbiddenError("Aluno não pertence à organização desta viagem")
 
         pontos = _pontos_ordenados(rota)
         posicoes = {ponto_id: k for k, ponto_id in enumerate(pontos)}
@@ -153,51 +155,24 @@ def validar_e_reservar(
             raise ValidationError("A origem precisa vir antes do destino na ordem do circuito")
 
         # Redeclarar não pode fazer o aluno concorrer com a própria reserva.
-        vetor = _carga(viagem.id, pontos, excluir_aluno_id=aluno.usuario_id)
-        pico_trecho = max(vetor[i:j])
-        negado = pico_trecho >= _capacidade(viagem, rota)
+        vetor = _carga(viagem.id, pontos, excluir_solicitacao_id=solicitacao.id)
+        negada = max(vetor[i:j]) >= _capacidade(viagem, rota)
 
-        registro = db.session.get(AlunosConfirmados, (viagem.id, aluno.usuario_id))
-
-        if negado and registro is not None and registro.status == StatusSolicitacao.CONFIRMADO:
-            # Tentar trocar de trajeto não pode custar o lugar já garantido.
-            # Sem esta guarda a linha seria sobrescrita como NEGADO e o aluno
-            # sairia da rodada por ter pedido um trecho lotado. A negação não
-            # é registrada aqui de propósito: gravá-la exigiria destruir a
-            # reserva, e o estrangulamento que o RF-21 procura é a negação de
-            # quem ainda não tem lugar.
+        if negada and solicitacao.ponto_embarque_id is not None:
+            # Trocar de trajeto não pode custar o lugar já garantido, então essa
+            # tentativa não vira NEGADA.
             raise ConflictError(
                 "Sem lugar disponível no trecho solicitado; sua reserva anterior foi mantida"
             )
 
-        if not registro:
-            registro = AlunosConfirmados(viagem_id=viagem.id, aluno_id=aluno.usuario_id)
-            db.session.add(registro)
+        solicitacao.ponto_embarque_id = pontos[i]
+        solicitacao.ponto_destino_id = pontos[j]
+        solicitacao.declarada_em = agora
+        if negada:
+            solicitacao.status = StatusSolicitacao.NEGADA
 
-        registro.ponto_embarque_id = pontos[i]
-        registro.ponto_destino_id = pontos[j]
-        registro.declarado_em = agora
-        registro.status = StatusSolicitacao.NEGADO if negado else StatusSolicitacao.CONFIRMADO
-        registro.confirmacao = not negado
-
-    if negado:
+    if negada:
         logger.info(f"Trajeto negado por capacidade: viagem={viagem_id} aluno={aluno_id}")
-        raise ConflictError("Sem lugar disponível no trecho solicitado nesta rodada")
+        raise ConflictError("Sem lugar disponível no trecho solicitado nesta viagem")
 
-    return registro
-
-
-def liberar(viagem_id: IdLike, aluno_id: IdLike) -> None:
-    """RF-19: devolve a capacidade dos segmentos e marca CANCELADO."""
-    with transactional():
-        registro = db.session.get(
-            AlunosConfirmados,
-            (_uuid(viagem_id, "ID da viagem"), _uuid(aluno_id, "ID do aluno")),
-        )
-        if not registro:
-            raise NotFoundError("Solicitação não encontrada")
-
-        # O vetor só conta linhas CONFIRMADO, então sair desse estado já
-        # devolve a capacidade dos segmentos do trajeto.
-        registro.status = StatusSolicitacao.CANCELADO
-        registro.confirmacao = False
+    return solicitacao

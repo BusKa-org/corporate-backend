@@ -4,25 +4,34 @@ from flask import request
 from flask_jwt_extended import get_jwt_identity, jwt_required
 from flask_restx import Namespace, Resource
 
-from app.api.contracts import onibus_contract
+from app.api.contracts import janela_contract, onibus_contract
+from app.schemas.janela_schema import (
+    JanelaCreateRequestSchema,
+    JanelaListResponseSchema,
+    JanelaResponseSchema,
+)
 from app.schemas.onibus_schema import (
     OnibusCreateRequestSchema,
     OnibusListResponseSchema,
     OnibusResponseSchema,
     OnibusUpdateRequestSchema,
 )
-from app.services import onibus_service
+from app.services import janelas_service, onibus_service
 
 api = Namespace("onibus", description="Gerenciamento da Frota")
 
 # API contracts (Swagger documentation)
 models = onibus_contract.register_models(api)
+janela_models = janela_contract.register_models(api)
 
 # Validation schemas (Marshmallow)
 onibus_create_request_schema = OnibusCreateRequestSchema()
 onibus_update_request_schema = OnibusUpdateRequestSchema()
 onibus_response_schema = OnibusResponseSchema()
 onibus_list_response_schema = OnibusListResponseSchema()
+janela_create_request_schema = JanelaCreateRequestSchema()
+janela_response_schema = JanelaResponseSchema()
+janela_list_response_schema = JanelaListResponseSchema()
 
 
 @api.route("/")
@@ -87,3 +96,38 @@ class OnibusResource(Resource):
         current_user_id = get_jwt_identity()
         onibus_service.delete_onibus(current_user_id, id)
         return {"message": "Ônibus removido com sucesso"}, 200
+
+
+@api.route("/<string:id>/janelas")
+class JanelaListResource(Resource):
+    @api.doc("list_janelas")
+    @api.response(200, "Success", janela_models["janela_list_response"])
+    @jwt_required()
+    def get(self, id: str) -> tuple[dict[str, Any], int]:
+        """Lista as janelas de disponibilidade do ônibus"""
+        current_user_id = get_jwt_identity()
+        janelas = janelas_service.listar_janelas(current_user_id, id)
+        return janela_list_response_schema.dump({"items": janelas, "total": len(janelas)}), 200
+
+    @api.doc("create_janela")
+    @api.expect(janela_models["janela_create_request"])
+    @api.response(201, "Created", janela_models["janela_response"])
+    @jwt_required()
+    def post(self, id: str) -> tuple[dict[str, Any], int]:
+        """Cria uma janela de disponibilidade para o ônibus"""
+        current_user_id = get_jwt_identity()
+        data = request.get_json(silent=True) or {}
+        payload = janela_create_request_schema.load(data)
+        janela = janelas_service.criar_janela(current_user_id, id, payload)
+        return janela_response_schema.dump(janela), 201
+
+
+@api.route("/<string:id>/janelas/<string:janela_id>")
+class JanelaResource(Resource):
+    @api.doc("delete_janela")
+    @jwt_required()
+    def delete(self, id: str, janela_id: str) -> tuple[dict[str, Any], int]:
+        """Remove uma janela de disponibilidade"""
+        current_user_id = get_jwt_identity()
+        janelas_service.remover_janela(current_user_id, id, janela_id)
+        return {"message": "Janela de disponibilidade removida com sucesso"}, 200

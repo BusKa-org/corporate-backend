@@ -11,7 +11,7 @@ x-app-env: &app_env
   JWT_SECRET_KEY: ${JWT_SECRET_KEY:-change-me-in-production}
   JWT_EXPIRES_HOURS: ${JWT_EXPIRES_HOURS:-2}
   FLASK_ENV: ${FLASK_ENV:-production}
-  TZ: America/Sao_Paulo
+  TZ: America/Fortaleza
   FIREBASE_CREDENTIALS: ${FIREBASE_CREDENTIALS:-}
   CORS_ORIGINS: ${CORS_ORIGINS:-}
   FRONTEND_URL: ${FRONTEND_URL:-}
