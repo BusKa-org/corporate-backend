@@ -1,7 +1,7 @@
 """add tipo_viagem and on-demand parameters to rota
 
 Revision ID: e7f8a9b0c1d2
-Revises: e5f6a7b8c9d0
+Revises: a7b8c9d0e1f2
 Create Date: 2026-09-30 12:00:00.000000+00:00
 """
 
@@ -13,7 +13,8 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic
 revision: str = "e7f8a9b0c1d2"
-down_revision: Union[str, None] = "e5f6a7b8c9d0"
+# PR #16 (driver work hours) merges into dev first; this chain sits on top of it.
+down_revision: Union[str, None] = "a7b8c9d0e1f2"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
