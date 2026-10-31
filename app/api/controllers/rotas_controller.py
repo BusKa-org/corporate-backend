@@ -21,7 +21,7 @@ from app.schemas.rota_schema import (
     RotaResponseSchema,
     RotaUpdateRequestSchema,
 )
-from app.schemas.solicitacao_schema import SolicitacaoResponseSchema
+from app.schemas.solicitacao_schema import RodadaAtivaResponseSchema, SolicitacaoResponseSchema
 from app.services import rotas_service, solicitacoes_service
 from app.services.consentimento_service import exige_consentimento
 
@@ -41,6 +41,7 @@ rota_create_request_schema = RotaCreateRequestSchema()
 rota_update_request_schema = RotaUpdateRequestSchema()
 pontos_add_request_schema = RotaPontosAddRequestSchema()
 solicitacao_response_schema = SolicitacaoResponseSchema()
+rodada_ativa_response_schema = RodadaAtivaResponseSchema()
 
 horario_create_request_schema = HorarioCreateRequestSchema()
 horario_response_schema = HorarioResponseSchema()
@@ -203,3 +204,15 @@ class RotaSolicitacoesResource(Resource):
         user_id = get_jwt_identity()
         solicitacao = solicitacoes_service.solicitar_viagem(user_id, id)
         return solicitacao_response_schema.dump(solicitacao), 201
+
+
+@api.route("/<string:id>/viagem-ativa")
+class RotaViagemAtivaResource(Resource):
+    @api.doc("rodada_ativa")
+    @api.response(200, "Success", solicitacao_models["rodada_ativa_response"])
+    @jwt_required()
+    def get(self, id: str) -> tuple[dict[str, Any], int]:
+        """Rodada ativa da rota sob demanda (viagem null quando ociosa) e as janelas de hoje."""
+        user_id = get_jwt_identity()
+        rodada = solicitacoes_service.buscar_rodada_ativa(user_id, id)
+        return rodada_ativa_response_schema.dump(rodada), 200

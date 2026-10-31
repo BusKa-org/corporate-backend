@@ -56,6 +56,36 @@ Returns 201 with `{id, viagem_id, status, created_at, viagem: {id, status, rota_
 | 404 | route not found |
 | 409 | student already has an active request (also the same trip twice) or is in a trip en route; vehicle en route; vehicle serving another route |
 
+### Active round of a route (RF-12, secondary flow)
+
+`GET /v1/rotas/<id>/viagem-ativa`: student, gestor or driver of the route's
+organization. Lets a student who missed the push see the round and its countdown.
+Always 200; an idle vehicle is `"viagem": null` (no 404, so the app needs no error path
+for the normal idle case).
+
+```json
+{
+  "viagem": {"id", "status", "rota_id", "created_at", "inicio_real", "buffer_fim",
+             "segundos_restantes_buffer", "motorista": {"id", "nome"},
+             "veiculo": {"id", "placa", "modelo"}} | null,
+  "minha_solicitacao": {"id", "status"} | null,
+  "janelas_hoje": [{"hora_inicio": "08:00", "hora_fim": "12:00"}]
+}
+```
+
+- `segundos_restantes_buffer` comes from the server clock, is never negative, and is
+  `null` outside `BUFFER_ABERTO`.
+- `minha_solicitacao` is the caller's active request (students only), so the app can cancel it.
+- A vehicle busy with another route counts as no round for this route.
+
+| Status | When |
+|---|---|
+| 400 | fixed route; malformed id |
+| 403 | other organization; role without access |
+| 404 | route not found |
+
+Every on-demand endpoint returns 400 for a malformed id in the path.
+
 ### Driver start (RF-11, RF-12)
 
 `POST /v1/viagens/<id>/iniciar-percurso`: only the trip's driver. No body. Returns 200

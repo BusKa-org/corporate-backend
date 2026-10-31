@@ -5,10 +5,10 @@ from sqlalchemy import select
 from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError, ValidationError
 from app.core.transaction import transactional
 from app.models.base import db
-from app.models.enum import StatusSolicitacao, StatusViagem, TipoViagem
+from app.models.enum import StatusSolicitacao, StatusViagem, TipoViagem, UserRole
 from app.models.onibus import Onibus
 from app.models.rota import Rota
-from app.models.user import Aluno
+from app.models.user import Aluno, User
 from app.models.viagem import AlunosConfirmados, SolicitacaoViagem, Viagem
 from app.services import janelas_service, viagens_service
 from app.services.notificacao_service import NotificacaoService
@@ -205,3 +205,64 @@ def cancelar_solicitacao(user_id: str, viagem_id: str) -> SolicitacaoViagem:
 
         return solicitacao
 
+
+def buscar_rodada_ativa(user_id: str, rota_id: str) -> dict:
+    """
+    Rodada ativa da rota sob demanda, para quem abre o app sem ter recebido o push
+    (RF-12, fluxo secundário). Sem rodada, devolve viagem None e as janelas de hoje.
+
+    Raises: ForbiddenError, NotFoundError, ValidationError
+    """
+    user = db.session.get(User, user_id)
+    if not user or user.role not in (UserRole.ALUNO, UserRole.GESTOR, UserRole.MOTORISTA):
+        raise ForbiddenError("Acesso negado")
+
+    rota = db.session.get(Rota, validate_uuid(rota_id, "ID da rota"))
+    if not rota:
+        raise NotFoundError("Rota não encontrada")
+
+    if rota.organizacao_id != user.organizacao_id:
+        raise ForbiddenError("Acesso negado")
+
+    if rota.tipo == TipoViagem.FIXA:
+        raise ValidationError("Rota de horário fixo não tem rodada sob demanda")
+
+    resultado: dict = {"viagem": None, "minha_solicitacao": None, "janelas_hoje": []}
+    if rota.veiculo_padrao_id is None:
+        return resultado
+
+    agora_local = tempo.agora_local()
+    dia = viagens_service._get_dia_semana_enum(agora_local.date())
+    resultado["janelas_hoje"] = janelas_service.listar_janelas_do_dia(rota.veiculo_padrao_id, dia)
+
+    viagem = viagens_service.buscar_viagem_ativa_do_veiculo(rota.veiculo_padrao_id)
+    # Veículo ocupado com outra rota: para esta rota não há rodada.
+    if viagem is None or viagem.rota_id != rota.id:
+        return resultado
+
+    segundos_restantes = None
+    if viagem.status == StatusViagem.BUFFER_ABERTO and viagem.buffer_fim:
+        segundos_restantes = int((viagem.buffer_fim - tempo.agora_utc()).total_seconds())
+        if segundos_restantes < 0:
+            segundos_restantes = 0
+
+    resultado["viagem"] = {
+        "id": viagem.id,
+        "status": viagem.status.value,
+        "rota_id": viagem.rota_id,
+        "created_at": viagem.created_at,
+        "inicio_real": viagem.inicio_real,
+        "buffer_fim": viagem.buffer_fim,
+        "segundos_restantes_buffer": segundos_restantes,
+        "motorista": viagem.motorista,
+        "veiculo": viagem.veiculo,
+    }
+
+    if user.role == UserRole.ALUNO:
+        resultado["minha_solicitacao"] = (
+            db.session.query(SolicitacaoViagem)
+            .filter_by(viagem_id=viagem.id, aluno_id=user.id, status=StatusSolicitacao.ATIVA)
+            .first()
+        )
+
+    return resultado
