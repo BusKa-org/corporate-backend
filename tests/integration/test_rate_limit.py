@@ -13,6 +13,7 @@ from app.extensions import (
     _chave_por_email_ou_token,
     limiter,
 )
+from app.models.enum import UserStatus
 
 PIN_VALIDAR = "/v1/convites/pin/validar"
 LOGIN = "/v1/auth/login"
@@ -180,10 +181,21 @@ def test_jwt_invalido_conta_pelo_ip(app):
 
 
 @pytest.mark.integration
-def test_usuarios_diferentes_nao_dividem_contagem(app, limitado, _db):
+def test_token_de_conta_excluida_conta_pelo_ip(app, aluno, _db):
+    """O token revogado não pode virar 500 na chave do limitador: cai para o IP."""
+    aluno.user.status = UserStatus.DELETED
+    _db.session.commit()
+    with app.test_request_context(
+        "/v1/users/me", headers=aluno.headers, environ_base={"REMOTE_ADDR": "10.0.0.9"}
+    ):
+        assert _chave_do_cliente() == "ip:10.0.0.9"
+
+
+@pytest.mark.integration
+def test_usuarios_diferentes_nao_dividem_contagem(app, limitado, aluno, other_aluno):
     with app.app_context():
-        token_a = create_access_token(identity=str(uuid.uuid4()))
-        token_b = create_access_token(identity=str(uuid.uuid4()))
+        token_a = create_access_token(identity=str(aluno.user.id))
+        token_b = create_access_token(identity=str(other_aluno.user.id))
     url = f"/v1/viagens/{uuid.uuid4()}/localizacao"
 
     for _ in range(2):

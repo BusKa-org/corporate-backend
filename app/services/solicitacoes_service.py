@@ -5,7 +5,7 @@ from sqlalchemy import select
 from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError, ValidationError
 from app.core.transaction import transactional
 from app.models.base import db
-from app.models.enum import StatusSolicitacao, StatusViagem, TipoViagem, UserRole, UserStatus
+from app.models.enum import StatusSolicitacao, StatusViagem, TipoViagem, UserRole
 from app.models.onibus import Onibus
 from app.models.rota import Rota
 from app.models.user import Aluno, User
@@ -73,10 +73,7 @@ def solicitar_viagem(user_id: str, rota_id: str) -> SolicitacaoViagem:
         db.session.execute(
             select(User.id).where(User.id == aluno.usuario_id).with_for_update(key_share=True)
         )
-        # Uma exclusão de conta que segurava o lock já pode ter anonimizado o aluno.
-        atual = db.session.get(Aluno, aluno.usuario_id, populate_existing=True)
-        if atual is None or atual.status != UserStatus.ACTIVE:
-            raise ForbiddenError("Conta inativa")
+        capacidade_service.exigir_conta_ativa(aluno.usuario_id)
 
         agora_local = tempo.agora_local()
         janela = janelas_service.buscar_janela_ativa(veiculo_id, agora_local)

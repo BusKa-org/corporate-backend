@@ -9,8 +9,14 @@ from marshmallow.exceptions import ValidationError as MarshmallowValidationError
 from werkzeug.exceptions import HTTPException
 
 from app.core.exceptions import AppError, ValidationError
+from app.models.base import db
+from app.models.enum import UserStatus
+from app.models.user import User
 
 logger = logging.getLogger(__name__)
+
+# Os mesmos status que o login recusa: um token não pode fazer o que um login novo não faria.
+STATUS_SEM_ACESSO = (UserStatus.DELETED, UserStatus.DISABLED, UserStatus.PENDING_APPROVAL)
 
 
 def _request_id() -> str | None:
@@ -188,6 +194,14 @@ def register_jwt_handlers(jwt: JWTManager) -> None:
     @jwt.expired_token_loader
     def expired_token(jwt_header, jwt_payload):
         return jsonify(_error_payload(code="TOKEN_EXPIRED", message="Token expirado")), 401
+
+    @jwt.token_in_blocklist_loader
+    def conta_sem_acesso(jwt_header, jwt_payload) -> bool:
+        # Uma busca por chave primária por requisição autenticada.
+        user = db.session.get(User, jwt_payload["sub"])
+        if user is None:
+            return True
+        return user.status in STATUS_SEM_ACESSO
 
     @jwt.revoked_token_loader
     def revoked_token(jwt_header, jwt_payload):

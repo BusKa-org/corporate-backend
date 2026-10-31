@@ -17,6 +17,7 @@ from app.models.user import Aluno, User
 from app.models.viagem import SolicitacaoViagem
 from app.services import convite_service
 from tests.factories.user_factory import SENHA_PADRAO
+from tests.factories.viagem_factory import SolicitacaoViagemFactory
 from tests.helpers import imagens
 from tests.integration.concurrency.conftest import ao_mesmo_tempo, status_de
 
@@ -181,6 +182,43 @@ def test_exclusao_contra_solicitacao_nao_deixa_conta_excluida_com_solicitacao_at
         .count()
     )
     assert not (excluida and ativas)
+
+
+def test_exclusao_contra_declaracao_nao_deixa_conta_excluida_com_lugar(
+    app, _db, aluno, viagem_buffer_aberto, pontos_circuito
+):
+    _db.session.add(
+        SolicitacaoViagemFactory(viagem_id=viagem_buffer_aberto.id, aluno_id=aluno.user.id)
+    )
+    _db.session.commit()
+    email = aluno.user.email
+    p1, p2, _, _ = pontos_circuito
+
+    def excluir():
+        return app.test_client().delete(
+            "/v1/users/me", json={"email": email, "senha": SENHA_PADRAO}, headers=aluno.headers
+        )
+
+    def declarar():
+        return app.test_client().post(
+            f"/v1/viagens/{viagem_buffer_aberto.id}/declaracao",
+            json={"ponto_origem_id": str(p1.id), "ponto_destino_id": str(p2.id)},
+            headers=aluno.headers,
+        )
+
+    exclusao, declaracao = ao_mesmo_tempo(app, [excluir, declarar])
+
+    # Declaração antes: a exclusão devolve o trecho. Depois: 401 do token ou 403 do serviço.
+    assert exclusao.status_code == 200, exclusao.get_data(as_text=True)
+    assert declaracao.status_code in (200, 401, 403), declaracao.get_data(as_text=True)
+    _db.session.expire_all()
+    assert _db.session.get(User, aluno.user.id).status == UserStatus.DELETED
+    ativas = (
+        _db.session.query(SolicitacaoViagem)
+        .filter_by(aluno_id=aluno.user.id, status=StatusSolicitacao.ATIVA)
+        .count()
+    )
+    assert ativas == 0
 
 
 # ---------- foto ----------

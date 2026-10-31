@@ -19,8 +19,9 @@ from sqlalchemy import select
 from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError, ValidationError
 from app.core.transaction import transactional
 from app.models.base import db
-from app.models.enum import StatusSolicitacao, StatusViagem
+from app.models.enum import StatusSolicitacao, StatusViagem, UserStatus
 from app.models.rota import Rota
+from app.models.user import Aluno
 from app.models.viagem import SolicitacaoViagem, Viagem
 from app.utils import tempo
 from app.utils.validators import validate_uuid
@@ -106,6 +107,14 @@ def capacidade_viagem(viagem_id: IdLike) -> int:
     return _capacidade(viagem, _rota_da_viagem(viagem))
 
 
+def exigir_conta_ativa(aluno_id: IdLike) -> None:
+    """Chame depois dos locks: uma exclusão de conta que os segurava já pode ter
+    anonimizado o aluno, então relê do banco."""
+    aluno = db.session.get(Aluno, aluno_id, populate_existing=True)
+    if aluno is None or aluno.status != UserStatus.ACTIVE:
+        raise ForbiddenError("Conta inativa")
+
+
 def validar_e_reservar(
     viagem_id: IdLike,
     aluno_id: IdLike,
@@ -132,6 +141,8 @@ def validar_e_reservar(
 
         if viagem.status != StatusViagem.BUFFER_ABERTO:
             raise ValidationError("A viagem não está aceitando declarações de trajeto")
+
+        exigir_conta_ativa(aluno_id)
 
         agora = tempo.agora_utc()
         if not viagem.buffer_fim or viagem.buffer_fim <= agora:

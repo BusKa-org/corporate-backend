@@ -111,6 +111,11 @@ All notable changes to this project will be documented in this file.
   Invitations replace all of them: nobody signs up on their own.
 
 ### Fixed
+- After `DELETE /v1/users/me` the old JWT kept working for up to 2 hours. Every authenticated
+  request now loads the user and returns 401 `TOKEN_REVOKED` when the user no longer exists or
+  has a status login refuses (`DELETED`, `DISABLED`, `PENDING_APPROVAL`). The rate limiter
+  counts such a token by IP. `POST /v1/viagens/<id>/declaracao` also checks, after its locks,
+  that the student account is active (403), so a deleted student cannot join a trip in the buffer.
 - `PUT /v1/viagens/<id>/confirmacao`: a double tap on the first attendance confirmation of a
   fixed-route trip returned 409 (primary key) for the second tap. The student row is now locked
   before reading the confirmation, so the second tap gets 200 with the same result. Confirming
