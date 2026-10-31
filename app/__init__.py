@@ -14,8 +14,12 @@ from flask_cors import CORS
 from flask_jwt_extended import JWTManager
 from flask_restx import Api
 
-from app.core.error_handlers import register_error_handlers, register_jwt_handlers
-from app.extensions import scheduler
+from app.core.error_handlers import (
+    register_api_error_handlers,
+    register_error_handlers,
+    register_jwt_handlers,
+)
+from app.extensions import limiter, scheduler
 from app.utils.scheduler_setup import init_scheduler
 
 from .api.controllers.aluno_controller import api as alunos_ns
@@ -121,6 +125,18 @@ def create_app(
     app.config["QR_DIGITOS"] = settings.QR_DIGITOS
     app.config["QR_JANELA_PASSOS"] = settings.QR_JANELA_PASSOS
     app.config["SYNC_TOLERANCIA_SEGUNDOS"] = settings.SYNC_TOLERANCIA_SEGUNDOS
+    app.config["RATELIMIT_ENABLED"] = settings.RATELIMIT_ENABLED
+    app.config["RATELIMIT_STORAGE_URI"] = settings.RATELIMIT_STORAGE_URI
+    app.config["RATELIMIT_DEFAULT"] = settings.RATELIMIT_DEFAULT
+    app.config["RATELIMIT_AUTH"] = settings.RATELIMIT_AUTH
+    app.config["RATELIMIT_SENSITIVE"] = settings.RATELIMIT_SENSITIVE
+    app.config["RATELIMIT_REALTIME"] = settings.RATELIMIT_REALTIME
+    app.config["RATELIMIT_HEADERS_ENABLED"] = True
+    # Redis fora do ar não derruba a API: cada worker passa a contar em memória
+    # (com aviso no log) e volta para o Redis quando ele responder.
+    app.config["RATELIMIT_IN_MEMORY_FALLBACK_ENABLED"] = True
+    app.config["RATELIMIT_SWALLOW_ERRORS"] = True
+    app.config["RATELIMIT_STORAGE_OPTIONS"] = {"socket_connect_timeout": 1, "socket_timeout": 1}
 
     # Maximum request size (16MB)
     app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024
@@ -160,6 +176,7 @@ def create_app(
 
     db.init_app(app)
     jwt.init_app(app)
+    limiter.init_app(app)
 
     # ==========================================
     # Scheduler Configuration
@@ -245,6 +262,7 @@ Inclua o header: `Authorization: Bearer <seu_token>`
 
     register_jwt_handlers(jwt)
     register_error_handlers(app)
+    register_api_error_handlers(api)
 
     # ==========================================
     # OpenAPI Export Endpoint

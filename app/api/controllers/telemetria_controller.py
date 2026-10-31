@@ -12,6 +12,7 @@ from flask_jwt_extended import get_jwt_identity, jwt_required
 from flask_restx import Namespace, Resource
 
 from app.api.contracts import telemetria_contract
+from app.extensions import limite_tempo_real
 from app.schemas.telemetria_schema import (
     ConsumoViagemListResponseSchema,
     IngestaoResponseSchema,
@@ -40,6 +41,7 @@ class TelemetriaIngestaoResource(Resource):
     @api.expect(models["ingestao_request"])
     @api.response(201, "Lote processado", models["ingestao_response"])
     @jwt_required()
+    @limite_tempo_real
     def post(self) -> tuple[dict[str, Any], int]:
         """(Veículo) Envia um lote de amostras de telemetria"""
         current_user_id = get_jwt_identity()

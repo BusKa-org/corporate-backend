@@ -3,6 +3,8 @@ from typing import Any
 
 from flask import g, jsonify, request
 from flask_jwt_extended import JWTManager
+from flask_limiter.errors import RateLimitExceeded
+from flask_restx import Api
 from marshmallow.exceptions import ValidationError as MarshmallowValidationError
 from werkzeug.exceptions import HTTPException
 
@@ -34,6 +36,22 @@ def _error_payload(*, code: str, message: str, details: Any | None = None) -> di
     if details is not None:
         payload["error"]["details"] = details
     return payload
+
+
+def _handle_rate_limited(err: RateLimitExceeded) -> tuple[dict[str, Any], int]:
+    # O Flask-Limiter acrescenta o Retry-After depois, no after_request.
+    payload = _error_payload(
+        code="RATE_LIMITED",
+        message="Muitas requisições. Tente novamente em instantes.",
+        details={"limit": err.description},
+    )
+    return payload, 429
+
+
+def register_api_error_handlers(api: Api) -> None:
+    """O flask_restx responde sozinho as HTTPException levantadas dentro dos
+    Resources, então o 429 dos limites por rota precisa ser registrado nele também."""
+    api.errorhandler(RateLimitExceeded)(_handle_rate_limited)
 
 
 def register_error_handlers(app) -> None:
@@ -99,6 +117,8 @@ def register_error_handlers(app) -> None:
             ),
             400,
         )
+
+    app.errorhandler(RateLimitExceeded)(_handle_rate_limited)
 
     @app.errorhandler(HTTPException)
     def handle_http_exception(err: HTTPException):
