@@ -202,6 +202,15 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 10
+      redis:
+        image: redis:8.6-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
 
     steps:
       - uses: actions/checkout@v7
@@ -249,6 +258,7 @@ jobs:
           POSTGRES_USER: buska_user
           POSTGRES_PASSWORD: buska_pass
           JWT_SECRET_KEY: test_secret
+          REDIS_URL: redis://localhost:6379/0
         run: |
           uv run pytest -m "not e2e" \
             --cov=app --cov-branch --cov-report=term-missing --cov-report=xml --cov-report=html

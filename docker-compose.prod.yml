@@ -21,6 +21,13 @@ x-app-env: &app_env
   MAIL_USERNAME: ${MAIL_USERNAME:-}
   MAIL_PASSWORD: ${MAIL_PASSWORD:-}
   MAIL_USE_TLS: ${MAIL_USE_TLS:-true}
+  # Um contador só para os 4 workers do gunicorn; memory:// contaria em cada um.
+  RATELIMIT_STORAGE_URI: ${RATELIMIT_STORAGE_URI:-redis://redis:6379/0}
+  RATELIMIT_ENABLED: ${RATELIMIT_ENABLED:-true}
+  RATELIMIT_DEFAULT: ${RATELIMIT_DEFAULT:-200 per hour}
+  RATELIMIT_AUTH: ${RATELIMIT_AUTH:-10 per minute}
+  RATELIMIT_SENSITIVE: ${RATELIMIT_SENSITIVE:-5 per minute}
+  RATELIMIT_REALTIME: ${RATELIMIT_REALTIME:-120 per minute}
 
 services:
   db:
@@ -44,6 +51,19 @@ services:
       timeout: 5s
       retries: 5
 
+  # Sem porta no host: só a API fala com ele, pela rede interna.
+  redis:
+    image: redis:8.6-alpine
+    container_name: buska_redis
+    restart: unless-stopped
+    networks:
+      - buska_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
   api:
     image: ${API_IMAGE}
     pull_policy: never
@@ -61,6 +81,8 @@ services:
       - fotos_aluno:/app/instance/fotos_aluno
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     networks:
       - buska_network
