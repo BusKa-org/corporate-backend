@@ -1,5 +1,8 @@
 """on-demand trip lifecycle: availability windows, ride requests, trip states
 
+The request also carries the declared route (RF-13) and NEGADA, a request refused
+by the segment capacity check (RF-14), counted per stop in the dashboard (RF-21).
+
 Revision ID: f8a9b0c1d2e3
 Revises: e7f8a9b0c1d2
 Create Date: 2026-10-31 12:00:00.000000+00:00
@@ -70,7 +73,12 @@ def upgrade() -> None:
     )
 
     status_solicitacao = postgresql.ENUM(
-        "ATIVA", "CANCELADA", "DESISTENCIA", name="status_solicitacao", create_type=False
+        "ATIVA",
+        "CANCELADA",
+        "DESISTENCIA",
+        "NEGADA",
+        name="status_solicitacao",
+        create_type=False,
     )
     status_solicitacao.create(op.get_bind())
     op.create_table(
@@ -93,6 +101,19 @@ def upgrade() -> None:
             "created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=True
         ),
         sa.Column("cancelada_em", sa.DateTime(timezone=True), nullable=True),
+        sa.Column(
+            "ponto_embarque_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("ponto.id", name="solicitacao_viagem_ponto_embarque_id_fkey"),
+            nullable=True,
+        ),
+        sa.Column(
+            "ponto_destino_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("ponto.id", name="solicitacao_viagem_ponto_destino_id_fkey"),
+            nullable=True,
+        ),
+        sa.Column("declarada_em", sa.DateTime(timezone=True), nullable=True),
     )
     op.create_index("ix_solicitacao_viagem_aluno_id", "solicitacao_viagem", ["aluno_id"])
     op.create_index(
