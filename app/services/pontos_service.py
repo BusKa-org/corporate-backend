@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 def list_all(user_id: str) -> list[Ponto]:
     """List all points for user's organizacao."""
-    user = User.query.get(user_id)
+    user = db.session.get(User, user_id)
     if not user:
         raise NotFoundError("Usuário não encontrado")
 
@@ -28,11 +28,11 @@ def get_by_id(user_id: str, ponto_id: str) -> Ponto:
 
     Raises: NotFoundError, ForbiddenError
     """
-    user = User.query.get(user_id)
+    user = db.session.get(User, user_id)
     if not user:
         raise NotFoundError("Usuário não encontrado")
 
-    ponto = Ponto.query.get(ponto_id)
+    ponto = db.session.get(Ponto, ponto_id)
     if not ponto:
         raise NotFoundError("Ponto não encontrado")
 
@@ -48,7 +48,7 @@ def create_ponto(user_id: str, data: dict[str, Any]) -> Ponto:
 
     Raises: ForbiddenError, ValidationError, AppError
     """
-    user = User.query.get(user_id)
+    user = db.session.get(User, user_id)
     if not user or user.role not in (UserRole.GESTOR, UserRole.MOTORISTA):
         raise ForbiddenError("Permissão negada")
 
@@ -79,11 +79,11 @@ def update_ponto(user_id: str, ponto_id: str, data: dict[str, Any]) -> Ponto:
 
     Raises: ForbiddenError, NotFoundError, AppError
     """
-    user = User.query.get(user_id)
+    user = db.session.get(User, user_id)
     if not user or user.role != UserRole.GESTOR:
         raise ForbiddenError("Apenas gestores editam pontos")
 
-    ponto = Ponto.query.get(ponto_id)
+    ponto = db.session.get(Ponto, ponto_id)
     if not ponto:
         raise NotFoundError("Ponto não encontrado")
 
@@ -113,11 +113,11 @@ def delete_ponto(user_id: str, ponto_id: str) -> None:
 
     Raises: ForbiddenError, NotFoundError, AppError
     """
-    user = User.query.get(user_id)
+    user = db.session.get(User, user_id)
     if not user or user.role != UserRole.GESTOR:
         raise ForbiddenError("Permissão negada")
 
-    ponto = Ponto.query.get(ponto_id)
+    ponto = db.session.get(Ponto, ponto_id)
     if not ponto:
         raise NotFoundError("Ponto não encontrado")
 

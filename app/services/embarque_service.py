@@ -457,7 +457,7 @@ def endpoint_descontinuado() -> None:
     )
 
 
-def conferir_embarque(user_id: IdLike, viagem_id: IdLike, qr: str) -> dict[str, Any]:
+def checkin_embarque(user_id: IdLike, viagem_id: IdLike, qr: str) -> dict[str, Any]:
     """RF-17 passo 1: confere a credencial lida e devolve o passageiro com a foto.
 
     Só leitura: não embarca ninguém nem marca a credencial como usada. Uma

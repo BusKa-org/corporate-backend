@@ -164,7 +164,7 @@ def test_rodada_completa_da_solicitacao_ao_embarque(
 
     # RF-17 — a leitura no ponto correto mostra a Ana com a foto, sem embarcá-la.
     qr_ana = _qr_do_app(credencial_ana, relogio)
-    r = condutor.post(f"/v1/embarque/viagens/{viagem_id}/conferencia", json={"qr_token": qr_ana})
+    r = condutor.post(f"/v1/embarque/viagens/{viagem_id}/checkin", json={"qr_token": qr_ana})
     assert r.status_code == 200, r.get_data(as_text=True)
     assert r.get_json()["ponto_embarque_id"] == str(p1.id)
     assert r.get_json()["sem_foto"] is False

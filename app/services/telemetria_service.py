@@ -17,7 +17,7 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import func
-from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.dialects.postgresql import distinct_on, insert as pg_insert
 
 from app.core.exceptions import ForbiddenError, NotFoundError
 from app.models.base import db
@@ -134,7 +134,7 @@ def ultimo_por_veiculo(gestor_id: str) -> list[TelemetriaVeiculo]:
         db.session.query(TelemetriaVeiculo)
         .join(Onibus, TelemetriaVeiculo.veiculo_id == Onibus.id)
         .filter(Onibus.organizacao_id == gestor.organizacao_id)
-        .distinct(TelemetriaVeiculo.veiculo_id)
+        .ext(distinct_on(TelemetriaVeiculo.veiculo_id))
         .order_by(TelemetriaVeiculo.veiculo_id, TelemetriaVeiculo.timestamp.desc())
         .all()
     )

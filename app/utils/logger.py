@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from flask import Flask, g, has_request_context, request
-from pythonjsonlogger import jsonlogger
+from pythonjsonlogger.json import JsonFormatter
 
 
 class RequestIdFilter(logging.Filter):
@@ -28,7 +28,7 @@ class RequestIdFilter(logging.Filter):
         return True
 
 
-class CustomJsonFormatter(jsonlogger.JsonFormatter):
+class CustomJsonFormatter(JsonFormatter):
     """Custom JSON formatter with additional fields."""
 
     def add_fields(

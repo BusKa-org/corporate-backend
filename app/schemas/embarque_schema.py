@@ -12,7 +12,7 @@ from app.services.embarque_service import MOTIVOS_RECUSA, TIPOS_EVENTO
 
 
 class QrRequestSchema(BaseSchema):
-    """POST /embarque/viagens/<id>/conferencia e /confirmacao
+    """POST /embarque/viagens/<id>/checkin e /confirmacao
 
     Sem `ocorrido_em`: online vale o relógio do servidor.
     """
@@ -110,7 +110,7 @@ class EmbarqueResponseSchema(BaseSchema):
     sem_foto = fields.Boolean()
 
 
-class ConferenciaResponseSchema(BaseSchema):
+class CheckinResponseSchema(BaseSchema):
     viagem_id = fields.String()
     aluno_id = fields.String()
     nome = fields.String(allow_none=True)

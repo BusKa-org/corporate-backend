@@ -600,7 +600,7 @@
         ]
       }
     },
-    "/v1/embarque/viagens/{viagem_id}/conferencia": {
+    "/v1/embarque/viagens/{viagem_id}/checkin": {
       "parameters": [
         {
           "name": "viagem_id",
@@ -620,12 +620,12 @@
           "200": {
             "description": "Credencial válida, passageiro a conferir",
             "schema": {
-              "$ref": "#/definitions/ConferenciaResponse"
+              "$ref": "#/definitions/CheckinResponse"
             }
           }
         },
         "summary": "Confere o QR lido e devolve o passageiro com a foto, sem embarcar (RF-17)",
-        "operationId": "conferir_embarque",
+        "operationId": "checkin_embarque",
         "parameters": [
           {
             "name": "payload",
@@ -865,7 +865,7 @@
       "post": {
         "responses": {
           "410": {
-            "description": "ENDPOINT_DESCONTINUADO: use /conferencia e depois /confirmacao"
+            "description": "ENDPOINT_DESCONTINUADO: use /checkin e depois /confirmacao"
           }
         },
         "summary": "Descontinuado: embarcava na leitura, sem conferir a foto (RF-17)",
@@ -4856,7 +4856,7 @@
       },
       "type": "object"
     },
-    "ConferenciaResponse": {
+    "CheckinResponse": {
       "properties": {
         "viagem_id": {
           "type": "string",
