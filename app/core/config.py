@@ -108,11 +108,11 @@ class Settings:
             "SYNC_TOLERANCIA_SEGUNDOS", default=120, min_val=0, max_val=3600
         )
 
-        # Rate limit (Flask-Limiter). Formato do limite: "10 per minute", "200 per hour".
+        # Rate limit (Flask-Limiter). Formato do limite: "10 per minute", "2000 per hour".
         self.RATELIMIT_ENABLED = os.getenv("RATELIMIT_ENABLED", "true").lower() == "true"
         # memory:// conta separado em cada worker do gunicorn; produção usa Redis.
         self.RATELIMIT_STORAGE_URI = os.getenv("RATELIMIT_STORAGE_URI", "memory://")
-        self.RATELIMIT_DEFAULT = self._get_rate_limit("RATELIMIT_DEFAULT", "200 per hour")
+        self.RATELIMIT_DEFAULT = self._get_rate_limit("RATELIMIT_DEFAULT", "2000 per hour")
         self.RATELIMIT_AUTH = self._get_rate_limit("RATELIMIT_AUTH", "10 per minute")
         self.RATELIMIT_SENSITIVE = self._get_rate_limit("RATELIMIT_SENSITIVE", "5 per minute")
         # GPS, telemetria e embarque mandam muitas requisições seguidas do mesmo usuário.

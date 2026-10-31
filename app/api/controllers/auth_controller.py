@@ -5,7 +5,11 @@ from flask_restx import Namespace, Resource
 
 from app.api.contracts import auth_contract
 from app.core.exceptions import ValidationError
-from app.extensions import limite_auth, limite_sensivel
+from app.extensions import (
+    limite_auth_por_email,
+    limite_auth_por_token,
+    limite_sensivel_por_email_ou_token,
+)
 from app.schemas.auth_schema import LoginRequestSchema, TokenResponseSchema
 from app.services import auth_service
 
@@ -31,7 +35,7 @@ class AuthLogin(Resource):
     )
     @api.expect(models["login_request"])
     @api.response(200, "Success", models["token_response"])
-    @limite_auth
+    @limite_auth_por_email
     def post(self) -> tuple[dict[str, Any], int]:
         """
         Authenticate user and get JWT token.
@@ -56,7 +60,7 @@ class AuthForgotPassword(Resource):
         },
     )
     @api.expect(models["forgot_password_request"])
-    @limite_auth
+    @limite_auth_por_email
     def post(self) -> tuple[dict[str, Any], int]:
         """Request password recovery. Sends email with reset link if the user exists."""
         data = request.get_json() or {}
@@ -100,7 +104,7 @@ def _reset_password_form_html(token: str, action_url: str) -> str:
 @api.route("/reset-password")
 @api.doc(False)
 class AuthResetPassword(Resource):
-    @limite_auth
+    @limite_auth_por_token
     def get(self) -> Response:
         """Serve HTML form to reset password (link in email)."""
         token = request.args.get("token", "").strip()
@@ -111,7 +115,7 @@ class AuthResetPassword(Resource):
         html = _reset_password_form_html(token, action_url)
         return Response(html, status=200, mimetype="text/html; charset=utf-8")
 
-    @limite_sensivel
+    @limite_sensivel_por_email_ou_token
     def post(self) -> tuple[dict[str, Any], int]:
         """Reset password with token (from form or API)."""
         data = request.get_json(silent=True) or request.form

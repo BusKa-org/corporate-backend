@@ -4,7 +4,11 @@ from flask import request
 from flask_jwt_extended import get_jwt_identity, jwt_required
 from flask_restx import Namespace, Resource
 
-from app.extensions import limite_auth, limite_sensivel
+from app.extensions import (
+    limite_auth_por_email,
+    limite_auth_por_token,
+    limite_sensivel_por_email,
+)
 from app.schemas.convite_schema import (
     ConviteAceiteRequestSchema,
     ConviteListQuerySchema,
@@ -80,7 +84,7 @@ class ConviteAceiteResource(Resource):
         "consultar_convite",
         responses={200: "Dados do convite", 404: "Convite inválido ou expirado"},
     )
-    @limite_auth
+    @limite_auth_por_token
     def get(self, token: str) -> tuple[dict[str, Any], int]:
         """(Público) Dados preenchidos pelo gestor e os campos que ainda faltam"""
         return convite_service.consultar_por_token(token), 200
@@ -94,7 +98,7 @@ class ConviteAceiteResource(Resource):
             409: "E-mail ou CPF já cadastrado",
         },
     )
-    @limite_auth
+    @limite_auth_por_token
     def post(self, token: str) -> tuple[dict[str, str], int]:
         """(Público) Conclui o cadastro. Corpo: nome, cpf, telefone, instituicao_id, senha,
         necessidades_acessibilidade, observacao_acessibilidade"""
@@ -106,7 +110,7 @@ class ConviteAceiteResource(Resource):
 @api.route("/pin")
 class ConvitePinSolicitarResource(Resource):
     @api.doc("solicitar_pin_do_convite", responses={200: "Resposta igual para qualquer e-mail"})
-    @limite_auth
+    @limite_auth_por_email
     def post(self) -> tuple[dict[str, str], int]:
         """(Público) Envia um PIN de 10 minutos ao e-mail, se ele estiver habilitado. Corpo: {"email"}"""
         payload = pin_solicitar_schema.load(request.get_json(silent=True) or {})
@@ -121,7 +125,7 @@ class ConvitePinValidarResource(Resource):
     @api.doc(
         "validar_pin_do_convite", responses={200: "PIN correto", 400: "PIN inválido ou expirado"}
     )
-    @limite_sensivel
+    @limite_sensivel_por_email
     def post(self) -> tuple[dict[str, str], int]:
         """(Público) Confere o PIN. Devolve o token que abre /aceite/<token>. Corpo: {"email", "pin"}"""
         payload = pin_validar_schema.load(request.get_json(silent=True) or {})
