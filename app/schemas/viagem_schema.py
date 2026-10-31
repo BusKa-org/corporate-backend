@@ -147,6 +147,14 @@ class MessageResponseSchema(BaseSchema):
 class ViagemAlunoConfirmacaoResponseSchema(BaseSchema):
     aluno_id = fields.String()
     nome = fields.String(attribute="aluno.nome")
+    # Motorista confere a foto no embarque (RF-17) e vê quem precisa de ajuda.
+    foto_url = fields.String(attribute="aluno.foto_url", dump_default=None)
+    necessidades_acessibilidade = fields.List(
+        fields.String(), attribute="aluno.necessidades_acessibilidade"
+    )
+    observacao_acessibilidade = fields.String(
+        attribute="aluno.observacao_acessibilidade", dump_default=None
+    )
     confirmacao = fields.Boolean()
     ponto_embarque = fields.String(attribute="ponto_embarque.apelido")
     ponto_destino = fields.String(attribute="ponto_destino.apelido")

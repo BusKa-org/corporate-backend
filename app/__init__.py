@@ -108,6 +108,11 @@ def create_app(
     app.config["MAIL_USE_TLS"] = settings.MAIL_USE_TLS
     app.config["FRONTEND_URL"] = settings.FRONTEND_URL
     app.config["APP_DOWNLOAD_URL"] = settings.APP_DOWNLOAD_URL
+    app.config["FOTOS_ALUNO_DIR"] = settings.FOTOS_ALUNO_DIR or os.path.join(
+        app.instance_path, "fotos_aluno"
+    )
+    app.config["FOTO_ALUNO_MAX_BYTES"] = settings.FOTO_ALUNO_MAX_BYTES
+    app.config["FOTO_ALUNO_MAX_PIXELS"] = settings.FOTO_ALUNO_MAX_PIXELS
 
     # Maximum request size (16MB)
     app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024

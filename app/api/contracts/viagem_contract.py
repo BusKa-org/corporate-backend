@@ -58,6 +58,9 @@ def register_models(api):
         {
             "aluno_id": fields.String(description="UUID do aluno"),
             "nome": fields.String(description="Nome do aluno"),
+            "foto_url": fields.String(description="Caminho da foto (GET autenticado)"),
+            "necessidades_acessibilidade": fields.List(fields.String),
+            "observacao_acessibilidade": fields.String(),
             "confirmacao": fields.Boolean(description="Confirmado"),
             "ponto_embarque": fields.String(description="UUID do ponto de embarque"),
         },
