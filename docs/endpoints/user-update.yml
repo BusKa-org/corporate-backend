@@ -3,7 +3,7 @@ tags:
   - User
 summary: Update User Profile
 description: |
-  Allows the authenticated user to update their profile information.  
+  Allows the authenticated user to update their profile information.
   Requires a valid **JWT access token** provided in the `Authorization` header as a Bearer token.
 operationId: updateUser
 security:

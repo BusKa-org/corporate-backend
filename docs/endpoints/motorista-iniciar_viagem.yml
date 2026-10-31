@@ -3,8 +3,8 @@ tags:
   - Motorista
 summary: Iniciar Viagem
 description: |
-  Marca uma viagem como **iniciada**.  
-  Disponível apenas para usuários com o papel **motorista**.  
+  Marca uma viagem como **iniciada**.
+  Disponível apenas para usuários com o papel **motorista**.
   Requer um **JWT token** válido no cabeçalho `Authorization`.
 operationId: iniciarViagem
 security:

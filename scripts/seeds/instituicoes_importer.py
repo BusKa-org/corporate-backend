@@ -1,13 +1,12 @@
 import csv
 from pathlib import Path
 
+from app.models.prefeitura import Prefeitura
 from sqlalchemy.dialects.postgresql import insert
 
 from app.models.base import db
 from app.models.enum import TipoInstituicao
 from app.models.geo import Instituicao
-from app.models.prefeitura import Prefeitura
-
 
 BATCH_SIZE = 10
 
@@ -44,6 +43,7 @@ def _clean(value: str | None) -> str | None:
 def _normalize_key(value: str) -> str:
     return value.strip().lower()
 
+
 def _normalize_ibge_code(value: str | None) -> str | None:
     cleaned = _clean(value)
     if not cleaned:
@@ -54,6 +54,7 @@ def _normalize_ibge_code(value: str | None) -> str | None:
         return None
 
     return str(int(digits_only))
+
 
 def _load_prefeitura_indexes():
     prefeituras = Prefeitura.query.all()

@@ -3,9 +3,9 @@ tags:
   - Motorista
 summary: Adicionar Pontos à Rota
 description: |
-  Permite que um motorista adicione pontos (localizações) a uma rota existente.  
-  Cada ponto contém nome, latitude e longitude.  
-  Apenas usuários com o papel **motorista** podem acessar este endpoint.  
+  Permite que um motorista adicione pontos (localizações) a uma rota existente.
+  Cada ponto contém nome, latitude e longitude.
+  Apenas usuários com o papel **motorista** podem acessar este endpoint.
   Requer um **JWT token** válido no cabeçalho `Authorization`.
 operationId: adicionarPonto
 security:

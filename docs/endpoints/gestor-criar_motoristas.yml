@@ -3,8 +3,8 @@ tags:
   - Gestor
 summary: Criar Novo Motorista
 description: |
-  Cria um novo **motorista** (usuário com papel de motorista) vinculado ao mesmo município do gestor autenticado.  
-  Apenas usuários com o papel **gestor** podem acessar este endpoint.  
+  Cria um novo **motorista** (usuário com papel de motorista) vinculado ao mesmo município do gestor autenticado.
+  Apenas usuários com o papel **gestor** podem acessar este endpoint.
   Requer um **JWT token** válido no cabeçalho `Authorization`.
 operationId: criarMotoristaGestor
 security:
