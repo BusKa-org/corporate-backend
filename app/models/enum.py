@@ -105,6 +105,12 @@ class StatusOcorrencia(enum.Enum):
     RESOLVIDA = "RESOLVIDA"
 
 
+class StatusMotorista(enum.Enum):
+    ATIVO = "ATIVO"
+    EM_ROTA = "EM_ROTA"
+    EM_DESCANSO_OBRIGATORIO = "EM_DESCANSO_OBRIGATORIO"
+
+
 class NecessidadeAcessibilidade(enum.Enum):
     CADEIRA_DE_RODAS = "CADEIRA_DE_RODAS"
     MOBILIDADE_REDUZIDA = "MOBILIDADE_REDUZIDA"

@@ -6,6 +6,8 @@ description: |
   Marca uma viagem como **iniciada**.  
   Disponível apenas para usuários com o papel **motorista**.  
   Requer um **JWT token** válido no cabeçalho `Authorization`.
+  O motorista não pode ter outra viagem em andamento nem descanso obrigatório pendente,
+  e precisa estar no dia e no horário de trabalho. Com a viagem em andamento, ele aparece como `EM_ROTA`.
 operationId: iniciarViagem
 security:
   - BearerAuth: []
@@ -31,8 +33,12 @@ responses:
         message:
           type: string
           example: "Viagem iniciada com sucesso."
+  409:
+    description: Motorista já está `EM_ROTA` em outra viagem.
   403:
-    description: Acesso negado — apenas motoristas podem iniciar viagens.
+    description: |
+      Acesso negado — viagem de outro motorista, fora do dia/horário de trabalho, ou
+      descanso obrigatório pendente (a mensagem informa o horário em que pode voltar a dirigir).
     schema:
       type: object
       properties:

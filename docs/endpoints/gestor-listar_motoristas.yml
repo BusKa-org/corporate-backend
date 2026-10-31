@@ -36,6 +36,16 @@ responses:
             type: string
             example: "joao.motorista@buska.app"
             description: Endereço de e-mail do motorista.
+          status_motorista:
+            type: string
+            enum: [ATIVO, EM_ROTA, EM_DESCANSO_OBRIGATORIO]
+            example: "EM_DESCANSO_OBRIGATORIO"
+            description: Estado do motorista, calculado pelas viagens e por descanso_ate (não editável).
+          descanso_ate:
+            type: string
+            format: date-time
+            example: "2026-10-31T14:30:00+00:00"
+            description: Fim do descanso obrigatório. Nulo fora de EM_DESCANSO_OBRIGATORIO.
     examples:
       application/json:
         - id: 4
