@@ -4,7 +4,7 @@ from flask import request
 from flask_jwt_extended import get_jwt_identity, jwt_required
 from flask_restx import Namespace, Resource
 
-from app.api.contracts import ponto_contract, rota_contract
+from app.api.contracts import ponto_contract, rota_contract, solicitacao_contract
 from app.schemas.horario_schema import (
     HorarioCreateRequestSchema,
     HorarioListResponseSchema,
@@ -21,13 +21,16 @@ from app.schemas.rota_schema import (
     RotaResponseSchema,
     RotaUpdateRequestSchema,
 )
-from app.services import rotas_service
+from app.schemas.solicitacao_schema import SolicitacaoResponseSchema
+from app.services import rotas_service, solicitacoes_service
+from app.services.consentimento_service import exige_consentimento
 
 api = Namespace("rotas", description="Gestão de Rotas")
 
 # API contracts (Swagger documentation)
 models = rota_contract.register_models(api)
 ponto_models = ponto_contract.register_models(api)
+solicitacao_models = solicitacao_contract.register_models(api)
 
 # Validation schemas (Marshmallow)
 rota_response_schema = RotaResponseSchema()
@@ -37,6 +40,7 @@ rota_detail_response_schema = RotaDetailResponseSchema()
 rota_create_request_schema = RotaCreateRequestSchema()
 rota_update_request_schema = RotaUpdateRequestSchema()
 pontos_add_request_schema = RotaPontosAddRequestSchema()
+solicitacao_response_schema = SolicitacaoResponseSchema()
 
 horario_create_request_schema = HorarioCreateRequestSchema()
 horario_response_schema = HorarioResponseSchema()
@@ -186,16 +190,6 @@ class RotaResource(Resource):
         current_user_id = get_jwt_identity()
         rotas_service.delete_rota(current_user_id, id)
         return {"message": "Rota removida com sucesso"}, 200
-
-
-# RF-10: solicitação de viagem sob demanda
-from app.api.contracts import solicitacao_contract  # noqa: E402
-from app.schemas.solicitacao_schema import SolicitacaoResponseSchema  # noqa: E402
-from app.services import solicitacoes_service  # noqa: E402
-from app.services.consentimento_service import exige_consentimento  # noqa: E402
-
-solicitacao_models = solicitacao_contract.register_models(api)
-solicitacao_response_schema = SolicitacaoResponseSchema()
 
 
 @api.route("/<string:id>/solicitacoes")
