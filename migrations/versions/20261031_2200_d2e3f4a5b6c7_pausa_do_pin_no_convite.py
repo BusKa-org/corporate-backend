@@ -6,7 +6,7 @@ new PIN. When it reaches the limit, PIN entry pauses until pin_bloqueado_ate;
 the pause ending (or the gestor resending the invitation) resets it.
 
 Revision ID: d2e3f4a5b6c7
-Revises: c1d2e3f4a5b6
+Revises: e4f5a6b7c8d9
 Create Date: 2026-10-31 20:00:00.000000+00:00
 """
 
@@ -17,7 +17,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic
 revision: str = "d2e3f4a5b6c7"
-down_revision: Union[str, None] = "c1d2e3f4a5b6"
+down_revision: Union[str, None] = "e4f5a6b7c8d9"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
