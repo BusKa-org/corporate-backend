@@ -99,6 +99,8 @@ All notable changes to this project will be documented in this file.
   Invitations replace all of them: nobody signs up on their own.
 
 ### Fixed
+- `PUT /v1/alunos/me/foto`: a PNG and a JPEG uploaded at the same time could delete each
+  other and leave the student with no photo file. Uploads of the same student now run one at a time.
 - `DELETE /v1/users/me` sent twice at the same time returned 500 for one of them; the account
   row is now locked and the second request gets 401.
 - `POST /v1/convites/pin/validar` locks the invitation. Parallel wrong guesses were counted as
