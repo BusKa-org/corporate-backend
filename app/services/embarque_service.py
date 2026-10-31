@@ -634,7 +634,8 @@ def sincronizar(
     de estado que já é observável (o passageiro embarcou, a parada foi
     transposta), então reenviar o lote encontra o estado pronto e não faz nada.
     As exceções são a posição e a recusa, que são append-only: o `id` da linha
-    (telemetria ou ocorrência) é derivado do identificador do evento (UUIDv5),
+    (telemetria ou ocorrência) é derivado da viagem e do identificador do evento
+    (UUIDv5),
     e a chave primária cuida da duplicata.
 
     Eventos chegam fora de ordem e atrasados, então valem pelo carimbo que
