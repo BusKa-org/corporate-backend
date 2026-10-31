@@ -8,6 +8,7 @@ from app.models.enum import StatusViagem
 from app.models.rota import HorarioRota, Rota
 from app.models.viagem import AlunosConfirmados, TelemetriaViagem, Viagem, ViagemPonto
 from app.services.user_service import _get_gestor_or_403
+from app.services.viagens_service import juntar_rota
 
 logger = logging.getLogger(__name__)
 
@@ -18,9 +19,7 @@ def obter_progresso_viagem(gestor_id: str, viagem_id: str) -> list[dict]:
     gestor = _get_gestor_or_403(gestor_id, "Apenas gestores podem auditar o trajeto de viagens")
 
     viagem = (
-        db.session.query(Viagem)
-        .join(HorarioRota)
-        .join(Rota)
+        juntar_rota(db.session.query(Viagem))
         .filter(Viagem.id == viagem_id, Rota.organizacao_id == gestor.organizacao_id)
         .first()
     )
@@ -54,12 +53,12 @@ def relatorio_periodo_gestor(gestor_id: str, data_inicio: str, data_fim: str) ->
 
     try:
         stats_viagem = (
-            db.session.query(
-                func.count(Viagem.id).label("total_viagens"),
-                func.sum(Viagem.km_real).label("km_total_rodado"),
+            juntar_rota(
+                db.session.query(
+                    func.count(Viagem.id).label("total_viagens"),
+                    func.sum(Viagem.km_real).label("km_total_rodado"),
+                ).select_from(Viagem)
             )
-            .join(HorarioRota, Viagem.horario_rota_id == HorarioRota.id)
-            .join(Rota, HorarioRota.rota_id == Rota.id)
             .filter(
                 Rota.organizacao_id == gestor.organizacao_id,
                 Viagem.data >= data_inicio,
@@ -86,8 +85,8 @@ def relatorio_periodo_gestor(gestor_id: str, data_inicio: str, data_fim: str) ->
                 ).label("total_desperdicio"),
             )
             .select_from(Viagem)
-            .join(HorarioRota, Viagem.horario_rota_id == HorarioRota.id)
-            .join(Rota, HorarioRota.rota_id == Rota.id)
+            .outerjoin(HorarioRota, Viagem.horario_rota_id == HorarioRota.id)
+            .join(Rota, Rota.id == func.coalesce(Viagem.rota_id, HorarioRota.rota_id))
             .join(AlunosConfirmados, Viagem.id == AlunosConfirmados.viagem_id)
             .filter(
                 Rota.organizacao_id == gestor.organizacao_id,
@@ -125,9 +124,7 @@ def obter_telemetria_viagem(gestor_id: str, viagem_id: str) -> list[dict]:
     gestor = _get_gestor_or_403(gestor_id, "Apenas gestores podem auditar a telemetria de viagens")
 
     viagem = (
-        db.session.query(Viagem)
-        .join(HorarioRota)
-        .join(Rota)
+        juntar_rota(db.session.query(Viagem))
         .filter(Viagem.id == viagem_id, Rota.organizacao_id == gestor.organizacao_id)
         .first()
     )
