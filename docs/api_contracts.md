@@ -188,55 +188,119 @@ length is set per route (`buffer_minutos`), not per window.
 
 ## Embarque por QR com conferência da foto (RF-15 a RF-18)
 
+### QR dinâmico (RF-15)
+
+`GET /v1/viagens/<id>/credencial-embarque` (aluno) devolve
+`{credencial_id, segredo, algoritmo, passo_segundos, digitos, ponto_embarque_id, expira_em, usado}`.
+Sai o `token` estático. O app do aluno gera o código sem rede, no padrão TOTP (RFC 6238):
+`HMAC-SHA1(segredo, floor(unix_time / passo_segundos))` com truncamento dinâmico, `digitos`
+dígitos (padrão 30 s e 6 dígitos; o `segredo` vem em hexadecimal, 32 bytes). O QR desenhado
+é `<credencial_id>.<codigo>` e muda a cada passo. O servidor aceita o passo corrente e
+`QR_JANELA_PASSOS` passos de cada lado (padrão 1). A credencial continua valendo 4 h e uma vez.
+Vale a credencial do ponto em que o aluno está hoje na lista; há no máximo uma ativa por
+aluno e viagem (reemitida para outro ponto, a antiga é revogada).
+
+### Embarque (RF-17)
+
 Todas as rotas abaixo são do motorista da viagem, com a viagem `EM_ANDAMENTO`
-(outro motorista ou papel: 403). Recusas usam o corpo de erro padrão com um `code`:
-`CREDENCIAL_DESCONHECIDA` (404), `CREDENCIAL_DE_OUTRA_VIAGEM`, `CREDENCIAL_DE_OUTRO_PONTO`,
-`CREDENCIAL_JA_UTILIZADA`, `CREDENCIAL_EXPIRADA`, `PASSAGEIRO_NAO_PREVISTO` (409).
+(outro motorista ou papel: 403). Online vale sempre o relógio do servidor: `ocorrido_em`
+saiu dos corpos de `conferencia`, `confirmacao`, `recusa` e `manual` e é ignorado se vier.
+`qr_token` é o conteúdo lido do QR, `<credencial_id>.<codigo>`. Recusas usam o corpo de erro
+padrão com um `code`:
+
+| code | status | quando |
+|---|---|---|
+| `CREDENCIAL_DESCONHECIDA` | 404 | QR fora do formato ou credencial inexistente |
+| `CREDENCIAL_DE_OUTRA_VIAGEM` | 409 | credencial de outra viagem |
+| `CREDENCIAL_DE_OUTRO_PONTO` | 409 | o passageiro embarca em outra parada |
+| `CREDENCIAL_DESATUALIZADA` | 409 | o ponto do aluno mudou ou a credencial foi reemitida |
+| `CREDENCIAL_RECUSADA` | 409 | o motorista já recusou este QR nesta viagem |
+| `CREDENCIAL_JA_UTILIZADA` | 409 | o passageiro já embarcou |
+| `CREDENCIAL_EXPIRADA` | 409 | passou a validade de 4 h |
+| `CODIGO_EXPIRADO` | 409 | código fora da janela (print antigo) ou de outra credencial |
+| `PASSAGEIRO_NAO_PREVISTO` | 409 | aluno fora da lista de embarque |
+| `SEM_FOTO_EXIGE_MANUAL` | 409 | confirmação de aluno sem foto (só em `confirmacao`) |
 
 O embarque por QR tem dois passos:
 
-1. `POST /v1/embarque/viagens/<id>/validacao` `{qr_token, ocorrido_em?}`: confere a credencial
-   (desta viagem, do ponto corrente, sem uso, não expirada) e devolve
-   `{viagem_id, aluno_id, nome, foto_url, sem_foto, ponto_embarque_id, ponto_destino_id}`.
+1. `POST /v1/embarque/viagens/<id>/conferencia` `{qr_token}`: confere a credencial e o código e
+   devolve `{viagem_id, aluno_id, nome, foto_url, sem_foto, ponto_embarque_id, ponto_destino_id}`.
    **Não embarca e não consome a credencial.** Credencial inválida: erro, sem foto.
 2. O motorista compara a foto com a pessoa e chama um dos dois:
-   - `POST /v1/embarque/viagens/<id>/confirmacao` `{qr_token, ocorrido_em?}`: refaz as
-     conferências, registra o embarque (`embarcado_em`) e marca a credencial como usada.
+   - `POST /v1/embarque/viagens/<id>/confirmacao` `{qr_token}`: refaz as conferências com as
+     linhas travadas, registra o embarque (`embarcado_em`) e marca a credencial como usada.
      Resposta: `{viagem_id, aluno_id, nome, ponto_embarque_id, embarcado_em, manual: false,
-     foto_url, sem_foto}`. A segunda confirmação do mesmo token: 409 `CREDENCIAL_JA_UTILIZADA`.
-   - `POST /v1/embarque/viagens/<id>/recusa` `{qr_token, motivo, observacao?, ocorrido_em?}`,
+     foto_url, sem_foto}`. Duas confirmações ao mesmo tempo: uma embarca, a outra recebe 409
+     `CREDENCIAL_JA_UTILIZADA`. Se o código girou além da janela entre os dois passos
+     (`CODIGO_EXPIRADO`), o app relê o QR.
+   - `POST /v1/embarque/viagens/<id>/recusa` `{qr_token, motivo, observacao?}`,
      `motivo` = `FOTO_NAO_CONFERE` ou `SEM_FOTO`, `observacao` até 500 caracteres: não embarca,
-     a credencial continua sem uso e abre uma ocorrência (`OUTRO`, `ABERTA`) para o gestor.
-     Resposta: `{viagem_id, aluno_id, motivo, ocorrencia_id}`. O passageiro real ainda pode
-     embarcar pelo fallback manual.
+     **recusa a credencial** e abre uma ocorrência (`OUTRO`, `ABERTA`) para o gestor. Resposta:
+     `{viagem_id, aluno_id, motivo, ocorrencia_id}`. A recusa não confere o código (ele pode
+     ter girado enquanto o motorista olhava a foto). Daí em diante o mesmo QR recebe
+     `CREDENCIAL_RECUSADA` em `conferencia`, `confirmacao` e na fila offline: a vaga fica
+     indisponível para aquela credencial. O passageiro real embarca pelo fallback manual,
+     conferido pela foto da lista do ponto. Não há rota para desfazer a recusa.
 
-Aluno sem foto (`sem_foto: true`, `foto_url: null`): a confirmação embarca mesmo assim e
-abre uma ocorrência (`OUTRO`, `ABERTA`) avisando que ninguém conferiu o rosto. O motorista
-também pode recusar com `SEM_FOTO`.
+Aluno sem foto: `conferencia` devolve `sem_foto: true`, `foto_url: null`, e `confirmacao`
+recusa com `SEM_FOTO_EXIGE_MANUAL`. O motorista usa o fallback manual (que gera ocorrência) ou
+recusa com `SEM_FOTO`.
 
-`POST /v1/embarque/viagens/<id>/manual` `{aluno_id}` (falha de leitura do QR): o motorista
-confere o rosto pela foto da lista do ponto. Continua gerando uma ocorrência (`RESOLVIDA`) por uso.
-A resposta ganha `foto_url` e `sem_foto`.
+`POST /v1/embarque/viagens/<id>/validacao`: **descontinuado, responde 410**
+`ENDPOINT_DESCONTINUADO` com a mensagem "Esta versão do app do motorista não é mais suportada.
+Atualize o app...".
+
+`POST /v1/embarque/viagens/<id>/manual` `{aluno_id}` (falha de leitura do QR, aluno sem foto,
+passageiro real depois de uma recusa): o motorista confere o rosto pela foto da lista do ponto.
+Gera uma ocorrência (`RESOLVIDA`) por uso. A resposta traz `foto_url` e `sem_foto`.
 
 `GET /v1/embarque/viagens/<id>/roteiro` (e `.../roteiro/avancar`): cada passageiro de
-`pontos[].passageiros` ganha `foto_url` e `sem_foto`. É a lista do ponto para o fallback
-manual e o que o app baixa antes de perder a rede: as fotos são lidas em
+`pontos[].passageiros` traz `foto_url`, `sem_foto`, `credencial_id` e `qr_segredo` (sai
+`qr_token`). É a lista do ponto para o fallback manual e o que o app baixa antes de perder a
+rede: com o `qr_segredo` o app confere o código do QR sem conexão, e as fotos são lidas em
 `GET /v1/alunos/<aluno_id>/foto`, liberado ao motorista enquanto a viagem está em rota.
 
-`POST /v1/embarque/viagens/<id>/sincronizacao` (RF-18): o evento `EMBARQUE` é o QR já
-confirmado pelo motorista. Novo tipo `RECUSA` com `qr_token`, `motivo`, `observacao?`: abre a
-ocorrência uma vez só por `evento_id` (reenvio: `ja_aplicado`). A recusa offline não exige o
-ponto corrente nem a credencial sem uso, porque pode chegar depois do embarque manual.
+### Fila offline (RF-18)
+
+`POST /v1/embarque/viagens/<id>/sincronizacao`:
+
+- `EMBARQUE_CONFIRMADO` `{qr_token, ponto_id?}`: o QR conferido e confirmado pelo motorista.
+  O código é conferido contra o `ocorrido_em` do evento. Mesmas recusas do online.
+- `EMBARQUE` (o tipo antigo): recusado evento a evento com `EVENTO_DESCONTINUADO`; os outros
+  eventos do lote seguem.
+- `RECUSA` `{qr_token, motivo, observacao?}`: abre a ocorrência uma vez só por `evento_id`
+  (reenvio: `ja_aplicado`) e recusa a credencial. Não exige o ponto corrente nem a credencial
+  sem uso, porque pode chegar depois do embarque manual do passageiro real.
+- `EMBARQUE_MANUAL`, `CHEGADA_PONTO` e `POSICAO` sem mudança.
+
+Os eventos são aplicados em ordem de `ocorrido_em` (empate: ordem da fila) e `resultados` sai
+nessa ordem. Uma `RECUSA` bloqueia qualquer embarque posterior do mesmo QR, no mesmo lote ou
+num lote seguinte (`CREDENCIAL_RECUSADA`). O `ocorrido_em` é limitado: mais de
+`SYNC_TOLERANCIA_SEGUNDOS` (padrão 120) no futuro do relógio do servidor dá
+`EVENTO_NO_FUTURO`, e um embarque ou recusa de antes da emissão da credencial (com a mesma
+tolerância) dá `EVENTO_ANTES_DA_CREDENCIAL`. A validade é conferida no `ocorrido_em`.
 
 ### Mudanças para os apps
 
-- **`POST .../validacao` não embarca mais.** O app precisa chamar `.../confirmacao` depois
-  que o motorista confirmar a foto. A resposta de `validacao` mudou (sai `embarcado_em` e
-  `manual`, entram `foto_url`, `sem_foto`, `ponto_destino_id`).
-- Novas rotas `POST .../confirmacao` e `POST .../recusa`.
-- Novos campos `foto_url` e `sem_foto` no roteiro e nas respostas de embarque.
-- Novo tipo de evento offline `RECUSA` (campos `motivo`, `observacao`). O app só enfileira
-  `EMBARQUE` depois da confirmação do motorista.
+App do aluno:
+
+- `GET .../credencial-embarque` não traz mais `token`. O app gera o código TOTP a partir de
+  `segredo`, `passo_segundos` e `digitos` e desenha o QR `<credencial_id>.<codigo>`,
+  renovando a cada passo. Um QR com o token antigo é recusado (`CREDENCIAL_DESCONHECIDA`).
+
+App do motorista:
+
+- **`POST .../validacao` responde 410** `ENDPOINT_DESCONTINUADO`: o app antigo falha alto e
+  pede atualização. A leitura passa a ser `POST .../conferencia`, que não embarca; depois o app
+  chama `.../confirmacao` ou `.../recusa`.
+- `qr_token` é o conteúdo do QR (`<credencial_id>.<codigo>`). `ocorrido_em` saiu das rotas
+  online.
+- Novos códigos de recusa: `CREDENCIAL_RECUSADA`, `CREDENCIAL_DESATUALIZADA`,
+  `CODIGO_EXPIRADO`, `SEM_FOTO_EXIGE_MANUAL`. Aluno sem foto: só pelo fallback manual.
+- Roteiro: `qr_token` vira `credencial_id` + `qr_segredo`; com eles o app confere o QR offline.
+- Fila offline: o embarque por QR é `EMBARQUE_CONFIRMADO`; `EMBARQUE` é recusado com
+  `EVENTO_DESCONTINUADO`. Novos códigos `EVENTO_NO_FUTURO` e `EVENTO_ANTES_DA_CREDENCIAL`.
+  Os `resultados` vêm em ordem de `ocorrido_em`; case por `evento_id`.
 
 ## Foto do aluno
 

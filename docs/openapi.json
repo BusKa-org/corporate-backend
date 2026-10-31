@@ -201,22 +201,6 @@
       }
     },
     "/v1/consentimento": {
-      "delete": {
-        "responses": {
-          "200": {
-            "description": "Consentimento revogado"
-          },
-          "409": {
-            "description": "Não há consentimento vigente"
-          }
-        },
-        "summary": "Revoga o consentimento",
-        "description": "O usuário volta ao estado pendente.",
-        "operationId": "revogar_consentimento",
-        "tags": [
-          "consentimento"
-        ]
-      },
       "get": {
         "responses": {
           "200": {
@@ -241,6 +225,22 @@
         "summary": "Registra o aceite da versão vigente do termo",
         "description": "Corpo: {\"versao\": \"...\"}",
         "operationId": "aceitar_consentimento",
+        "tags": [
+          "consentimento"
+        ]
+      },
+      "delete": {
+        "responses": {
+          "200": {
+            "description": "Consentimento revogado"
+          },
+          "409": {
+            "description": "Não há consentimento vigente"
+          }
+        },
+        "summary": "Revoga o consentimento",
+        "description": "O usuário volta ao estado pendente.",
+        "operationId": "revogar_consentimento",
         "tags": [
           "consentimento"
         ]
@@ -600,6 +600,47 @@
         ]
       }
     },
+    "/v1/embarque/viagens/{viagem_id}/conferencia": {
+      "parameters": [
+        {
+          "name": "viagem_id",
+          "in": "path",
+          "required": true,
+          "type": "string"
+        }
+      ],
+      "post": {
+        "responses": {
+          "409": {
+            "description": "CREDENCIAL_DE_OUTRA_VIAGEM, CREDENCIAL_DE_OUTRO_PONTO, CREDENCIAL_JA_UTILIZADA, CREDENCIAL_EXPIRADA, CREDENCIAL_RECUSADA, CREDENCIAL_DESATUALIZADA ou CODIGO_EXPIRADO"
+          },
+          "404": {
+            "description": "CREDENCIAL_DESCONHECIDA"
+          },
+          "200": {
+            "description": "Credencial válida, passageiro a conferir",
+            "schema": {
+              "$ref": "#/definitions/ConferenciaResponse"
+            }
+          }
+        },
+        "summary": "Confere o QR lido e devolve o passageiro com a foto, sem embarcar (RF-17)",
+        "operationId": "conferir_embarque",
+        "parameters": [
+          {
+            "name": "payload",
+            "required": true,
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/QrEmbarqueRequest"
+            }
+          }
+        ],
+        "tags": [
+          "embarque"
+        ]
+      }
+    },
     "/v1/embarque/viagens/{viagem_id}/confirmacao": {
       "parameters": [
         {
@@ -612,7 +653,7 @@
       "post": {
         "responses": {
           "409": {
-            "description": "CREDENCIAL_DE_OUTRA_VIAGEM, CREDENCIAL_DE_OUTRO_PONTO ou JA_UTILIZADA"
+            "description": "CREDENCIAL_DE_OUTRA_VIAGEM, CREDENCIAL_DE_OUTRO_PONTO, CREDENCIAL_JA_UTILIZADA, CREDENCIAL_EXPIRADA, CREDENCIAL_RECUSADA, CREDENCIAL_DESATUALIZADA ou CODIGO_EXPIRADO ou SEM_FOTO_EXIGE_MANUAL"
           },
           "404": {
             "description": "CREDENCIAL_DESCONHECIDA"
@@ -632,7 +673,7 @@
             "required": true,
             "in": "body",
             "schema": {
-              "$ref": "#/definitions/ValidarEmbarqueRequest"
+              "$ref": "#/definitions/QrEmbarqueRequest"
             }
           }
         ],
@@ -688,7 +729,7 @@
       "post": {
         "responses": {
           "409": {
-            "description": "CREDENCIAL_DE_OUTRA_VIAGEM, CREDENCIAL_DE_OUTRO_PONTO ou JA_UTILIZADA"
+            "description": "CREDENCIAL_DE_OUTRA_VIAGEM, CREDENCIAL_DE_OUTRO_PONTO, CREDENCIAL_JA_UTILIZADA, CREDENCIAL_EXPIRADA, CREDENCIAL_RECUSADA, CREDENCIAL_DESATUALIZADA ou CODIGO_EXPIRADO"
           },
           "404": {
             "description": "CREDENCIAL_DESCONHECIDA"
@@ -700,7 +741,7 @@
             }
           }
         },
-        "summary": "A foto não confere: não embarca e abre ocorrência para o gestor (RF-17)",
+        "summary": "A foto não confere: não embarca, recusa o QR e abre ocorrência (RF-17)",
         "operationId": "recusar_embarque",
         "parameters": [
           {
@@ -823,31 +864,12 @@
       ],
       "post": {
         "responses": {
-          "409": {
-            "description": "CREDENCIAL_DE_OUTRA_VIAGEM, CREDENCIAL_DE_OUTRO_PONTO ou JA_UTILIZADA"
-          },
-          "404": {
-            "description": "CREDENCIAL_DESCONHECIDA"
-          },
-          "200": {
-            "description": "Credencial válida, passageiro a conferir",
-            "schema": {
-              "$ref": "#/definitions/ConferenciaResponse"
-            }
+          "410": {
+            "description": "ENDPOINT_DESCONTINUADO: use /conferencia e depois /confirmacao"
           }
         },
-        "summary": "Confere a credencial lida e devolve o passageiro com a foto, sem embarcar (RF-17)",
-        "operationId": "validar_embarque",
-        "parameters": [
-          {
-            "name": "payload",
-            "required": true,
-            "in": "body",
-            "schema": {
-              "$ref": "#/definitions/ValidarEmbarqueRequest"
-            }
-          }
-        ],
+        "summary": "Descontinuado: embarcava na leitura, sem conferir a foto (RF-17)",
+        "operationId": "validar_embarque_descontinuado",
         "tags": [
           "embarque"
         ]
@@ -934,17 +956,6 @@
           "type": "string"
         }
       ],
-      "delete": {
-        "responses": {
-          "200": {
-            "description": "Success"
-          }
-        },
-        "operationId": "delete_instituicao",
-        "tags": [
-          "instituicoes"
-        ]
-      },
       "get": {
         "responses": {
           "200": {
@@ -955,6 +966,17 @@
           }
         },
         "operationId": "get_instituicao",
+        "tags": [
+          "instituicoes"
+        ]
+      },
+      "delete": {
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "operationId": "delete_instituicao",
         "tags": [
           "instituicoes"
         ]
@@ -1141,33 +1163,6 @@
           "type": "string"
         }
       ],
-      "delete": {
-        "responses": {
-          "200": {
-            "description": "Success"
-          }
-        },
-        "summary": "Remove um ônibus",
-        "operationId": "delete_onibus",
-        "tags": [
-          "onibus"
-        ]
-      },
-      "get": {
-        "responses": {
-          "200": {
-            "description": "Success",
-            "schema": {
-              "$ref": "#/definitions/OnibusResponse"
-            }
-          }
-        },
-        "summary": "Detalhes de um ônibus",
-        "operationId": "get_onibus",
-        "tags": [
-          "onibus"
-        ]
-      },
       "patch": {
         "responses": {
           "200": {
@@ -1189,6 +1184,33 @@
             }
           }
         ],
+        "tags": [
+          "onibus"
+        ]
+      },
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/OnibusResponse"
+            }
+          }
+        },
+        "summary": "Detalhes de um ônibus",
+        "operationId": "get_onibus",
+        "tags": [
+          "onibus"
+        ]
+      },
+      "delete": {
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "Remove um ônibus",
+        "operationId": "delete_onibus",
         "tags": [
           "onibus"
         ]
@@ -1321,13 +1343,16 @@
           "type": "string"
         }
       ],
-      "delete": {
+      "get": {
         "responses": {
           "200": {
-            "description": "Success"
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/PontoResponse"
+            }
           }
         },
-        "operationId": "delete_ponto",
+        "operationId": "get_ponto",
         "tags": [
           "pontos"
         ]
@@ -1356,16 +1381,13 @@
           "pontos"
         ]
       },
-      "get": {
+      "delete": {
         "responses": {
           "200": {
-            "description": "Success",
-            "schema": {
-              "$ref": "#/definitions/PontoResponse"
-            }
+            "description": "Success"
           }
         },
-        "operationId": "get_ponto",
+        "operationId": "delete_ponto",
         "tags": [
           "pontos"
         ]
@@ -1436,13 +1458,16 @@
           "type": "string"
         }
       ],
-      "delete": {
+      "get": {
         "responses": {
           "200": {
-            "description": "Success"
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/RotaDetailResponse"
+            }
           }
         },
-        "operationId": "delete_rota",
+        "operationId": "get_rota",
         "tags": [
           "rotas"
         ]
@@ -1468,16 +1493,13 @@
           "rotas"
         ]
       },
-      "get": {
+      "delete": {
         "responses": {
           "200": {
-            "description": "Success",
-            "schema": {
-              "$ref": "#/definitions/RotaDetailResponse"
-            }
+            "description": "Success"
           }
         },
-        "operationId": "get_rota",
+        "operationId": "delete_rota",
         "tags": [
           "rotas"
         ]
@@ -1900,46 +1922,6 @@
       }
     },
     "/v1/users/me": {
-      "delete": {
-        "responses": {
-          "200": {
-            "description": "Conta excluída"
-          },
-          "401": {
-            "description": "Credenciais inválidas"
-          },
-          "403": {
-            "description": "Somente passageiros podem excluir a conta"
-          },
-          "409": {
-            "description": "Viagem em andamento"
-          }
-        },
-        "summary": "Exclui a conta e os dados pessoais do passageiro logado",
-        "description": "Corpo: {\"email\", \"senha\"}",
-        "operationId": "delete_my_account",
-        "tags": [
-          "users"
-        ]
-      },
-      "get": {
-        "responses": {
-          "200": {
-            "description": "Success",
-            "schema": {
-              "$ref": "#/definitions/UserResponse"
-            }
-          },
-          "404": {
-            "description": "User not found"
-          }
-        },
-        "summary": "Perfil do usuário logado",
-        "operationId": "get_my_profile",
-        "tags": [
-          "users"
-        ]
-      },
       "patch": {
         "responses": {
           "200": {
@@ -1967,6 +1949,46 @@
             }
           }
         ],
+        "tags": [
+          "users"
+        ]
+      },
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/UserResponse"
+            }
+          },
+          "404": {
+            "description": "User not found"
+          }
+        },
+        "summary": "Perfil do usuário logado",
+        "operationId": "get_my_profile",
+        "tags": [
+          "users"
+        ]
+      },
+      "delete": {
+        "responses": {
+          "200": {
+            "description": "Conta excluída"
+          },
+          "401": {
+            "description": "Credenciais inválidas"
+          },
+          "403": {
+            "description": "Somente passageiros podem excluir a conta"
+          },
+          "409": {
+            "description": "Viagem em andamento"
+          }
+        },
+        "summary": "Exclui a conta e os dados pessoais do passageiro logado",
+        "description": "Corpo: {\"email\", \"senha\"}",
+        "operationId": "delete_my_account",
         "tags": [
           "users"
         ]
@@ -2047,27 +2069,6 @@
           "type": "string"
         }
       ],
-      "delete": {
-        "responses": {
-          "200": {
-            "description": "Deleted"
-          },
-          "403": {
-            "description": "Forbidden"
-          },
-          "404": {
-            "description": "Not found"
-          },
-          "400": {
-            "description": "Has linked trips"
-          }
-        },
-        "summary": "Gestor remove um motorista",
-        "operationId": "delete_motorista",
-        "tags": [
-          "users"
-        ]
-      },
       "patch": {
         "responses": {
           "200": {
@@ -2098,6 +2099,27 @@
             }
           }
         ],
+        "tags": [
+          "users"
+        ]
+      },
+      "delete": {
+        "responses": {
+          "200": {
+            "description": "Deleted"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "400": {
+            "description": "Has linked trips"
+          }
+        },
+        "summary": "Gestor remove um motorista",
+        "operationId": "delete_motorista",
         "tags": [
           "users"
         ]
@@ -3932,9 +3954,25 @@
     },
     "CredencialEmbarqueResponse": {
       "properties": {
-        "token": {
+        "credencial_id": {
           "type": "string",
-          "description": "Token opaco do QR de embarque"
+          "description": "UUID da credencial, início do QR"
+        },
+        "segredo": {
+          "type": "string",
+          "description": "Segredo do código TOTP (hex, 32 bytes)"
+        },
+        "algoritmo": {
+          "type": "string",
+          "description": "HMAC do TOTP (RFC 6238): SHA1"
+        },
+        "passo_segundos": {
+          "type": "integer",
+          "description": "O código muda a cada passo"
+        },
+        "digitos": {
+          "type": "integer",
+          "description": "Tamanho do código"
         },
         "ponto_embarque_id": {
           "type": "string",
@@ -4769,9 +4807,13 @@
           "type": "string",
           "description": "Nome do passageiro"
         },
-        "qr_token": {
+        "credencial_id": {
           "type": "string",
-          "description": "Credencial válida (matriz de permissões)"
+          "description": "Credencial ativa (matriz de permissões)"
+        },
+        "qr_segredo": {
+          "type": "string",
+          "description": "Segredo do QR, para conferir o código sem rede (hex)"
         },
         "embarcou": {
           "type": "boolean",
@@ -4802,19 +4844,14 @@
       },
       "type": "object"
     },
-    "ValidarEmbarqueRequest": {
+    "QrEmbarqueRequest": {
       "required": [
         "qr_token"
       ],
       "properties": {
         "qr_token": {
           "type": "string",
-          "description": "Credencial lida do QR Code"
-        },
-        "ocorrido_em": {
-          "type": "string",
-          "format": "date-time",
-          "description": "Momento da leitura (ISO 8601)"
+          "description": "Conteúdo do QR lido: <credencial_id>.<codigo>"
         }
       },
       "type": "object"
@@ -4898,7 +4935,7 @@
       "properties": {
         "qr_token": {
           "type": "string",
-          "description": "Credencial lida do QR Code"
+          "description": "Conteúdo do QR lido: <credencial_id>.<codigo>"
         },
         "motivo": {
           "type": "string",
@@ -4907,11 +4944,6 @@
         "observacao": {
           "type": "string",
           "description": "Texto livre do motorista (até 500)"
-        },
-        "ocorrido_em": {
-          "type": "string",
-          "format": "date-time",
-          "description": "Momento da recusa (ISO 8601)"
         }
       },
       "type": "object"
@@ -4945,11 +4977,6 @@
         "aluno_id": {
           "type": "string",
           "description": "UUID do aluno na lista do ponto"
-        },
-        "ocorrido_em": {
-          "type": "string",
-          "format": "date-time",
-          "description": "Momento do embarque (ISO 8601)"
         }
       },
       "type": "object"
@@ -4981,7 +5008,7 @@
         },
         "tipo": {
           "type": "string",
-          "description": "EMBARQUE, EMBARQUE_MANUAL, RECUSA, CHEGADA_PONTO ou POSICAO"
+          "description": "EMBARQUE_CONFIRMADO, EMBARQUE_MANUAL, RECUSA, CHEGADA_PONTO ou POSICAO (EMBARQUE é recusado com EVENTO_DESCONTINUADO)"
         },
         "ocorrido_em": {
           "type": "string",
@@ -4990,7 +5017,7 @@
         },
         "qr_token": {
           "type": "string",
-          "description": "Credencial lida (EMBARQUE, RECUSA)"
+          "description": "QR lido, <credencial_id>.<codigo> (EMBARQUE_CONFIRMADO, RECUSA)"
         },
         "motivo": {
           "type": "string",
