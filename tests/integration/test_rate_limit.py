@@ -197,7 +197,7 @@ def test_jwt_invalido_conta_pelo_ip(app):
         headers={"Authorization": "Bearer nao-e-um-jwt"},
         environ_base={"REMOTE_ADDR": "10.0.0.9"},
     ):
-        assert _chave_do_cliente() == "ip:10.0.0.9"
+        assert _chave_do_cliente() == f"ip:{_hash('10.0.0.9')}"
 
 
 @pytest.mark.integration
@@ -208,7 +208,7 @@ def test_token_de_conta_excluida_conta_pelo_ip(app, aluno, _db):
     with app.test_request_context(
         "/v1/users/me", headers=aluno.headers, environ_base={"REMOTE_ADDR": "10.0.0.9"}
     ):
-        assert _chave_do_cliente() == "ip:10.0.0.9"
+        assert _chave_do_cliente() == f"ip:{_hash('10.0.0.9')}"
 
 
 @pytest.mark.integration
@@ -251,7 +251,7 @@ def test_storage_fora_do_ar_nao_derruba_a_api(app):
 
 @pytest.mark.integration
 @pytest.mark.skipif(not os.getenv("REDIS_URL"), reason="REDIS_URL não definido")
-def test_contagem_fica_no_redis(app):
+def test_contagem_fica_no_redis(app, _db):
     import redis
 
     redis_url = os.environ["REDIS_URL"]
@@ -269,9 +269,16 @@ def test_contagem_fica_no_redis(app):
     token = str(uuid.uuid4())
     cliente.get(f"/v1/convites/aceite/{token}")
     cliente.post(LOGIN, json={"email": "segredo@x.com", "password": "e"})
-    for chave in conexao.keys("*"):
+    # Rota anônima sem limite próprio: conta pelo IP no limite padrão.
+    cliente.get("/v1/users/me")
+    chaves = conexao.keys("*")
+    # Sem estas chaves o laço abaixo passaria sem checar nada.
+    for prefixo in (b"token:", b"email:", b"ip:"):
+        assert any(prefixo in chave for chave in chaves), prefixo
+    for chave in chaves:
         assert token.encode() not in chave
         assert b"segredo@x.com" not in chave
+        assert b"127.0.0.1" not in chave
 
 
 @pytest.mark.integration

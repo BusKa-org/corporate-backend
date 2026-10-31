@@ -1,6 +1,7 @@
 """Flask extensions module to prevent circular imports."""
 
 import hashlib
+import hmac
 from collections.abc import Mapping
 from typing import Any
 
@@ -32,7 +33,8 @@ def _chave_do_cliente() -> str:
 
     if identidade:
         return f"user:{identidade}"
-    return f"ip:{get_remote_address()}"
+    # IP também é dado pessoal (LGPD): entra na chave só como HMAC.
+    return f"ip:{_hash(get_remote_address())}"
 
 
 def _corpo() -> Mapping[str, Any]:
@@ -75,8 +77,14 @@ def _token_da_requisicao() -> str | None:
 
 
 def _hash(valor: str) -> str:
-    """Token de reset/convite e e-mail não podem aparecer em claro nas chaves do Redis."""
-    return hashlib.sha256(valor.encode()).hexdigest()[:32]
+    """Token, e-mail e IP não podem aparecer em claro nas chaves do Redis.
+
+    HMAC com segredo do app: um SHA-256 puro de e-mail se reverte por dicionário.
+    Reusa o JWT_SECRET_KEY (o único segredo do app); trocar o segredo só zera
+    os contadores, que duram um minuto.
+    """
+    chave = current_app.config["JWT_SECRET_KEY"].encode()
+    return hmac.new(chave, valor.encode(), hashlib.sha256).hexdigest()[:32]
 
 
 def _chave_por_email() -> str:
