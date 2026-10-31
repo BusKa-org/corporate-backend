@@ -82,6 +82,10 @@ def register_models(api):
         "RotaUpdateRequest",
         {
             "nome": fields.String(required=True, description="Nome da rota"),
+            "tipo": fields.String(
+                enum=TIPOS_VIAGEM,
+                description="Não pode ser alterado: só o tipo atual é aceito (outro valor dá 400)",
+            ),
             "buffer_minutos": fields.Integer(description=BUFFER_DESC),
             "prazo_inicio_minutos": fields.Integer(description=PRAZO_DESC),
             "motorista_padrao_id": fields.String(description="UUID do motorista padrão"),

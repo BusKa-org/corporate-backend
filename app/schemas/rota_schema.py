@@ -59,6 +59,8 @@ class RotaUpdateRequestSchema(BaseSchema):
     """
 
     nome = fields.String()
+    # Só para recusar a troca com 400 em vez de ignorar o campo.
+    tipo = fields.Enum(TipoViagem)
     motorista_padrao_id = fields.String(allow_none=True)
     veiculo_padrao_id = fields.String(allow_none=True)
     buffer_minutos = fields.Integer(validate=BUFFER_MINUTOS_RANGE)

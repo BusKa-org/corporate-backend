@@ -476,6 +476,9 @@ def update_rota(user_id: str, rota_id: str, data: dict[str, Any]) -> Rota:
         )
         raise ForbiddenError("Acesso negado")
 
+    if "tipo" in data and data["tipo"] != rota.tipo:
+        raise ValidationError("O tipo da rota não pode ser alterado; crie uma nova rota")
+
     if rota.tipo != TipoViagem.SOB_DEMANDA and any(k in data for k in PARAMETROS_SOB_DEMANDA):
         raise ValidationError("Parâmetros de buffer só se aplicam a rotas sob demanda")
 
