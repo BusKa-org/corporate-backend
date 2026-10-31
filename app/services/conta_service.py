@@ -81,9 +81,6 @@ def _anonimizar(user: User) -> None:
         user.data_nascimento = None
         user.nome_responsavel = None
         user.cpf_responsavel = None
-        user.email_responsavel = None
-        user.guardian_token = None
-        user.guardian_consented_at = None
 
 
 def _apagar_ponto_casa(user: User) -> None:

@@ -50,13 +50,10 @@ class AlunoResponseSchema(BaseSchema):
     status = fields.String(attribute="status.value", dump_default=None)
     signup_completed_at = fields.DateTime(dump_default=None)
 
-    # Minor / guardian
     data_nascimento = fields.Date(dump_default=None)
     is_minor = fields.Boolean(dump_default=False)
-    email_responsavel = fields.Email(dump_default=None)
     nome_responsavel = fields.String(dump_default=None)
     cpf_responsavel = fields.String(dump_default=None)
-    guardian_consented_at = fields.DateTime(dump_default=None)
 
     foto_url = fields.String(dump_default=None)
     necessidades_acessibilidade = fields.List(fields.String())

@@ -16,7 +16,12 @@ class Rota(db.Model):
         ),
     )
 
-    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = db.Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        server_default=db.text("uuid_generate_v4()"),
+    )
     organizacao_id = db.Column(
         UUID(as_uuid=True), db.ForeignKey("organizacao.id", ondelete="CASCADE"), nullable=False
     )
@@ -78,7 +83,12 @@ class RotaPonto(db.Model):
 class HorarioRota(db.Model):
     __tablename__ = "horario_rota"
 
-    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = db.Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        server_default=db.text("uuid_generate_v4()"),
+    )
 
     rota_id = db.Column(
         UUID(as_uuid=True), db.ForeignKey("rota.id", ondelete="CASCADE"), nullable=False
@@ -95,7 +105,12 @@ class HorarioRota(db.Model):
 class DiasOperacao(db.Model):
     __tablename__ = "dias_operacao"
 
-    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = db.Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        server_default=db.text("uuid_generate_v4()"),
+    )
 
     horario_rota_id = db.Column(
         UUID(as_uuid=True), db.ForeignKey("horario_rota.id", ondelete="CASCADE"), nullable=False
