@@ -111,6 +111,8 @@ All notable changes to this project will be documented in this file.
   Invitations replace all of them: nobody signs up on their own.
 
 ### Fixed
+- Sending an e-mail no longer writes the SMTP password (`MAIL_PASSWORD`) to the logs. Rotate the
+  mail password if the logs of an earlier build were kept.
 - Rate limit keys no longer hold the raw password reset / invitation token, the
   e-mail or the client IP: all are stored as an HMAC-SHA256 keyed with
   `JWT_SECRET_KEY`, so they no longer appear in Redis key names.

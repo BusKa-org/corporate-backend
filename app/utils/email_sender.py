@@ -42,7 +42,6 @@ def send_email(
     logger.info("Mail server: %s", mail_server)
     logger.info("Mail port: %s", mail_port)
     logger.info("Mail username: %s", mail_username)
-    logger.info("Mail password: %s", mail_password)
     logger.info("Mail use TLS: %s", mail_use_tls)
 
     try:
