@@ -109,6 +109,7 @@ def create_app(
         app.instance_path, "fotos_aluno"
     )
     app.config["FOTO_ALUNO_MAX_BYTES"] = settings.FOTO_ALUNO_MAX_BYTES
+    app.config["FOTO_ALUNO_MAX_PIXELS"] = settings.FOTO_ALUNO_MAX_PIXELS
 
     # Maximum request size (16MB)
     app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024

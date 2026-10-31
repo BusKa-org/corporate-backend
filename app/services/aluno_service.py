@@ -19,7 +19,7 @@ from app.models.geo import Endereco, Ponto
 from app.models.user import Aluno, User
 from app.models.viagem import AlunosConfirmados, Viagem
 from app.services.user_service import _get_gestor_or_403, _get_user_or_404
-from app.utils.imagem import remover_metadados
+from app.utils.imagem import dimensoes, remover_metadados
 from app.utils.validators import validate_uuid
 
 logger = logging.getLogger(__name__)
@@ -198,6 +198,14 @@ def salvar_foto(user_id: str, arquivo: IO[bytes]) -> Aluno:
     tipo = _tipo_da_imagem(conteudo[:12])
     if tipo is None:
         raise ValidationError("A foto deve ser JPEG, PNG ou WEBP")
+
+    largura, altura = dimensoes(conteudo, tipo)
+    max_pixels = current_app.config["FOTO_ALUNO_MAX_PIXELS"]
+    if largura * altura > max_pixels:
+        raise ValidationError(
+            f"A foto deve ter no máximo {max_pixels / 1_000_000:g} megapixels "
+            f"(enviada: {largura}x{altura})"
+        )
 
     conteudo = remover_metadados(conteudo, tipo)
 
