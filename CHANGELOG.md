@@ -99,6 +99,8 @@ All notable changes to this project will be documented in this file.
   Invitations replace all of them: nobody signs up on their own.
 
 ### Fixed
+- `POST /v1/convites/pin/validar` locks the invitation. Parallel wrong guesses were counted as
+  one attempt (the 5-attempt limit could be bypassed) and the right PIN could be used twice.
 - `POST /v1/embarque/viagens/<id>/sincronizacao`: the same offline queue sent twice at the
   same time answered `recusado`/`CONFLICT` for `RECUSA` and `POSICAO` events instead of
   `ja_aplicado`. The duplicate check now runs after the row lock.
