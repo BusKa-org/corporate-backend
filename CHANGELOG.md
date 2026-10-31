@@ -26,6 +26,16 @@ All notable changes to this project will be documented in this file.
 - Trip types (`TipoViagem`: `FIXA`, `SOB_DEMANDA`) on `Rota`. On-demand routes
   take `buffer_minutos` (1–30, default 5) and `prazo_inicio_minutos` (1–120,
   default 10) instead of a timetable; `POST`/`PUT /v1/rotas` accept and return them.
+- On-demand trip lifecycle (Plan 2, RF-05/10/11/12/19). Availability windows per
+  vehicle with an assigned driver (`/v1/onibus/<id>/janelas`); ride requests
+  (`POST /v1/rotas/<id>/solicitacoes`) that open a `SOLICITADA` trip and notify the
+  window's driver; driver start (`POST /v1/viagens/<id>/iniciar-percurso`) that opens
+  the `BUFFER_ABERTO` window and broadcasts to the organization's students; request
+  cancellation (`DELETE /v1/viagens/<id>/solicitacao`), recorded as a no-show once the
+  trip is en route. Scheduler jobs close expired buffers (`EM_ANDAMENTO`) and alert the
+  gestor once when the driver misses the start deadline. Trips now carry `rota_id`,
+  `buffer_fim` and the new statuses. New settings `FUSO_HORARIO`,
+  `JOB_BUFFER_INTERVALO_SEGUNDOS`, `JOB_PRAZO_INICIO_INTERVALO_SEGUNDOS`.
 
 ### Removed
 - Passenger self-signup (`POST /v1/alunos/signup`), the guardian consent endpoints, the
@@ -34,6 +44,9 @@ All notable changes to this project will be documented in this file.
   Invitations replace all of them: nobody signs up on their own.
 
 ### Fixed
+- `PUT /v1/viagens/<id>/cancelar` checks that the trip belongs to the gestor's
+  organization (403 otherwise). Before, any gestor could cancel any trip.
+- `POST /v1/viagens/` returns the created trip serialized; it returned the raw ORM object.
 - `PUT /v1/alunos/me` is a partial update again: omitted fields are left alone. Before,
   the schema defaulted every omitted field to `None`, so sending only the address wiped
   `nome` and `matricula` and ended in a 500. `nome` and `endereco_casa` now return 400

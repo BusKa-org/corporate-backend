@@ -60,7 +60,7 @@ Each produces working, testable software on its own. See
 
 | Plan | Scope | Requirements | Depends on | Parallel? |
 |---|---|---|---|---|
-| 2. Trip lifecycle | `StatusViagem` → `OCIOSA→SOLICITADA→BUFFER_ABERTO→EM_ROTA→FINALIZADA`, availability windows, ride request, buffer timer, broadcast, cancellation | RF-05, 10, 11, 12, 19 | Foundation | Partially |
+| 2. Trip lifecycle — **done** (PR #7) | `StatusViagem` + `SOLICITADA`, `BUFFER_ABERTO` (`EM_ANDAMENTO` is "em rota"; "ociosa" = no active trip), vehicle availability windows, ride request, buffer timer job, broadcast, cancellation | RF-05, 10, 11, 12, 19 | Foundation | Partially |
 | 3. Capacity engine | Segment load vector in Redis, `PicoTrecho` validation, origin/destination declaration, ordered circuit stops | RF-04, 13, 14 | Foundation | **Yes** |
 | 4. Boarding | Dynamic QR bound to passenger photo, driver itinerary, QR + photo validation with manual fallback | RF-15, 16, 17 | Plans 2, 3 | Partially |
 | 5. LGPD | Versioned consent capture, account deletion with history anonymisation | RF-09, 20 | Foundation | **Yes** |
@@ -87,7 +87,7 @@ index or a test database. Give each its own `TEST_DATABASE_URI` (the guard in
 
 ## Code debt
 
-### 1. `RotaAluno` has readers but no writer — Plan 2 must resolve
+### 1. `RotaAluno` has readers but no writer — now Plan 3's to resolve
 
 **Severity: high.** Task 4 removed route join/leave management but deliberately
 kept the `RotaAluno` roster, because it is load-bearing well beyond subscription
@@ -102,6 +102,11 @@ must own all four dependent call sites:
 - `tasks/notificacao_tasks.verificar_viagens_24h` — same resolution
 - `schemas/viagem_schema.get_total_alunos` — occupancy count
 - `viagens_service._popular_dados_da_viagem` — passenger population
+
+Plan 2 did not resolve it: on-demand trips use `SolicitacaoViagem` (per-trip
+interest), but origin/destination declaration is RF-13/RF-14, so the successor
+for the call sites above lands with Plan 3. Fixed-route trips still depend on
+`RotaAluno`.
 
 Do not delete `RotaAluno` before the successor exists. Deleting it is a
 business-logic decision, not a cleanup.
