@@ -14,6 +14,8 @@ def register_models(api):
             "qr_token": fields.String(description="Credencial válida (matriz de permissões)"),
             "embarcou": fields.Boolean(description="Embarque já registrado"),
             "ponto_destino_id": fields.String(description="UUID do ponto de desembarque"),
+            "foto_url": fields.String(description="Caminho da foto (GET autenticado)"),
+            "sem_foto": fields.Boolean(description="Aluno sem foto cadastrada"),
         },
     )
 
@@ -51,6 +53,39 @@ def register_models(api):
         },
     )
 
+    recusar_request = api.model(
+        "RecusarEmbarqueRequest",
+        {
+            "qr_token": fields.String(required=True, description="Credencial lida do QR Code"),
+            "motivo": fields.String(required=True, description="FOTO_NAO_CONFERE ou SEM_FOTO"),
+            "observacao": fields.String(description="Texto livre do motorista (até 500)"),
+            "ocorrido_em": fields.DateTime(description="Momento da recusa (ISO 8601)"),
+        },
+    )
+
+    conferencia_response = api.model(
+        "ConferenciaResponse",
+        {
+            "viagem_id": fields.String(description="UUID da viagem"),
+            "aluno_id": fields.String(description="UUID do aluno"),
+            "nome": fields.String(description="Nome do passageiro"),
+            "foto_url": fields.String(description="Caminho da foto (GET autenticado)"),
+            "sem_foto": fields.Boolean(description="Aluno sem foto cadastrada"),
+            "ponto_embarque_id": fields.String(description="UUID do ponto de embarque"),
+            "ponto_destino_id": fields.String(description="UUID do ponto de desembarque"),
+        },
+    )
+
+    recusa_response = api.model(
+        "RecusaResponse",
+        {
+            "viagem_id": fields.String(description="UUID da viagem"),
+            "aluno_id": fields.String(description="UUID do aluno"),
+            "motivo": fields.String(description="Motivo da recusa"),
+            "ocorrencia_id": fields.String(description="Ocorrência aberta para o gestor"),
+        },
+    )
+
     manual_request = api.model(
         "EmbarqueManualRequest",
         {
@@ -73,6 +108,8 @@ def register_models(api):
             "ponto_embarque_id": fields.String(description="UUID do ponto de embarque"),
             "embarcado_em": fields.DateTime(description="Momento do embarque"),
             "manual": fields.Boolean(description="Embarque registrado pelo fallback manual"),
+            "foto_url": fields.String(description="Caminho da foto (GET autenticado)"),
+            "sem_foto": fields.Boolean(description="Embarcou sem foto cadastrada"),
         },
     )
 
@@ -82,10 +119,12 @@ def register_models(api):
             "evento_id": fields.String(required=True, description="Identificador gerado no app"),
             "tipo": fields.String(
                 required=True,
-                description="EMBARQUE, EMBARQUE_MANUAL, CHEGADA_PONTO ou POSICAO",
+                description="EMBARQUE, EMBARQUE_MANUAL, RECUSA, CHEGADA_PONTO ou POSICAO",
             ),
             "ocorrido_em": fields.DateTime(required=True, description="Carimbo local do evento"),
-            "qr_token": fields.String(description="Credencial lida (EMBARQUE)"),
+            "qr_token": fields.String(description="Credencial lida (EMBARQUE, RECUSA)"),
+            "motivo": fields.String(description="FOTO_NAO_CONFERE ou SEM_FOTO (RECUSA)"),
+            "observacao": fields.String(description="Texto livre do motorista (RECUSA)"),
             "aluno_id": fields.String(description="UUID do aluno (EMBARQUE_MANUAL)"),
             "ponto_id": fields.String(description="UUID do ponto (CHEGADA_PONTO, embarques)"),
             "latitude": fields.Float(description="Latitude (POSICAO)"),
@@ -123,6 +162,9 @@ def register_models(api):
         "roteiro_response": roteiro_response,
         "validar_request": validar_request,
         "manual_request": manual_request,
+        "recusar_request": recusar_request,
+        "conferencia_response": conferencia_response,
+        "recusa_response": recusa_response,
         "avancar_request": avancar_request,
         "embarque_response": embarque_response,
         "sincronizacao_request": sincronizacao_request,

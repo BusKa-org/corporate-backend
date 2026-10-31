@@ -131,8 +131,13 @@ def test_rodada_completa_da_solicitacao_ao_embarque(
     assert paradas[3]["embarcam"] == 1 and paradas[3]["desembarcam"] == 1  # Carla sobe, Ana desce
     assert paradas[4]["desembarcam"] == 2  # Bruno e Carla
 
-    # RF-17 — o motorista valida a credencial no ponto correto.
+    # RF-17 — a leitura no ponto correto mostra a Ana para conferir, sem embarcá-la.
     r = condutor.post(f"/v1/embarque/viagens/{viagem_id}/validacao", json={"qr_token": token_ana})
+    assert r.status_code == 200, r.get_data(as_text=True)
+    assert r.get_json()["ponto_embarque_id"] == str(p1.id)
+
+    # A foto confere e o motorista confirma: só agora o embarque é registrado.
+    r = condutor.post(f"/v1/embarque/viagens/{viagem_id}/confirmacao", json={"qr_token": token_ana})
     assert r.status_code == 200, r.get_data(as_text=True)
 
     _db.session.expire_all()
@@ -142,7 +147,7 @@ def test_rodada_completa_da_solicitacao_ao_embarque(
     assert embarcados == 1
 
     # A mesma credencial não embarca duas vezes.
-    r = condutor.post(f"/v1/embarque/viagens/{viagem_id}/validacao", json={"qr_token": token_ana})
+    r = condutor.post(f"/v1/embarque/viagens/{viagem_id}/confirmacao", json={"qr_token": token_ana})
     assert r.status_code == 409
 
 

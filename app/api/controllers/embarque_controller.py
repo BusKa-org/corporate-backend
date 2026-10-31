@@ -1,8 +1,7 @@
 """RF-15 a RF-18 — credencial de embarque, roteiro do motorista e sincronização.
 
-A conferência visual por fotografia prevista no RF-15/RF-17 está descopada:
-o embarque é validado pela credencial, com fallback manual sem verificação de
-identidade (ver `embarque_service.confirmar_manual`).
+O embarque por QR tem dois passos (RF-17): `validacao` confere a credencial e
+devolve o passageiro com a foto; o motorista então `confirmacao` ou `recusa`.
 """
 
 from typing import Any
@@ -14,8 +13,11 @@ from flask_restx import Namespace, Resource
 from app.api.contracts import embarque_contract
 from app.schemas.embarque_schema import (
     AvancarPontoRequestSchema,
+    ConferenciaResponseSchema,
     EmbarqueManualRequestSchema,
     EmbarqueResponseSchema,
+    RecusarEmbarqueRequestSchema,
+    RecusaResponseSchema,
     RoteiroResponseSchema,
     SincronizacaoRequestSchema,
     SincronizacaoResponseSchema,
@@ -30,11 +32,14 @@ models = embarque_contract.register_models(api)
 
 # Validation schemas (Marshmallow)
 validar_request_schema = ValidarEmbarqueRequestSchema()
+recusar_request_schema = RecusarEmbarqueRequestSchema()
 manual_request_schema = EmbarqueManualRequestSchema()
 avancar_request_schema = AvancarPontoRequestSchema()
 sincronizacao_request_schema = SincronizacaoRequestSchema()
 roteiro_response_schema = RoteiroResponseSchema()
 embarque_response_schema = EmbarqueResponseSchema()
+conferencia_response_schema = ConferenciaResponseSchema()
+recusa_response_schema = RecusaResponseSchema()
 sincronizacao_response_schema = SincronizacaoResponseSchema()
 
 
@@ -74,17 +79,56 @@ class AvancarPontoResource(Resource):
 class ValidacaoResource(Resource):
     @api.doc("validar_embarque")
     @api.expect(models["validar_request"])
+    @api.response(200, "Credencial válida, passageiro a conferir", models["conferencia_response"])
+    @api.response(404, "CREDENCIAL_DESCONHECIDA")
+    @api.response(409, "CREDENCIAL_DE_OUTRA_VIAGEM, CREDENCIAL_DE_OUTRO_PONTO ou JA_UTILIZADA")
+    @jwt_required()
+    def post(self, viagem_id: str) -> tuple[dict[str, Any], int]:
+        """Confere a credencial lida e devolve o passageiro com a foto, sem embarcar (RF-17)"""
+        payload = validar_request_schema.load(_body())
+        resultado = embarque_service.validar_embarque(
+            get_jwt_identity(), viagem_id, payload["qr_token"], payload["ocorrido_em"]
+        )
+        return conferencia_response_schema.dump(resultado), 200
+
+
+@api.route("/viagens/<string:viagem_id>/confirmacao")
+class ConfirmacaoResource(Resource):
+    @api.doc("confirmar_embarque")
+    @api.expect(models["validar_request"])
     @api.response(200, "Embarque registrado", models["embarque_response"])
     @api.response(404, "CREDENCIAL_DESCONHECIDA")
     @api.response(409, "CREDENCIAL_DE_OUTRA_VIAGEM, CREDENCIAL_DE_OUTRO_PONTO ou JA_UTILIZADA")
     @jwt_required()
     def post(self, viagem_id: str) -> tuple[dict[str, Any], int]:
-        """Valida a credencial lida e registra o embarque (RF-17)"""
+        """A foto confere: registra o embarque e consome a credencial (RF-17)"""
         payload = validar_request_schema.load(_body())
-        resultado = embarque_service.validar_embarque(
+        resultado = embarque_service.confirmar_embarque(
             get_jwt_identity(), viagem_id, payload["qr_token"], payload["ocorrido_em"]
         )
         return embarque_response_schema.dump(resultado), 200
+
+
+@api.route("/viagens/<string:viagem_id>/recusa")
+class RecusaResource(Resource):
+    @api.doc("recusar_embarque")
+    @api.expect(models["recusar_request"])
+    @api.response(200, "Recusa registrada", models["recusa_response"])
+    @api.response(404, "CREDENCIAL_DESCONHECIDA")
+    @api.response(409, "CREDENCIAL_DE_OUTRA_VIAGEM, CREDENCIAL_DE_OUTRO_PONTO ou JA_UTILIZADA")
+    @jwt_required()
+    def post(self, viagem_id: str) -> tuple[dict[str, Any], int]:
+        """A foto não confere: não embarca e abre ocorrência para o gestor (RF-17)"""
+        payload = recusar_request_schema.load(_body())
+        resultado = embarque_service.recusar_embarque(
+            get_jwt_identity(),
+            viagem_id,
+            payload["qr_token"],
+            payload["motivo"],
+            payload["observacao"],
+            payload["ocorrido_em"],
+        )
+        return recusa_response_schema.dump(resultado), 200
 
 
 @api.route("/viagens/<string:viagem_id>/manual")

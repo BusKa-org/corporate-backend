@@ -47,6 +47,7 @@ def test_tipos_de_evento_cobrem_a_fila_do_app():
     assert set(embarque_service.TIPOS_EVENTO) == {
         "EMBARQUE",
         "EMBARQUE_MANUAL",
+        "RECUSA",
         "CHEGADA_PONTO",
         "POSICAO",
     }

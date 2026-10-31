@@ -76,8 +76,8 @@ def validar_credencial(token: str) -> CredencialEmbarque:
     """
     Confere se um token de embarque existe, não foi usado e não expirou.
 
-    Não marca a credencial como usada nem compara a foto do passageiro:
-    isso fica na validação feita pelo motorista, fora deste serviço. Só leitura,
+    Não marca a credencial como usada: o consumo acontece quando o motorista
+    confirma o embarque (`embarque_service.confirmar_embarque`). Só leitura,
     sem efeito colateral.
 
     Raises: NotFoundError, ValidationError
