@@ -2,6 +2,7 @@
 
 import logging
 import os
+import tempfile
 from typing import IO, Any, cast
 
 from flask import current_app
@@ -18,6 +19,7 @@ from app.models.geo import Endereco, Ponto
 from app.models.user import Aluno, User
 from app.models.viagem import AlunosConfirmados, Viagem
 from app.services.user_service import _get_gestor_or_403, _get_user_or_404
+from app.utils.imagem import remover_metadados
 from app.utils.validators import validate_uuid
 
 logger = logging.getLogger(__name__)
@@ -197,10 +199,31 @@ def salvar_foto(user_id: str, arquivo: IO[bytes]) -> Aluno:
     if tipo is None:
         raise ValidationError("A foto deve ser JPEG, PNG ou WEBP")
 
-    os.makedirs(current_app.config["FOTOS_ALUNO_DIR"], exist_ok=True)
-    apagar_foto(str(aluno.id))
-    with open(_caminho_foto(str(aluno.id), EXTENSOES_FOTO[tipo]), "wb") as destino:
-        destino.write(conteudo)
+    conteudo = remover_metadados(conteudo, tipo)
+
+    # Grava num arquivo temporário e só então troca pelo definitivo: se a gravação
+    # falhar no meio, a foto antiga continua lá.
+    pasta = current_app.config["FOTOS_ALUNO_DIR"]
+    os.makedirs(pasta, exist_ok=True)
+    extensao = EXTENSOES_FOTO[tipo]
+    descritor, temporario = tempfile.mkstemp(dir=pasta, suffix=".tmp")
+    try:
+        with os.fdopen(descritor, "wb") as destino:
+            destino.write(conteudo)
+        os.replace(temporario, _caminho_foto(str(aluno.id), extensao))
+    except OSError:
+        if os.path.exists(temporario):
+            os.remove(temporario)
+        logger.exception("Falha ao gravar a foto do aluno %s", aluno.id)
+        raise AppError("Erro ao salvar a foto", 500)
+
+    # Trocou de PNG para JPEG, por exemplo: a foto com a outra extensão sai.
+    for outra_extensao in EXTENSOES_FOTO.values():
+        if outra_extensao == extensao:
+            continue
+        caminho_antigo = _caminho_foto(str(aluno.id), outra_extensao)
+        if os.path.exists(caminho_antigo):
+            os.remove(caminho_antigo)
 
     aluno.foto_url = f"/v1/alunos/{aluno.id}/foto"
     db.session.commit()
