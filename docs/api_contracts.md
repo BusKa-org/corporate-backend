@@ -376,6 +376,9 @@ Counting key depends on the route:
   the reset `token` (JSON or form). `GET /v1/auth/reset-password` and
   `GET`/`POST /v1/convites/aceite/<token>`: the token. No token: one shared
   `sem-token` bucket.
+- E-mails and tokens are stored in the key as a SHA-256 hash (first 32 hex
+  chars), never in clear text, so reset links, invitation tokens and e-mails
+  do not show up in Redis key names. Counting is the same.
 - Every other route (`change-password`, realtime and the default limit): the JWT
   identity when the request has a valid token, otherwise the connection IP
   (`request.remote_addr`). IP is only left as the key for anonymous routes with

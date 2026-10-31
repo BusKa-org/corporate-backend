@@ -11,6 +11,8 @@ from app.extensions import (
     _chave_do_cliente,
     _chave_por_email,
     _chave_por_email_ou_token,
+    _chave_por_token,
+    _hash,
     limiter,
 )
 from app.models.enum import UserStatus
@@ -157,7 +159,7 @@ def test_corpo_sem_email_valido_cai_num_balde_so(app, kwargs):
 @pytest.mark.integration
 def test_chave_do_email_nao_consome_o_corpo(app):
     with app.test_request_context(LOGIN, method="POST", json={"email": " A@X.com "}):
-        assert _chave_por_email() == "email:a@x.com"
+        assert _chave_por_email() == f"email:{_hash('a@x.com')}"
         assert request.get_json() == {"email": " A@X.com "}
 
 
@@ -166,8 +168,26 @@ def test_reset_de_senha_conta_pelo_token_sem_email(app):
     with app.test_request_context(
         "/v1/auth/reset-password", method="POST", data={"token": "abc", "new_password": "x"}
     ):
-        assert _chave_por_email_ou_token() == "token:abc"
+        assert _chave_por_email_ou_token() == f"token:{_hash('abc')}"
         assert request.form["new_password"] == "x"
+
+
+@pytest.mark.integration
+def test_chave_nao_guarda_token_nem_email_em_claro(app):
+    token = str(uuid.uuid4())
+    url = f"/v1/convites/aceite/{token}"
+    with app.test_request_context(url):
+        chave = _chave_por_token()
+    with app.test_request_context(url, method="POST"):
+        mesma_chave = _chave_por_token()
+    with app.test_request_context(f"/v1/convites/aceite/{uuid.uuid4()}"):
+        outra_chave = _chave_por_token()
+    assert token not in chave
+    assert chave == mesma_chave
+    assert chave != outra_chave
+
+    with app.test_request_context(LOGIN, method="POST", json={"email": "a@x.com"}):
+        assert "a@x.com" not in _chave_por_email()
 
 
 @pytest.mark.integration
@@ -245,6 +265,13 @@ def test_contagem_fica_no_redis(app):
     assert r.status_code == 429
     # A chave no Redis é o que faz todos os workers do gunicorn verem a mesma contagem.
     assert conexao.keys("LIMITS:*")
+
+    token = str(uuid.uuid4())
+    cliente.get(f"/v1/convites/aceite/{token}")
+    cliente.post(LOGIN, json={"email": "segredo@x.com", "password": "e"})
+    for chave in conexao.keys("*"):
+        assert token.encode() not in chave
+        assert b"segredo@x.com" not in chave
 
 
 @pytest.mark.integration
