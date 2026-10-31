@@ -3,7 +3,7 @@
 from datetime import UTC, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
-from app.models.enum import StatusMotorista, StatusViagem
+from app.models.enum import StatusViagem
 from app.services.viagens_service import disponibilidade_motorista
 from tests.factories.viagem_factory import ViagemFactory
 
@@ -14,7 +14,6 @@ def test_ativo_sem_historico_pode_trabalhar(_db, motorista):
 
 
 def test_em_rota_nao_pode_trabalhar(_db, motorista, viagem_futura_iniciada_com_motorista):
-    motorista.user.status_motorista = StatusMotorista.EM_ROTA
     pode, motivo, livre = disponibilidade_motorista(motorista.user, datetime.now(UTC))
     assert pode is False
     assert "em rota" in motivo
@@ -23,7 +22,6 @@ def test_em_rota_nao_pode_trabalhar(_db, motorista, viagem_futura_iniciada_com_m
 
 def test_em_descanso_informa_quando_fica_livre(_db, motorista):
     agora = datetime.now(UTC)
-    motorista.user.status_motorista = StatusMotorista.EM_DESCANSO_OBRIGATORIO
     motorista.user.descanso_ate = agora + timedelta(minutes=5)
 
     pode, motivo, livre = disponibilidade_motorista(motorista.user, agora)
@@ -35,7 +33,6 @@ def test_em_descanso_informa_quando_fica_livre(_db, motorista):
 
 def test_descanso_termina_exatamente_em_descanso_ate(_db, motorista):
     agora = datetime.now(UTC)
-    motorista.user.status_motorista = StatusMotorista.EM_DESCANSO_OBRIGATORIO
     motorista.user.descanso_ate = agora
 
     assert disponibilidade_motorista(motorista.user, agora) == (True, None, None)
@@ -83,10 +80,3 @@ def test_turno_que_atravessa_meia_noite(app, _db, motorista):
     fora = disponibilidade_motorista(motorista.user, datetime(2026, 1, 5, 6, 0, tzinfo=fuso))
     assert fora[0] is False
     assert "Fora do horário" in fora[1]
-
-
-def test_em_rota_sem_viagem_em_andamento_e_corrigido(_db, motorista):
-    motorista.user.status_motorista = StatusMotorista.EM_ROTA
-
-    assert disponibilidade_motorista(motorista.user, datetime.now(UTC)) == (True, None, None)
-    assert motorista.user.status_motorista == StatusMotorista.ATIVO

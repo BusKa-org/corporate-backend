@@ -1,5 +1,5 @@
 import uuid
-from datetime import date, datetime
+from datetime import date
 
 from sqlalchemy.dialects.postgresql import ARRAY, UUID
 
@@ -61,25 +61,16 @@ class Motorista(User):
     horario_fim = db.Column(db.Time, nullable=True)
     dias_trabalho = db.Column(ARRAY(db.String(3)), nullable=True)
 
-    # Estado operacional, mudado só pelo sistema. Não é `status`: esse nome já é da conta (User).
-    status_motorista = db.Column(
-        db.Enum(StatusMotorista, name="status_motorista"),
-        nullable=False,
-        default=StatusMotorista.ATIVO,
-        server_default=StatusMotorista.ATIVO.value,
-    )
+    # Fim do descanso obrigatório, gravado ao fim de uma viagem. Nulo = não deve descanso.
     descanso_ate = db.Column(db.DateTime(timezone=True), nullable=True)
+    # Calculado pelo service para a resposta (viagens + descanso_ate); não é coluna.
+    # __allow_unmapped__ deixa o SQLAlchemy ignorar essa anotação sem Mapped[].
+    __allow_unmapped__ = True
+    status_motorista: StatusMotorista | None = None
 
     __mapper_args__ = {
         "polymorphic_identity": UserRole.MOTORISTA,
     }
-
-    def status_atual(self, agora: datetime) -> StatusMotorista:
-        """Status considering that a rest whose `descanso_ate` has passed is over."""
-        if self.status_motorista == StatusMotorista.EM_DESCANSO_OBRIGATORIO:
-            if self.descanso_ate is None or self.descanso_ate <= agora:
-                return StatusMotorista.ATIVO
-        return self.status_motorista
 
 
 class Gestor(User):

@@ -1,5 +1,3 @@
-from datetime import UTC, datetime
-
 from marshmallow import fields
 
 from app.models.enum import DiaDaSemana
@@ -107,9 +105,11 @@ class UserResponseSchema(BaseSchema):
     descanso_ate = fields.Method("get_descanso_ate")
 
     def get_status_motorista(self, obj):
-        if not hasattr(obj, "status_atual"):
+        # Preenchido pelo service (user_service._preencher_status_motoristas)
+        status = getattr(obj, "status_motorista", None)
+        if status is None:
             return None
-        return obj.status_atual(datetime.now(UTC)).value
+        return status.value
 
     def get_descanso_ate(self, obj):
         # Só mostra enquanto o descanso vale, para nunca exibir um descanso vencido

@@ -6,7 +6,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from flask import current_app
-from sqlalchemy import select
+from sqlalchemy import exists, select
 
 from app.core.exceptions import (
     AppError,
@@ -396,21 +396,76 @@ def _fim_descanso_motorista(motorista: Motorista, agora: datetime) -> datetime |
     )
 
 
+def motoristas_em_viagem(motorista_ids: list[Any]) -> set[Any]:
+    """Ids, among `motorista_ids`, of drivers with a trip EM_ANDAMENTO (one query)."""
+    if not motorista_ids:
+        return set()
+    linhas = (
+        db.session.query(Viagem.motorista_id)
+        .filter(
+            Viagem.motorista_id.in_(motorista_ids),
+            Viagem.status == StatusViagem.EM_ANDAMENTO,
+        )
+        .distinct()
+        .all()
+    )
+    ids: set[Any] = set()
+    for (motorista_id,) in linhas:
+        ids.add(motorista_id)
+    return ids
+
+
+def status_motorista(
+    motorista: Motorista, agora: datetime, em_viagem: bool | None = None
+) -> StatusMotorista:
+    """Driver state, computed from trips and `descanso_ate` (never stored).
+
+    Pass `em_viagem` (from `motoristas_em_viagem`) to skip the EXISTS query in lists.
+    """
+    if em_viagem is None:
+        em_viagem = db.session.query(
+            exists().where(
+                Viagem.motorista_id == motorista.id,
+                Viagem.status == StatusViagem.EM_ANDAMENTO,
+            )
+        ).scalar()
+    if em_viagem:
+        return StatusMotorista.EM_ROTA
+    if motorista.descanso_ate is not None and motorista.descanso_ate > agora:
+        return StatusMotorista.EM_DESCANSO_OBRIGATORIO
+    return StatusMotorista.ATIVO
+
+
 def disponibilidade_motorista(
     motorista: Motorista, agora: datetime
 ) -> tuple[bool, str | None, datetime | None]:
     """Whether the driver can start a trip at `agora`, without raising.
 
     Returns (pode_trabalhar, motivo, livre_a_partir_de). `livre_a_partir_de` is only
-    known for a mandatory rest; it is None otherwise. May fix a stale EM_ROTA on the
-    object (see `corrigir_em_rota_sem_viagem`); the caller's commit persists it.
+    known for a mandatory rest; it is None otherwise.
     """
-    corrigir_em_rota_sem_viagem(motorista, agora)
     fuso = ZoneInfo(current_app.config["TIMEZONE"])
     agora_local = agora.astimezone(fuso)
 
-    if motorista.status_atual(agora) == StatusMotorista.EM_ROTA:
+    status = status_motorista(motorista, agora)
+    if status == StatusMotorista.EM_ROTA:
         return False, "Motorista já está em rota", None
+
+    liberado_em = None
+    if status == StatusMotorista.EM_DESCANSO_OBRIGATORIO:
+        liberado_em = motorista.descanso_ate
+    else:
+        # Recalcula pelo histórico também: cobre viagens anteriores a `descanso_ate` existir.
+        liberado_em = _fim_descanso_motorista(motorista, agora)
+    if liberado_em is not None:
+        horas_max = current_app.config["MOTORISTA_HORAS_MAX_DIRECAO"]
+        minutos_descanso = current_app.config["MOTORISTA_DESCANSO_MINUTOS"]
+        horario = liberado_em.astimezone(fuso).strftime("%H:%M")
+        motivo = (
+            f"Motorista atingiu {horas_max}h de direção contínua e precisa descansar "
+            f"{minutos_descanso} min. Poderá dirigir novamente às {horario}."
+        )
+        return False, motivo, liberado_em
 
     if motorista.dias_trabalho:
         dia = _get_dia_semana_enum(agora_local.date())
@@ -434,66 +489,22 @@ def disponibilidade_motorista(
             )
             return False, motivo, None
 
-    liberado_em = None
-    if motorista.status_atual(agora) == StatusMotorista.EM_DESCANSO_OBRIGATORIO:
-        liberado_em = motorista.descanso_ate
-    else:
-        # Recalcula pelo histórico também: cobre viagens anteriores ao status existir.
-        liberado_em = _fim_descanso_motorista(motorista, agora)
-    if liberado_em is not None:
-        horas_max = current_app.config["MOTORISTA_HORAS_MAX_DIRECAO"]
-        minutos_descanso = current_app.config["MOTORISTA_DESCANSO_MINUTOS"]
-        horario = liberado_em.astimezone(fuso).strftime("%H:%M")
-        motivo = (
-            f"Motorista atingiu {horas_max}h de direção contínua e precisa descansar "
-            f"{minutos_descanso} min. Poderá dirigir novamente às {horario}."
-        )
-        return False, motivo, liberado_em
-
     return True, None, None
 
 
 def _validar_jornada_motorista(motorista: Motorista, agora: datetime) -> None:
-    """Block starting a trip while on another trip, outside working hours or during rest."""
-    corrigir_em_rota_sem_viagem(motorista, agora)
-    if motorista.status_atual(agora) == StatusMotorista.EM_ROTA:
-        raise ConflictError("Motorista já está em rota em outra viagem")
+    """Block starting a trip while on another trip, during rest or outside working hours."""
     pode, motivo, _ = disponibilidade_motorista(motorista, agora)
-    if not pode:
-        raise ForbiddenError(motivo or "Motorista indisponível")
+    if pode:
+        return
+    if status_motorista(motorista, agora) == StatusMotorista.EM_ROTA:
+        raise ConflictError("Motorista já está em rota em outra viagem")
+    raise ForbiddenError(motivo or "Motorista indisponível")
 
 
-def _atualizar_status_apos_viagem(motorista: Motorista, agora: datetime) -> None:
-    """After a started trip ends (finished or cancelled): rest if owed, else ATIVO."""
-    descanso_ate = _fim_descanso_motorista(motorista, agora)
-    if descanso_ate is None:
-        motorista.status_motorista = StatusMotorista.ATIVO
-        motorista.descanso_ate = None
-    else:
-        motorista.status_motorista = StatusMotorista.EM_DESCANSO_OBRIGATORIO
-        motorista.descanso_ate = descanso_ate
-
-
-def corrigir_em_rota_sem_viagem(motorista: Motorista, agora: datetime) -> bool:
-    """Fix a driver left EM_ROTA with no trip in progress (e.g. the trip was deleted).
-
-    Recomputes ATIVO or EM_DESCANSO_OBRIGATORIO from the trip history. Does not commit.
-    Returns True if the status changed.
-    """
-    if motorista.status_motorista != StatusMotorista.EM_ROTA:
-        return False
-    em_andamento = (
-        db.session.query(Viagem.id)
-        .filter(
-            Viagem.motorista_id == motorista.id,
-            Viagem.status == StatusViagem.EM_ANDAMENTO,
-        )
-        .first()
-    )
-    if em_andamento is not None:
-        return False
-    _atualizar_status_apos_viagem(motorista, agora)
-    return True
+def _gravar_descanso_apos_viagem(motorista: Motorista, agora: datetime) -> None:
+    """After a started trip ends (finished or cancelled): store the rest end, if owed."""
+    motorista.descanso_ate = _fim_descanso_motorista(motorista, agora)
 
 
 def list_viagens_motorista(user_id: str) -> list[Viagem]:
@@ -544,7 +555,6 @@ def controlar_viagem(user_id: str, viagem_id: str, data: dict[str, Any]) -> Viag
                     .one()
                 )
                 _validar_jornada_motorista(motorista, agora)
-                motorista.status_motorista = StatusMotorista.EM_ROTA
                 motorista.descanso_ate = None
             viagem.status = StatusViagem.EM_ANDAMENTO
             viagem.inicio_real = agora
@@ -558,7 +568,7 @@ def controlar_viagem(user_id: str, viagem_id: str, data: dict[str, Any]) -> Viag
             viagem.fim_real = _agora()
             db.session.flush()
             if viagem.motorista is not None:
-                _atualizar_status_apos_viagem(viagem.motorista, viagem.fim_real)
+                _gravar_descanso_apos_viagem(viagem.motorista, viagem.fim_real)
 
             rastros = (
                 TelemetriaViagem.query.filter_by(viagem_id=viagem.id)
@@ -638,7 +648,7 @@ def cancelar_viagem(user_id: str, viagem_id: str) -> dict[str, Any]:
             viagem.fim_real = _agora()
             db.session.flush()
             if viagem.motorista is not None:
-                _atualizar_status_apos_viagem(viagem.motorista, viagem.fim_real)
+                _gravar_descanso_apos_viagem(viagem.motorista, viagem.fim_real)
 
         confirmados = AlunosConfirmados.query.filter_by(viagem_id=viagem.id, confirmacao=True).all()
         data_formatada = viagem.data.strftime("%d/%m/%Y")

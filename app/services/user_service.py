@@ -18,7 +18,7 @@ from app.core.exceptions import (
 from app.models.base import db
 from app.models.enum import UserRole, UserStatus
 from app.models.user import Gestor, Motorista, User
-from app.services.viagens_service import corrigir_em_rota_sem_viagem
+from app.services.viagens_service import motoristas_em_viagem, status_motorista
 from app.utils import audit_logger, validate_cpf, validate_email, validate_password, validate_uuid
 
 logger = logging.getLogger(__name__)
@@ -48,15 +48,19 @@ def _get_gestor_or_403(
     return cast(Gestor, user)
 
 
-def _corrigir_status_motoristas(users: list[User]) -> None:
-    """Self-heal drivers stuck EM_ROTA before showing them (one query per EM_ROTA driver)."""
-    agora = datetime.now(UTC)
-    mudou = False
+def _preencher_status_motoristas(users: list[User]) -> None:
+    """Compute each driver's state for the response, with one query for the whole list."""
+    motorista_ids = []
     for user in users:
-        if isinstance(user, Motorista) and corrigir_em_rota_sem_viagem(user, agora):
-            mudou = True
-    if mudou:
-        db.session.commit()
+        if isinstance(user, Motorista):
+            motorista_ids.append(user.id)
+    if not motorista_ids:
+        return
+    em_viagem = motoristas_em_viagem(motorista_ids)
+    agora = datetime.now(UTC)
+    for user in users:
+        if isinstance(user, Motorista):
+            user.status_motorista = status_motorista(user, agora, user.id in em_viagem)
 
 
 def get_all_users(current_user_id: str) -> list[User]:
@@ -65,7 +69,7 @@ def get_all_users(current_user_id: str) -> list[User]:
     # with_polymorphic carrega as colunas de cada subtipo na mesma query (sem N+1)
     todos = with_polymorphic(User, "*")
     users = db.session.query(todos).filter(todos.organizacao_id == gestor.organizacao_id).all()
-    _corrigir_status_motoristas(users)
+    _preencher_status_motoristas(users)
     return users
 
 
@@ -78,18 +82,19 @@ def get_user_by_id(user_id: str, current_user_id: str | None = None) -> User:
 
     # Skip authorization for internal use
     if current_user_id is None:
+        _preencher_status_motoristas([user])
         return user
 
     current_user = _get_user_or_404(current_user_id)
 
     # Allow self-access
     if str(user_id) == str(current_user_id):
-        _corrigir_status_motoristas([user])
+        _preencher_status_motoristas([user])
         return user
 
     # Allow gestor access within same organizacao
     if current_user.role == UserRole.GESTOR and user.organizacao_id == current_user.organizacao_id:
-        _corrigir_status_motoristas([user])
+        _preencher_status_motoristas([user])
         return user
 
     # Log unauthorized access attempt
@@ -192,6 +197,7 @@ def create_motorista(gestor_id: str, data: dict[str, Any]) -> Motorista:
 
         db.session.add(new_motorista)
         db.session.commit()
+        _preencher_status_motoristas([new_motorista])
         return new_motorista
 
     except (ValidationError, ConflictError, ForbiddenError):
@@ -236,6 +242,7 @@ def update_motorista(gestor_id: str, motorista_id: str, data: dict[str, Any]) ->
         resource_type="motorista",
         resource_id=motorista_id,
     )
+    _preencher_status_motoristas([motorista])
     return motorista
 
 
@@ -289,7 +296,7 @@ def get_motoristas_by_municipio(gestor_id: str):
     motoristas = (
         db.session.query(Motorista).filter(Motorista.organizacao_id == gestor.organizacao_id).all()
     )
-    _corrigir_status_motoristas(motoristas)
+    _preencher_status_motoristas(motoristas)
 
     return motoristas
 
@@ -327,6 +334,7 @@ def update_profile(user_id: str, data: dict[str, Any]) -> User:
             resource_type="user",
             resource_id=user_id,
         )
+        _preencher_status_motoristas([user])
         return user
     except Exception as e:
         db.session.rollback()
