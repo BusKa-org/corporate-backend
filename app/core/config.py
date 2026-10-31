@@ -126,6 +126,15 @@ class Settings:
             "SYNC_TOLERANCIA_SEGUNDOS", default=120, min_val=0, max_val=3600
         )
 
+        # PIN do convite: erros somados de todos os PINs até o PIN entrar em pausa.
+        self.CONVITE_PIN_MAX_ERROS_TOTAL = self._get_int(
+            "CONVITE_PIN_MAX_ERROS_TOTAL", default=20, min_val=5, max_val=1000
+        )
+        # Minutos de pausa do PIN depois desse limite; no fim da pausa os erros zeram.
+        self.CONVITE_PIN_BLOQUEIO_MINUTOS = self._get_int(
+            "CONVITE_PIN_BLOQUEIO_MINUTOS", default=60, min_val=1, max_val=1440
+        )
+
         # Rate limit (Flask-Limiter). Formato do limite: "10 per minute", "2000 per hour".
         self.RATELIMIT_ENABLED = os.getenv("RATELIMIT_ENABLED", "true").lower() == "true"
         # memory:// conta separado em cada worker do gunicorn; produção usa Redis.

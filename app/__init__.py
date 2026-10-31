@@ -129,6 +129,8 @@ def create_app(
     app.config["QR_DIGITOS"] = settings.QR_DIGITOS
     app.config["QR_JANELA_PASSOS"] = settings.QR_JANELA_PASSOS
     app.config["SYNC_TOLERANCIA_SEGUNDOS"] = settings.SYNC_TOLERANCIA_SEGUNDOS
+    app.config["CONVITE_PIN_MAX_ERROS_TOTAL"] = settings.CONVITE_PIN_MAX_ERROS_TOTAL
+    app.config["CONVITE_PIN_BLOQUEIO_MINUTOS"] = settings.CONVITE_PIN_BLOQUEIO_MINUTOS
     app.config["RATELIMIT_ENABLED"] = settings.RATELIMIT_ENABLED
     app.config["RATELIMIT_STORAGE_URI"] = settings.RATELIMIT_STORAGE_URI
     app.config["RATELIMIT_DEFAULT"] = settings.RATELIMIT_DEFAULT

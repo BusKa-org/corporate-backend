@@ -1,7 +1,10 @@
 """Convites de cadastro de passageiro, pela API HTTP e pela tarefa de envio."""
 
 import re
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 
 import pytest
 
@@ -449,6 +452,10 @@ def emails_enviados(monkeypatch):
         enviados.append({"to": to, "texto": body_plain})
 
     monkeypatch.setattr(convite_service, "send_email", enviar)
+    # O PIN sai numa thread; aqui sai na hora, para o teste ler o e-mail logo depois do pedido.
+    monkeypatch.setattr(
+        convite_service, "_envios_de_pin", SimpleNamespace(submit=lambda fn, *args: fn(*args))
+    )
     return enviados
 
 
@@ -537,7 +544,7 @@ def _validar_pin(client, email, pin):
 
 
 def _pin_do_ultimo_email(emails_enviados):
-    return re.search(r"\b(\d{6})\b", emails_enviados[-1]["texto"]).group(1)
+    return re.search(r"\b(\d{8})\b", emails_enviados[-1]["texto"]).group(1)
 
 
 def _liberar_novo_pin(_db, email):
@@ -558,7 +565,7 @@ def test_pin_certo_devolve_o_token_do_convite_e_so_vale_uma_vez(
     assert emails_enviados[0]["to"] == "pin@org.test"
     pin = _pin_do_ultimo_email(emails_enviados)
 
-    errado = "000000" if pin != "000000" else "111111"
+    errado = "00000000" if pin != "00000000" else "11111111"
     assert _validar_pin(client, "pin@org.test", errado).status_code == 400
 
     certo = _validar_pin(client, "pin@org.test", pin)
@@ -590,7 +597,7 @@ def test_pin_nao_revela_se_o_email_esta_habilitado(
         assert resposta.status_code == 200
         assert resposta.get_json() == respostas[0].get_json()
     assert emails_enviados == []
-    assert _validar_pin(client, "desconhecido@org.test", "123456").status_code == 400
+    assert _validar_pin(client, "desconhecido@org.test", "12345678").status_code == 400
 
 
 def test_pin_expira_em_dez_minutos(gestor, client, email_configurado, emails_enviados, _db):
@@ -612,7 +619,7 @@ def test_pin_e_invalidado_depois_de_cinco_erros(
     _convidar(gestor, [{"email": "forca@org.test"}])
     _pedir_pin(client, "forca@org.test")
     pin = _pin_do_ultimo_email(emails_enviados)
-    errado = "000000" if pin != "000000" else "111111"
+    errado = "00000000" if pin != "00000000" else "11111111"
 
     for _ in range(5):
         assert _validar_pin(client, "forca@org.test", errado).status_code == 400
@@ -651,6 +658,123 @@ def test_reenviar_o_convite_invalida_o_pin_anterior(
     gestor.client.post(f"/v1/convites/{convite.id}/reenviar")
 
     assert _validar_pin(client, "novo-link@org.test", pin).status_code == 400
+
+
+def _errar_um_pin_inteiro(client, _db, email, emails_enviados):
+    """Pede um PIN novo e erra as 5 tentativas dele."""
+    _liberar_novo_pin(_db, email)
+    _pedir_pin(client, email)
+    pin = _pin_do_ultimo_email(emails_enviados)
+    errado = "00000000" if pin != "00000000" else "11111111"
+    for _ in range(5):
+        assert _validar_pin(client, email, errado).status_code == 400
+
+
+def test_erros_somados_de_varios_pins_pausam_o_pin_do_convite(
+    gestor, client, app, monkeypatch, email_configurado, emails_enviados, _db
+):
+    monkeypatch.setitem(app.config, "CONVITE_PIN_MAX_ERROS_TOTAL", 10)
+    eventos = []
+    monkeypatch.setattr(
+        convite_service.audit_logger,
+        "log_security_event",
+        lambda **kwargs: eventos.append(kwargs["event_type"]),
+    )
+    _convidar(gestor, [{"email": "lento@org.test"}])
+
+    _errar_um_pin_inteiro(client, _db, "lento@org.test", emails_enviados)
+    assert eventos == []
+    _errar_um_pin_inteiro(client, _db, "lento@org.test", emails_enviados)
+    assert eventos == ["convite_pin_bloqueado"]
+    convite = _convite(_db, "lento@org.test")
+    assert convite.pin_erros_total == 10
+    pausa = convite.pin_bloqueado_ate - datetime.now(UTC)
+    assert timedelta(minutes=59) < pausa <= timedelta(minutes=60)
+
+    # Pedir de novo não manda nada, e a resposta é a mesma de sempre.
+    _liberar_novo_pin(_db, "lento@org.test")
+    enviados_antes = len(emails_enviados)
+    resposta = _pedir_pin(client, "lento@org.test")
+    assert resposta.status_code == 200
+    assert len(emails_enviados) == enviados_antes
+
+    # Nem um PIN certo gravado no convite passa.
+    convite = _convite(_db, "lento@org.test")
+    convite.pin_hash = convite_service._hash_do_pin(convite, "12345678")
+    convite.pin_expira_em = datetime.now(UTC) + timedelta(minutes=10)
+    convite.pin_tentativas = 0
+    _db.session.commit()
+    resposta = _validar_pin(client, "lento@org.test", "12345678")
+    assert resposta.status_code == 400
+    assert resposta.get_json()["error"]["message"] == "PIN inválido ou expirado"
+
+    # Passada a pausa, o PIN volta a funcionar e os erros recomeçam do zero.
+    convite = _convite(_db, "lento@org.test")
+    convite.pin_bloqueado_ate = datetime.now(UTC) - timedelta(seconds=1)
+    _db.session.commit()
+    _liberar_novo_pin(_db, "lento@org.test")
+    _pedir_pin(client, "lento@org.test")
+    assert len(emails_enviados) == enviados_antes + 1
+    convite = _convite(_db, "lento@org.test")
+    assert convite.pin_bloqueado_ate is None
+    assert convite.pin_erros_total == 0
+    pin = _pin_do_ultimo_email(emails_enviados)
+    assert _validar_pin(client, "lento@org.test", pin).status_code == 200
+
+
+def test_reenvio_pelo_gestor_libera_o_pin_bloqueado(
+    gestor, client, app, monkeypatch, email_configurado, emails_enviados, _db
+):
+    monkeypatch.setitem(app.config, "CONVITE_PIN_MAX_ERROS_TOTAL", 5)
+    _convidar(gestor, [{"email": "liberado@org.test"}])
+    _errar_um_pin_inteiro(client, _db, "liberado@org.test", emails_enviados)
+    convite = _convite(_db, "liberado@org.test")
+    assert convite.pin_erros_total == 5
+
+    assert convite.pin_bloqueado_ate is not None
+
+    assert gestor.client.post(f"/v1/convites/{convite.id}/reenviar").status_code == 200
+    convite = _convite(_db, "liberado@org.test")
+    assert convite.pin_erros_total == 0
+    assert convite.pin_bloqueado_ate is None
+
+    _pedir_pin(client, "liberado@org.test")
+    pin = _pin_do_ultimo_email(emails_enviados)
+    assert _validar_pin(client, "liberado@org.test", pin).status_code == 200
+
+
+def test_pedido_de_pin_nunca_envia_o_e_mail_dentro_da_requisicao(
+    gestor, client, app, monkeypatch, email_configurado, _db
+):
+    """Enviar na requisição deixava o e-mail habilitado mais lento que o desconhecido."""
+    threads_que_enviaram = []
+    monkeypatch.setattr(
+        convite_service,
+        "send_email",
+        lambda **kwargs: threads_que_enviaram.append(threading.current_thread()),
+    )
+    envios = ThreadPoolExecutor(max_workers=1)
+    monkeypatch.setattr(convite_service, "_envios_de_pin", envios)
+    _convidar(gestor, [{"email": "habilitado@org.test"}])
+
+    habilitado = _pedir_pin(client, "habilitado@org.test")
+    desconhecido = _pedir_pin(client, "ninguem@org.test")
+    envios.shutdown(wait=True)
+
+    assert habilitado.status_code == desconhecido.status_code == 200
+    assert habilitado.get_json() == desconhecido.get_json()
+    assert len(threads_que_enviaram) == 1
+    assert threads_que_enviaram[0] is not threading.current_thread()
+
+
+def test_pin_fora_do_formato_nao_gasta_tentativa(
+    gestor, client, email_configurado, emails_enviados, _db
+):
+    _convidar(gestor, [{"email": "curto@org.test"}])
+    _pedir_pin(client, "curto@org.test")
+
+    assert _validar_pin(client, "curto@org.test", "123456").status_code == 400
+    assert _convite(_db, "curto@org.test").pin_tentativas == 0
 
 
 def test_pin_sem_email_configurado_nao_envia_nada(

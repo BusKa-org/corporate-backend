@@ -357,6 +357,29 @@ da lista ou texto acima do limite: 400. Itens repetidos são guardados uma vez s
 em que vieram. Aparecem para o gestor (`GET /v1/alunos/<id>`) e para o motorista na lista
 de passageiros da viagem. A exclusão da conta apaga os dois campos.
 
+## PIN do convite
+
+`POST /v1/convites/pin` manda um PIN de **8 dígitos** (antes eram 6), válido por 10 minutos,
+ao e-mail de um convite pendente; um PIN novo só sai 60 segundos depois do anterior.
+`POST /v1/convites/pin/validar` devolve o token do convite quando o PIN confere.
+
+**Mudança para os apps:** o campo do PIN precisa aceitar 8 dígitos. Um `pin` que não seja
+8 dígitos (espaços nas pontas são ignorados) volta 400 de validação sem gastar tentativa.
+
+- Cada PIN aceita 5 erros; no quinto ele deixa de valer.
+- Os erros também somam por convite, em todos os PINs, e um PIN novo não zera essa soma. Ao
+  chegar em `CONVITE_PIN_MAX_ERROS_TOTAL` (padrão 20), o PIN do convite entra em pausa por
+  `CONVITE_PIN_BLOQUEIO_MINUTOS` (padrão 60): o pedido não envia nada e a validação recusa até
+  o PIN certo. No fim da pausa a soma zera e o PIN volta a funcionar. A pausa é temporária de
+  propósito: um bloqueio definitivo deixaria qualquer um trancar o convidado de verdade. O link
+  do e-mail do convite continua valendo, e o gestor libera na hora reenviando o convite
+  (`POST /v1/convites/<id>/reenviar`), que também troca o token.
+- O e-mail do PIN sai numa thread em segundo plano, fora da requisição: o pedido de um e-mail
+  habilitado responde no mesmo tempo que o de um desconhecido. O PIN nunca é gravado em texto
+  puro (só o hash).
+- As respostas nunca revelam o estado: o pedido sempre responde 200 com a mesma mensagem e a
+  validação sempre falha com 400 `PIN inválido ou expirado`.
+
 ## Rate limit
 
 Every route is limited by Flask-Limiter. Over the limit, the API answers `429`
