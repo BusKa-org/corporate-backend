@@ -1,7 +1,7 @@
 import pytest
 
 from app.core.exceptions import ValidationError
-from app.utils.imagem import remover_metadados
+from app.utils.imagem import dimensoes, remover_metadados
 from tests.helpers import imagens
 
 
@@ -85,3 +85,58 @@ def test_webp_com_tamanho_errado_e_recusado():
 
     with pytest.raises(ValidationError):
         remover_metadados(quebrado, "image/webp")
+
+
+@pytest.mark.parametrize(
+    "conteudo, tipo",
+    [
+        (imagens.png(largura=4000, altura=3000), "image/png"),
+        (imagens.jpeg(com_exif=True, largura=4000, altura=3000), "image/jpeg"),
+        (imagens.webp(imagens.vp8x(4000, 3000) + imagens.VP8L), "image/webp"),
+        (imagens.webp(imagens.vp8(4000, 3000)), "image/webp"),
+        (imagens.webp(imagens.vp8l(4000, 3000)), "image/webp"),
+    ],
+)
+def test_dimensoes_lidas_do_cabecalho(conteudo, tipo):
+    assert dimensoes(conteudo, tipo) == (4000, 3000)
+
+
+def test_dimensoes_acima_do_limite_sao_lidas_inteiras():
+    # 14 bits é o máximo do VP8L; o serviço compara com o limite de pixels.
+    assert dimensoes(imagens.webp(imagens.vp8l(16384, 16384)), "image/webp") == (16384, 16384)
+    assert dimensoes(imagens.png(largura=100_000, altura=100_000), "image/png") == (
+        100_000,
+        100_000,
+    )
+
+
+@pytest.mark.parametrize(
+    "conteudo, tipo",
+    [
+        (imagens.png(largura=0, altura=10), "image/png"),
+        (imagens.jpeg(largura=10, altura=0), "image/jpeg"),
+        (imagens.webp(imagens.vp8(0, 10)), "image/webp"),
+    ],
+)
+def test_dimensao_zero_e_recusada(conteudo, tipo):
+    with pytest.raises(ValidationError):
+        dimensoes(conteudo, tipo)
+
+
+@pytest.mark.parametrize(
+    "conteudo, tipo",
+    [
+        (imagens.png()[:20], "image/png"),
+        (imagens.jpeg()[:30], "image/jpeg"),
+        (imagens.webp(imagens.vp8l(10, 10))[:22], "image/webp"),
+        (imagens.webp(imagens.vp8(10, 10))[:26], "image/webp"),
+        # Sem SOFn antes do início da imagem, e WEBP sem chunk de imagem.
+        (b"\xff\xd8" + imagens.APP0_JFIF + imagens.INICIO_DA_IMAGEM_JPEG, "image/jpeg"),
+        (imagens.webp(imagens.EXIF_WEBP), "image/webp"),
+        # IHDR fora do primeiro lugar.
+        (b"\x89PNG\r\n\x1a\n" + imagens.TEXTO_PNG + imagens.ihdr(1, 1), "image/png"),
+    ],
+)
+def test_cabecalho_cortado_ou_ausente_e_recusado(conteudo, tipo):
+    with pytest.raises(ValidationError):
+        dimensoes(conteudo, tipo)

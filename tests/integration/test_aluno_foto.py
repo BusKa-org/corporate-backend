@@ -199,3 +199,19 @@ def test_get_foto_aluno_sem_foto_404(aluno):
 
 def test_get_foto_id_invalido_400(aluno):
     assert aluno.client.get("/v1/alunos/nao-e-uuid/foto").status_code == 400
+
+
+def test_foto_no_limite_de_pixels_e_aceita_e_acima_e_recusada(
+    aluno, app, pasta_de_fotos, monkeypatch
+):
+    monkeypatch.setitem(app.config, "FOTO_ALUNO_MAX_PIXELS", 100)
+    no_limite = imagens.png(largura=10, altura=10)
+    assert _enviar(aluno, no_limite).status_code == 200
+
+    resposta = _enviar(aluno, imagens.jpeg(largura=11, altura=10), nome="foto.jpg")
+
+    assert resposta.status_code == 400
+    assert "megapixels" in resposta.get_data(as_text=True)
+    assert os.listdir(pasta_de_fotos) == [f"{aluno.user.id}.png"]
+    with open(pasta_de_fotos / f"{aluno.user.id}.png", "rb") as arquivo:
+        assert arquivo.read() == no_limite
