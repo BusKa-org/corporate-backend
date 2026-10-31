@@ -147,6 +147,14 @@ class MessageResponseSchema(BaseSchema):
 class ViagemAlunoConfirmacaoResponseSchema(BaseSchema):
     aluno_id = fields.String()
     nome = fields.String(attribute="aluno.nome")
+    # Motorista confere a foto no embarque (RF-17) e vê quem precisa de ajuda.
+    foto_url = fields.String(attribute="aluno.foto_url", dump_default=None)
+    necessidades_acessibilidade = fields.List(
+        fields.String(), attribute="aluno.necessidades_acessibilidade"
+    )
+    observacao_acessibilidade = fields.String(
+        attribute="aluno.observacao_acessibilidade", dump_default=None
+    )
     confirmacao = fields.Boolean()
     ponto_embarque = fields.String(attribute="ponto_embarque.apelido")
     ponto_destino = fields.String(attribute="ponto_destino.apelido")
@@ -327,6 +335,25 @@ class ViagemAgendaAlunoResponseSchema(BaseSchema):
     def get_ponto_embarque_id(self, obj):
         c = self._find_confirmacao(obj)
         return str(c.ponto_embarque_id) if (c and c.ponto_embarque_id) else None
+
+
+# ==========================================
+# Declaração de trajeto sob demanda (RF-13)
+# ==========================================
+
+
+class DeclaracaoTrajetoRequestSchema(BaseSchema):
+    """RF-13: origem e destino entre os pontos fixos do circuito."""
+
+    ponto_origem_id = fields.UUID(required=True)
+    ponto_destino_id = fields.UUID(required=True)
+
+    @validates_schema
+    def validate_pontos(self, data: dict[str, Any], **kwargs) -> None:
+        if data.get("ponto_origem_id") == data.get("ponto_destino_id"):
+            raise MarshmallowValidationError(
+                {"ponto_destino_id": ["A origem e o destino precisam ser pontos diferentes."]}
+            )
 
 
 class ViagemListResponseSchema(BaseSchema):

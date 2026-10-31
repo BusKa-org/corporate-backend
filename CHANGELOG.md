@@ -37,8 +37,32 @@ All notable changes to this project will be documented in this file.
   gestor once when the driver misses the start deadline. Trips now carry `rota_id`,
   `buffer_fim` and the new statuses. New settings `FUSO_HORARIO`,
   `JOB_BUFFER_INTERVALO_SEGUNDOS`, `JOB_PRAZO_INICIO_INTERVALO_SEGUNDOS`.
+- On-demand capacity and boarding on top of that lifecycle (RF-13 to RF-18, RF-21, RF-22).
+  During the buffer the student declares origin and destination
+  (`POST /v1/viagens/<id>/declaracao`, which also joins the trip if the student only got
+  the broadcast); the segment load vector accepts it or marks the request `NEGADA`.
+  When the buffer closes, each declared request becomes a passenger with a QR boarding
+  credential and the driver's itinerary is built; with no declared route the trip is
+  cancelled. Driver itinerary, QR/manual boarding and offline sync (`/v1/embarque/...`),
+  gestor indicators and CSV export (`/v1/dashboard/indicadores`) and battery telemetry
+  (`/v1/telemetria`) work on these trips. Cancelling during the buffer gives the segment
+  back; after departure it is a no-show and leaves the driver's boarding list.
+- Circuit editing (`DELETE /v1/rotas/<id>/pontos/<ponto_id>`, gap-free stop order) is
+  blocked while a trip that uses the circuit is active.
+- Passenger accessibility needs (`necessidades_acessibilidade`, `observacao_acessibilidade`)
+  on registration and `PUT /v1/alunos/me`, shown to the gestor and to the driver of the trip.
+- Passenger photo: `PUT /v1/alunos/me/foto` (multipart, JPEG/PNG/WEBP, EXIF/GPS and text
+  metadata removed) and `GET /v1/alunos/<id>/foto` for the passenger, the organization's
+  gestor, and the driver of a scheduled or in-progress trip the passenger confirmed.
+  Photos over `FOTO_ALUNO_MAX_PIXELS` (default 25 MP) are rejected with a 400.
+  New settings `FOTOS_ALUNO_DIR`, `FOTO_ALUNO_MAX_BYTES` and `FOTO_ALUNO_MAX_PIXELS`; production keeps photos in the
+  `fotos_aluno` volume. Account deletion removes the photo file and the accessibility data.
 
 ### Removed
+- dev's first on-demand implementation, replaced by the one above before any release:
+  `POST /v1/viagens/solicitar`, `GET /v1/viagens/rodada-ativa`, `DELETE /v1/viagens/<id>/declaracao`
+  and `/v1/janelas` (see `docs/api_contracts.md` for the replacements), the `OCIOSA` and
+  `EM_ROTA` trip statuses and the request status on `alunos_confirmados`.
 - Passenger self-signup (`POST /v1/alunos/signup`), the guardian consent endpoints, the
   single and batch approval endpoints (`POST /v1/alunos/<id>/aprovar`, `POST /v1/alunos/aprovar`)
   and the gestor-creates-account-with-password endpoint (`POST /v1/users/alunos`).
@@ -57,7 +81,4 @@ All notable changes to this project will be documented in this file.
 ### To do
 - Remove municipal-specific modules (route subscription, batch trip generation)
 - Rename `Prefeitura` → `Organizacao`
-- Add on-demand trip lifecycle: `Ociosa → Solicitada → Buffer aberto → Em rota → Finalizada`
-- Add segment capacity vector (Redis)
-- Add QR boarding credentials and offline-first driver sync
 - Refactor `create_app()` for entry-point plugin discovery

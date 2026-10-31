@@ -76,7 +76,11 @@ class Viagem(db.Model):
 
 
 class SolicitacaoViagem(db.Model):
-    """Interesse de um aluno numa viagem sob demanda (RF-10, RF-19)."""
+    """Interesse de um aluno numa viagem sob demanda (RF-10, RF-19).
+
+    Durante o buffer o aluno declara origem e destino (RF-13); a capacidade decide
+    se o trajeto cabe (RF-14). No fim do buffer quem declarou vira AlunosConfirmados.
+    """
 
     __tablename__ = "solicitacao_viagem"
     __table_args__ = (
@@ -108,8 +112,14 @@ class SolicitacaoViagem(db.Model):
     created_at = db.Column(db.DateTime(timezone=True), server_default=db.func.now())
     cancelada_em = db.Column(db.DateTime(timezone=True), nullable=True)
 
+    ponto_embarque_id = db.Column(UUID(as_uuid=True), db.ForeignKey("ponto.id"), nullable=True)
+    ponto_destino_id = db.Column(UUID(as_uuid=True), db.ForeignKey("ponto.id"), nullable=True)
+    declarada_em = db.Column(db.DateTime(timezone=True), nullable=True)
+
     viagem = relationship("Viagem", back_populates="solicitacoes")
     aluno = relationship("Aluno")
+    ponto_embarque = relationship("Ponto", foreign_keys=[ponto_embarque_id])
+    ponto_destino = relationship("Ponto", foreign_keys=[ponto_destino_id])
 
 
 class ViagemPonto(db.Model):
@@ -139,6 +149,9 @@ class ViagemPonto(db.Model):
 
 
 class AlunosConfirmados(db.Model):
+    """Passageiro de uma viagem: quem confirmou presença na viagem fixa, ou quem
+    teve o trajeto aceito na sob demanda (criado no fim do buffer)."""
+
     __tablename__ = "alunos_confirmados"
 
     viagem_id = db.Column(
@@ -169,6 +182,8 @@ class AlunosConfirmados(db.Model):
     aluno_lat = db.Column(db.Numeric(10, 8), nullable=True)
     aluno_lon = db.Column(db.Numeric(11, 8), nullable=True)
     aluno_gps_hora = db.Column(db.DateTime(timezone=True), nullable=True)
+
+    embarcado_em = db.Column(db.DateTime(timezone=True), nullable=True)
 
 
 class TelemetriaViagem(db.Model):

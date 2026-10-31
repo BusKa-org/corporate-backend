@@ -2,12 +2,22 @@ import enum
 
 
 class TipoInstituicao(enum.Enum):
+    """Tipo da instituição atendida.
+
+    Os seis primeiros vêm do catálogo escolar herdado (EMEC/INEP). Os dois
+    últimos existem porque uma implantação corporativa atende parques
+    tecnológicos e centros de inovação, que não são escolas — enquadrá-los
+    como universidade seria gravar dado errado só para caber no enum.
+    """
+
     INSTITUTO_FEDERAL = "Instituto Federal"
     UNIVERSIDADE_PUBLICA = "Universidade Pública"
     UNIVERSIDADE_PRIVADA = "Universidade Privada"
     ESCOLA_PUBLICA = "Escola Pública"
     ESCOLA_PRIVADA = "Escola Privada"
     ESCOLA_COMUNITARIA = "Escola Comunitária"
+    PARQUE_TECNOLOGICO = "Parque Tecnológico"
+    CENTRO_INOVACAO = "Centro de Inovação"
 
 
 class DiaDaSemana(enum.Enum):
@@ -44,10 +54,14 @@ class StatusViagem(enum.Enum):
 
 
 class StatusSolicitacao(enum.Enum):
+    """ATIVA sem pontos = interessado; ATIVA com pontos = lugar garantido (RF-13/14)."""
+
     ATIVA = "ATIVA"
     CANCELADA = "CANCELADA"
     # Cancelou depois do início do percurso: no-show previsto (RF-19).
     DESISTENCIA = "DESISTENCIA"
+    # Trajeto recusado por lotação (RF-14). Conta nas negações por ponto (RF-21).
+    NEGADA = "NEGADA"
 
 
 class UserRole(enum.Enum):
@@ -79,3 +93,12 @@ class TipoOcorrencia(enum.Enum):
 class StatusOcorrencia(enum.Enum):
     ABERTA = "ABERTA"
     RESOLVIDA = "RESOLVIDA"
+
+
+class NecessidadeAcessibilidade(enum.Enum):
+    CADEIRA_DE_RODAS = "CADEIRA_DE_RODAS"
+    MOBILIDADE_REDUZIDA = "MOBILIDADE_REDUZIDA"
+    DEFICIENCIA_VISUAL = "DEFICIENCIA_VISUAL"
+    DEFICIENCIA_AUDITIVA = "DEFICIENCIA_AUDITIVA"
+    DEFICIENCIA_INTELECTUAL = "DEFICIENCIA_INTELECTUAL"
+    OUTRA = "OUTRA"

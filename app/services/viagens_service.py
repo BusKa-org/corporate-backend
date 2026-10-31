@@ -76,31 +76,12 @@ def _rota_id_da_viagem(viagem: Viagem):
 
 
 def _popular_dados_da_viagem(viagem_obj: Viagem, rota_obj: Rota) -> None:
-    """Helper function that copies students and stops from route to trip."""
-    inscricoes = db.session.query(RotaAluno).filter_by(rota_id=rota_obj.id).all()
+    """Copia os pontos da rota para a viagem.
 
-    # Batch load all alunos to avoid N+1 queries
-    aluno_ids = [i.aluno_id for i in inscricoes]
-    if aluno_ids:
-        alunos = db.session.query(Aluno).filter(Aluno.usuario_id.in_(aluno_ids)).all()
-        alunos_map = {a.usuario_id: a for a in alunos}
-    else:
-        alunos_map = {}
-
-    for inscricao in inscricoes:
-        aluno = alunos_map.get(inscricao.aluno_id)
-        if not aluno:
-            continue
-
-        conf = AlunosConfirmados(
-            viagem_id=viagem_obj.id,
-            aluno_id=aluno.usuario_id,
-            confirmacao=False,
-            ponto_embarque_id=None,
-            ponto_destino_id=None,
-        )
-        db.session.add(conf)
-
+    Os passageiros não são mais copiados de uma inscrição permanente: cada
+    viagem tem sua própria lista, criada quando o aluno confirma presença
+    (viagem fixa) ou quando o buffer da sob demanda fecha (RF-15).
+    """
     pontos_rota = (
         db.session.query(RotaPonto).filter_by(rota_id=rota_obj.id).order_by(RotaPonto.ordem).all()
     )

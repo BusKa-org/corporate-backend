@@ -373,6 +373,65 @@ def viagem_futura_iniciada_com_motorista(_db, horario_rota, motorista):
     return v
 
 
+# ==========================================
+# Circuito sob demanda com capacidade por trecho — RF-13 a RF-18
+# ==========================================
+#
+# Um circuito de quatro pontos ordenados dá três segmentos (P1→P2, P2→P3,
+# P3→P4), o mínimo para exercitar trajetos disjuntos reusando o mesmo assento
+# na validação de capacidade (RF-14).
+
+
+@pytest.fixture()
+def pontos_circuito(_db, organizacao):
+    pontos = [PontoFactory(organizacao_id=organizacao.id) for _ in range(4)]
+    _db.session.add_all(pontos)
+    _db.session.commit()
+    return pontos
+
+
+@pytest.fixture()
+def circuito(_db, rota_sob_demanda, pontos_circuito):
+    """A rota sob demanda com os quatro pontos em ordem."""
+    for ordem, p in enumerate(pontos_circuito, start=1):
+        _db.session.add(RotaPontoFactory(rota_id=rota_sob_demanda.id, ponto_id=p.id, ordem=ordem))
+    _db.session.commit()
+    return rota_sob_demanda
+
+
+@pytest.fixture()
+def viagem_buffer_aberto(_db, circuito, motorista, onibus):
+    """Viagem do circuito com o buffer aberto pelo relógio real, ainda sem solicitações."""
+    v = ViagemFactory(
+        data=date.today(),
+        rota_id=circuito.id,
+        motorista_id=motorista.user.id,
+        veiculo_id=onibus.id,
+        status=StatusViagem.BUFFER_ABERTO,
+        buffer_fim=datetime.now(UTC) + timedelta(minutes=5),
+    )
+    _db.session.add(v)
+    _db.session.commit()
+    return v
+
+
+def reservar_trajeto(_db, viagem, aluno_id, origem_id, destino_id):
+    """Solicita (se ainda não solicitou) e declara o trajeto na viagem."""
+    from app.models.enum import StatusSolicitacao
+    from app.models.viagem import SolicitacaoViagem
+    from app.services import capacidade_service
+
+    ativa = (
+        _db.session.query(SolicitacaoViagem)
+        .filter_by(viagem_id=viagem.id, aluno_id=aluno_id, status=StatusSolicitacao.ATIVA)
+        .first()
+    )
+    if not ativa:
+        _db.session.add(SolicitacaoViagemFactory(viagem_id=viagem.id, aluno_id=aluno_id))
+        _db.session.commit()
+    return capacidade_service.validar_e_reservar(viagem.id, aluno_id, origem_id, destino_id)
+
+
 @pytest.fixture()
 def confirmacao_aluno(_db, viagem_futura_agendada_com_motorista, aluno, ponto):
     conf = AlunosConfirmadosFactory(

@@ -103,7 +103,6 @@ mebuska-corporate/
 │   └── services/           # Business logic services
 ├── database/               # SQL scripts
 │   ├── init.sql            # Schema and extensions
-│   └── populate.sql        # Seed data
 ├── docs/                   # API documentation
 │   └── endpoints/          # YAML specs (Swagger)
 ├── infra/

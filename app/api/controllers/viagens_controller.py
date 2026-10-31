@@ -18,6 +18,7 @@ from app.schemas.ponto_schema import (
 )
 from app.schemas.solicitacao_schema import SolicitacaoResponseSchema
 from app.schemas.viagem_schema import (
+    DeclaracaoTrajetoRequestSchema,
     MessageResponseSchema,
     ViagemAcaoRequestSchema,
     ViagemAgendaAlunoListResponseSchema,
@@ -63,6 +64,29 @@ viagem_agenda_aluno_list_response_schema = ViagemAgendaAlunoListResponseSchema()
 ponto_flat_list_response_schema = PontoFlatListResponseSchema()
 credencial_embarque_response_schema = CredencialEmbarqueResponseSchema()
 solicitacao_response_schema = SolicitacaoResponseSchema()
+
+declaracao_trajeto_request_schema = DeclaracaoTrajetoRequestSchema()
+
+
+@api.route("/<string:id>/declaracao")
+class ViagemDeclaracaoResource(Resource):
+    @api.doc(
+        "declarar_trajeto",
+        responses={
+            200: "Trajeto aceito",
+            400: "Viagem fora do buffer ou pontos inválidos",
+            409: "Sem lugar no trecho",
+        },
+    )
+    @api.expect(models["declaracao_trajeto_request"])
+    @api.response(200, "Trajeto aceito", solicitacao_models["solicitacao_response"])
+    @jwt_required()
+    @exige_consentimento
+    def post(self, id: str) -> tuple[dict[str, Any], int]:
+        """(Aluno) Declara origem e destino durante o buffer (RF-13/RF-14)"""
+        payload = declaracao_trajeto_request_schema.load(request.get_json(silent=True) or {})
+        solicitacao = solicitacoes_service.declarar_trajeto(get_jwt_identity(), id, payload)
+        return solicitacao_response_schema.dump(solicitacao), 200
 
 
 @api.route("/aluno/agenda")

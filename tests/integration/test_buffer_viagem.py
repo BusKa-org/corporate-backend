@@ -6,9 +6,10 @@ from datetime import timedelta
 import pytest
 
 from app.models.consentimento import ACEITE, Consentimento
-from app.models.enum import StatusViagem, UserStatus
+from app.models.credencial_embarque import CredencialEmbarque
+from app.models.enum import StatusSolicitacao, StatusViagem, UserStatus
 from app.models.notificacao import Notificacao
-from app.models.viagem import Viagem
+from app.models.viagem import AlunosConfirmados, Viagem
 from app.services import buffer_service
 from app.services.consentimento_service import VERSAO_TERMO_VIGENTE
 from tests.factories.user_factory import AlunoFactory, GestorFactory, MotoristaFactory
@@ -121,7 +122,12 @@ def _abrir_buffer(_db, viagem, buffer_fim):
     _db.session.commit()
 
 
-def test_buffer_expirado_vira_em_andamento(_db, viagem_solicitada, motorista, aluno, relogio):
+def test_buffer_expirado_vira_em_andamento(
+    _db, viagem_solicitada, circuito, pontos_circuito, motorista, aluno, relogio
+):
+    solicitacao = viagem_solicitada.solicitacoes[0]
+    solicitacao.ponto_embarque_id = pontos_circuito[0].id
+    solicitacao.ponto_destino_id = pontos_circuito[2].id
     buffer_fim = relogio.agora + timedelta(minutes=5)
     _abrir_buffer(_db, viagem_solicitada, buffer_fim)
     relogio.avancar(minutes=6)
@@ -133,6 +139,31 @@ def test_buffer_expirado_vira_em_andamento(_db, viagem_solicitada, motorista, al
     assert viagem.inicio_real == buffer_fim
     assert _notificacoes(motorista.user.id) == 1
     assert _notificacoes(aluno.user.id) == 1
+
+    # RF-15: quem declarou vira passageiro com credencial e o roteiro é materializado.
+    passageiro = _db.session.get(AlunosConfirmados, (viagem.id, aluno.user.id))
+    assert passageiro.confirmacao is True
+    assert passageiro.ponto_embarque_id == pontos_circuito[0].id
+    assert CredencialEmbarque.query.filter_by(viagem_id=viagem.id).count() == 1
+    assert len(viagem.pontos_visitados) == 4
+
+
+def test_buffer_expirado_sem_trajeto_declarado_cancela_a_viagem(
+    _db, viagem_solicitada, motorista, aluno, relogio
+):
+    """RF-15, fluxo secundário 1: sem trajeto aceito, o veículo volta a ficar ocioso."""
+    _abrir_buffer(_db, viagem_solicitada, relogio.agora + timedelta(minutes=5))
+    relogio.avancar(minutes=6)
+
+    assert buffer_service.fechar_buffers_expirados() == 1
+
+    viagem = _db.session.get(Viagem, viagem_solicitada.id)
+    assert viagem.status == StatusViagem.CANCELADA
+    assert viagem.inicio_real is None
+    assert viagem.solicitacoes[0].status == StatusSolicitacao.CANCELADA
+    assert AlunosConfirmados.query.filter_by(viagem_id=viagem.id).count() == 0
+    assert _notificacoes(motorista.user.id) == 1
+    assert _notificacoes(aluno.user.id) == 0
 
 
 def test_buffer_nao_expirado_fica_intacto(_db, viagem_solicitada, relogio):

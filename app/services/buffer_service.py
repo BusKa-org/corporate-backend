@@ -8,8 +8,8 @@ from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError
 from app.models.base import db
 from app.models.enum import StatusSolicitacao, StatusViagem, UserRole, UserStatus
 from app.models.user import Aluno, Gestor, User
-from app.models.viagem import SolicitacaoViagem, Viagem
-from app.services import consentimento_service
+from app.models.viagem import AlunosConfirmados, SolicitacaoViagem, Viagem
+from app.services import consentimento_service, embarque_service
 from app.services.notificacao_service import NotificacaoService
 from app.utils import tempo
 from app.utils.validators import validate_uuid
@@ -79,14 +79,32 @@ def notificar_abertura_buffer(viagem: Viagem) -> None:
 
 # shortcut: PR #16 needs nothing new here: the driver was validated in iniciar_percurso, and
 # EM_ANDAMENTO plus inicio_real below are what its computed state and rest calculation read.
-def colocar_em_rota(viagem: Viagem, momento: datetime) -> None:
-    """Única transição sob demanda para EM_ANDAMENTO; inicio_real conta o tempo de direção."""
+def colocar_em_rota(viagem: Viagem, momento: datetime, declaradas: list[SolicitacaoViagem]) -> None:
+    """Única transição sob demanda para EM_ANDAMENTO; inicio_real conta o tempo de direção.
+
+    Fecha a rodada (RF-15): cada trajeto aceito vira passageiro com credencial de embarque.
+    """
     viagem.status = StatusViagem.EM_ANDAMENTO
     viagem.inicio_real = momento
 
+    passageiros = []
+    for solicitacao in declaradas:
+        passageiro = AlunosConfirmados(
+            viagem_id=viagem.id,
+            aluno_id=solicitacao.aluno_id,
+            confirmacao=True,
+            ponto_embarque_id=solicitacao.ponto_embarque_id,
+            ponto_destino_id=solicitacao.ponto_destino_id,
+        )
+        db.session.add(passageiro)
+        passageiros.append(passageiro)
+    db.session.flush()
+
+    embarque_service.consolidar_embarque(viagem, passageiros)
+
 
 def fechar_buffers_expirados() -> int:
-    """Job: buffer expirado vira EM_ANDAMENTO e avisa motorista e alunos da rodada."""
+    """Job: buffer expirado vira EM_ANDAMENTO com quem declarou trajeto; sem ninguém, é cancelada."""
     agora = tempo.agora_utc()
     viagens = Viagem.query.filter(
         Viagem.status == StatusViagem.BUFFER_ABERTO,
@@ -95,7 +113,30 @@ def fechar_buffers_expirados() -> int:
 
     for viagem in viagens:
         # O instante em que o buffer fechou de fato, não o atraso do job.
-        colocar_em_rota(viagem, viagem.buffer_fim)
+        fim = viagem.buffer_fim
+
+        declaradas = []
+        for solicitacao in viagem.solicitacoes:
+            if solicitacao.status != StatusSolicitacao.ATIVA:
+                continue
+            if solicitacao.ponto_embarque_id is None:
+                # Só demonstrou interesse e não declarou trajeto: sai da rodada.
+                solicitacao.status = StatusSolicitacao.CANCELADA
+                solicitacao.cancelada_em = fim
+            else:
+                declaradas.append(solicitacao)
+
+        if not declaradas:
+            # RF-15, fluxo secundário 1: nenhum trajeto aceito, o veículo volta a ficar ocioso.
+            viagem.status = StatusViagem.CANCELADA
+            NotificacaoService._criar_notificacao_interna(
+                usuario_id=viagem.motorista_id,
+                titulo="Viagem cancelada",
+                mensagem="O buffer terminou sem trajetos declarados. O veículo volta a ficar ocioso.",
+            )
+            continue
+
+        colocar_em_rota(viagem, fim, declaradas)
 
         NotificacaoService._criar_notificacao_interna(
             usuario_id=viagem.motorista_id,
@@ -103,10 +144,7 @@ def fechar_buffers_expirados() -> int:
             mensagem="A janela de buffer terminou. Pode seguir com o percurso.",
         )
 
-        solicitacoes = SolicitacaoViagem.query.filter_by(
-            viagem_id=viagem.id, status=StatusSolicitacao.ATIVA
-        ).all()
-        for solicitacao in solicitacoes:
+        for solicitacao in declaradas:
             NotificacaoService._criar_notificacao_interna(
                 usuario_id=solicitacao.aluno_id,
                 titulo="🚐 Veículo em rota",

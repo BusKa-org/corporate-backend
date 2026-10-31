@@ -10,7 +10,7 @@ from app.models.onibus import Onibus
 from app.models.rota import Rota
 from app.models.user import Aluno, User
 from app.models.viagem import AlunosConfirmados, SolicitacaoViagem, Viagem
-from app.services import janelas_service, viagens_service
+from app.services import capacidade_service, janelas_service, viagens_service
 from app.services.notificacao_service import NotificacaoService
 from app.utils import tempo
 from app.utils.validators import validate_uuid
@@ -124,7 +124,6 @@ def solicitar_viagem(user_id: str, rota_id: str) -> SolicitacaoViagem:
                 mensagem=f"Um passageiro solicitou a rota {rota.nome}. Inicie o percurso quando estiver pronto.",
             )
 
-        # shortcut: no origin/destination or capacity check yet, add RF-13/14 here in Plan 3.
         solicitacao = SolicitacaoViagem(
             viagem_id=viagem.id,
             aluno_id=aluno.usuario_id,
@@ -171,6 +170,10 @@ def cancelar_solicitacao(user_id: str, viagem_id: str) -> SolicitacaoViagem:
         if viagem.status == StatusViagem.EM_ANDAMENTO:
             # Lugar não é reaberto: o veículo já saiu contando com o passageiro.
             solicitacao.status = StatusSolicitacao.DESISTENCIA
+            # Sai da lista de embarque do motorista (RF-16/RF-17).
+            passageiro = db.session.get(AlunosConfirmados, (viagem.id, aluno.usuario_id))
+            if passageiro:
+                passageiro.confirmacao = False
             if viagem.motorista_id:
                 NotificacaoService._criar_notificacao_interna(
                     usuario_id=viagem.motorista_id,
@@ -184,7 +187,7 @@ def cancelar_solicitacao(user_id: str, viagem_id: str) -> SolicitacaoViagem:
                 f"Não é possível cancelar a solicitação de uma viagem com status {viagem.status.name}"
             )
 
-        # shortcut: no capacity to give back yet, decrement the RF-14 load here in Plan 3.
+        # O vetor de carga só conta solicitações ATIVA: cancelar já devolve o trecho (RF-14).
         solicitacao.status = StatusSolicitacao.CANCELADA
         db.session.flush()
 
@@ -204,6 +207,35 @@ def cancelar_solicitacao(user_id: str, viagem_id: str) -> SolicitacaoViagem:
                     )
 
         return solicitacao
+
+
+def declarar_trajeto(user_id: str, viagem_id: str, data: dict) -> SolicitacaoViagem:
+    """
+    RF-13: o aluno declara origem e destino durante o buffer; a capacidade decide (RF-14).
+    Quem recebeu o aviso do buffer sem ter solicitado entra na viagem aqui mesmo.
+
+    Raises: ForbiddenError, NotFoundError, ValidationError, ConflictError
+    """
+    aluno = _buscar_aluno(user_id)
+
+    viagem = db.session.get(Viagem, validate_uuid(viagem_id, "ID da viagem"))
+    if not viagem:
+        raise NotFoundError("Viagem não encontrada")
+
+    ja_solicitou = (
+        db.session.query(SolicitacaoViagem.id)
+        .filter_by(viagem_id=viagem.id, aluno_id=aluno.usuario_id, status=StatusSolicitacao.ATIVA)
+        .first()
+    )
+    if not ja_solicitou and viagem.status == StatusViagem.BUFFER_ABERTO and viagem.rota_id:
+        solicitar_viagem(user_id, str(viagem.rota_id))
+
+    try:
+        return capacidade_service.validar_e_reservar(
+            viagem.id, aluno.usuario_id, data["ponto_origem_id"], data["ponto_destino_id"]
+        )
+    except ConflictError as e:
+        raise ConflictError(f"{e.message}. Tente novamente na próxima rodada.") from e
 
 
 def buscar_rodada_ativa(user_id: str, rota_id: str) -> dict:

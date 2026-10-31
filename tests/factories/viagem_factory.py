@@ -16,7 +16,9 @@ class ViagemFactory(factory.Factory):
     rota_id = None
     motorista_id = None
     veiculo_id = None
-    status = factory.Faker("random_element", elements=StatusViagem)
+    # Fixo, não sorteado: com os estados da rodada dentro do enum, sortear faria
+    # o teste passar ou falhar conforme o estado que calhasse de sair.
+    status = StatusViagem.AGENDADA
 
 
 class ViagemPontoFactory(factory.Factory):

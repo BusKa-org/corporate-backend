@@ -16,6 +16,9 @@ class SolicitacaoResponseSchema(BaseSchema):
     viagem_id = fields.UUID()
     status = fields.Function(lambda s: s.status.value if s.status else None)
     created_at = fields.DateTime()
+    ponto_embarque_id = fields.UUID(allow_none=True)
+    ponto_destino_id = fields.UUID(allow_none=True)
+    declarada_em = fields.DateTime(allow_none=True)
     viagem = fields.Nested(SolicitacaoViagemResumoSchema)
 
 

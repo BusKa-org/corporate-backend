@@ -26,9 +26,13 @@ def register_models(api):
             "id": fields.String(description="UUID da solicitação"),
             "viagem_id": fields.String(description="UUID da viagem"),
             "status": fields.String(
-                description="Status da solicitação", enum=["ATIVA", "CANCELADA", "DESISTENCIA"]
+                description="Status da solicitação",
+                enum=["ATIVA", "CANCELADA", "DESISTENCIA", "NEGADA"],
             ),
             "created_at": fields.DateTime(description="Momento da solicitação"),
+            "ponto_embarque_id": fields.String(description="Origem declarada (RF-13)"),
+            "ponto_destino_id": fields.String(description="Destino declarado (RF-13)"),
+            "declarada_em": fields.DateTime(description="Momento da declaração do trajeto"),
             "viagem": fields.Nested(solicitacao_viagem_resumo),
         },
     )

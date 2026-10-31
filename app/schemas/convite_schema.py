@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 
 from marshmallow import fields, validate
 
+from app.schemas.aluno_schema import AcessibilidadeInputSchema
 from app.schemas.common import BaseSchema
 
 
@@ -15,7 +16,7 @@ class ConviteListQuerySchema(BaseSchema):
     estado = fields.String(load_default=None, allow_none=True)
 
 
-class ConviteAceiteRequestSchema(BaseSchema):
+class ConviteAceiteRequestSchema(AcessibilidadeInputSchema):
     """Dados da pessoa ao concluir. Nome, CPF e instituição podem vir do convite."""
 
     nome = fields.String(load_default=None, allow_none=True)

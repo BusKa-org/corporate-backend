@@ -1,7 +1,7 @@
 import uuid
 from datetime import date
 
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import ARRAY, UUID
 
 from .base import db
 from .enum import UserRole, UserStatus
@@ -80,6 +80,13 @@ class Aluno(User):
     )
     matricula = db.Column(db.String(50))
     foto_url = db.Column(db.String(255))
+
+    # Nomes de NecessidadeAcessibilidade. Lista de texto, não ENUM do Postgres, para
+    # incluir uma necessidade nova sem migration.
+    necessidades_acessibilidade = db.Column(
+        ARRAY(db.String(30)), nullable=False, default=list, server_default="{}"
+    )
+    observacao_acessibilidade = db.Column(db.String(500))
 
     # Guardian (single responsible person, replaces the old pai/mae pair)
     nome_responsavel = db.Column(db.String(100))

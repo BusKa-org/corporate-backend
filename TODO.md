@@ -1,8 +1,47 @@
 # TODO — MeBusKá Corporate Backend
 
-Status as of 2026-08-03. Foundation complete (57 tests green, single Alembic
-head, linters clean). This file tracks what remains and the debt the foundation
-work left or uncovered.
+Status as of 2026-08-03. **Plans 2–8 are implemented** — 233 tests green, single
+Alembic head, linters clean. Every RF in the requirements document is covered
+except RF-07/RF-18's client side and all of RF-09/RF-13/RF-16/RF-17's UI, which
+live in the frontend repo (plan 9).
+
+This file tracks what remains and the debt the work left or uncovered.
+
+---
+
+## Blocking on someone else — needs a decision or data
+
+These are not code problems. Each one is a question I cannot answer from the
+repository.
+
+1. **Real data for two institutions is still missing** — in `mebuska-deploy`,
+   not here. `paqtcpb/dados.py` carries PaqTcPB and CITTA with **approximate
+   coordinates** and **no CNPJ**; the seed prints a warning about both on every
+   run. Confirm with PaqTcPB and fill them in there. Stop ordering matters
+   beyond cosmetics: it is what RF-14 builds its segments from.
+2. **`seed.py` is client-neutral now, and the municipal importers are gone.**
+   The product seeds a generic demonstration organisation. `scripts/seeds/`
+   (municipality/school catalogue importers keyed by IBGE code) and
+   `database/populate.sql` (a list of every PB municipality) were deleted —
+   they could not work after `codigo_ibge` was dropped, and a corporate tenant
+   curates a handful of institutions rather than importing a national
+   catalogue. Recoverable from git if a municipal deployment ever needs them.
+3. **No device identity for telemetry ingestion (RF-22).** Ingestion
+   authenticates as a driver or manager, so `mebuska-deploy` must provision an
+   account and store a long-lived token on the vehicle reader. Rotation and
+   revocation for a headless device are unsolved. Cheaper to settle before the
+   van is in service.
+4. **CPF is mandatory at signup and RF-02 never asks for it.** `usuario.cpf` is
+   `NOT NULL UNIQUE`. Dropping it is a small migration, but whether to collect
+   the identifier at all is a data-minimisation question under the LGPD, not a
+   technical one.
+5. **Boarding is bearer-only.** The passenger photograph in RF-15/RF-17 was
+   descoped by the sponsor, so the visual check that RF-17 describes as the
+   anti-fraud mechanism does not exist. A forwarded or screenshotted token is
+   indistinguishable from the real passenger, and the manual fallback has no
+   identity check whatsoever. Every manual boarding writes an `Ocorrencia` so a
+   manager can audit after the fact — that is mitigation, not the control the
+   requirement specifies. Worth re-confirming with the sponsor in writing.
 
 ---
 
@@ -51,6 +90,14 @@ Is *MeBuska* the company rebrand or the name of product 2? The requirements doc
 uses "MeBusKa" for the PaqTcPB system, which reads like product 2. This blocks
 final repo naming; renaming twice is the expensive part.
 
+### Accessibility needs are health data (open product decision)
+
+`necessidades_acessibilidade` and `observacao_acessibilidade` on `Aluno` describe
+disabilities, which is sensitive personal data under LGPD art. 11. The current
+consent term (`VERSAO_TERMO_VIGENTE`) does not mention it. Product/legal must decide
+whether the term needs to name it explicitly (and bump the version). Account deletion
+already clears both fields.
+
 ---
 
 ## Remaining plans
@@ -58,74 +105,90 @@ final repo naming; renaming twice is the expensive part.
 Each produces working, testable software on its own. See
 `docs/superpowers/plans/2026-08-03-foundation.md` for the full roadmap.
 
-| Plan | Scope | Requirements | Depends on | Parallel? |
-|---|---|---|---|---|
-| 2. Trip lifecycle — **done** (PR #7) | `StatusViagem` + `SOLICITADA`, `BUFFER_ABERTO` (`EM_ANDAMENTO` is "em rota"; "ociosa" = no active trip), vehicle availability windows, ride request, buffer timer job, broadcast, cancellation | RF-05, 10, 11, 12, 19 | Foundation | Partially |
-| 3. Capacity engine | Segment load vector in Redis, `PicoTrecho` validation, origin/destination declaration, ordered circuit stops | RF-04, 13, 14 | Foundation | **Yes** |
-| 4. Boarding | Dynamic QR bound to passenger photo, driver itinerary, QR + photo validation with manual fallback | RF-15, 16, 17 | Plans 2, 3 | Partially |
-| 5. LGPD | Versioned consent capture, account deletion with history anonymisation | RF-09, 20 | Foundation | **Yes** |
-| 6. Institution signup | Signup bound to an institution with manager approval | RF-02 | Foundation | **Yes** |
-| 7. Dashboard | IPK, denials per stop, per-segment timing, exportable period reports | RF-21 | Plans 2, 3 | No |
-| 8. Telemetry | Ingestion endpoint, time-series storage, `TelemetrySource` interface (vehicle adapter lives in `mebuska-deploy`) | RF-22 | Foundation | **Yes** |
-| 9. Frontend | Student app, driver app (offline-first), manager dashboard | RF-07, 18, all UI | Plans 2–8 APIs | Separate repo |
+| Plan | Scope | Requirements | Status |
+|---|---|---|---|
+| 2. Trip lifecycle | `SOLICITADA→BUFFER_ABERTO→EM_ANDAMENTO→FINALIZADA` ("ociosa" = no active trip), vehicle availability windows, ride request, buffer timer, broadcast, cancellation | RF-05, 10, 11, 12, 19 | **Done** (PR #7, replaced dev's first version) |
+| 3. Capacity engine | Segment load vector, `PicoTrecho` validation, origin/destination declaration, ordered circuit stops | RF-04, 13, 14 | **Done** |
+| 4. Boarding | Dynamic QR credential, driver itinerary, validation with manual fallback, offline sync | RF-15, 16, 17, 18 | **Done** (photo descoped) |
+| 5. LGPD | Versioned consent capture, account deletion with history anonymisation | RF-09, 20 | **Done** |
+| 6. Institution signup | Signup bound to an institution with manager approval | RF-02 | **Done** |
+| 7. Dashboard | IPK, denials per stop, per-segment timing, exportable period reports | RF-21 | **Done** |
+| 8. Telemetry | Ingestion endpoint, time-series storage | RF-22 | **Done** |
+| 9. Frontend | Student app, driver app (offline-first), manager dashboard | RF-07, 18, all UI | Separate repo |
 
-RF-01, 03, 06, 07, 08 already exist in the inherited codebase. They need
-**verification after the `Organizacao` rename**, not construction — add that as a
-task in Plan 2.
+RF-01, 03, 06, 07, 08 were inherited and needed verification, not construction,
+after the `Organizacao` rename. `tests/integration/test_requisitos_herdados.py`
+asserts all five still work.
 
-### Suggested agent waves
+### Two decisions taken during implementation
 
-- **Wave 1 (3 parallel):** Plans 3, 5, 8 — disjoint file sets
-- **Wave 2 (2 parallel):** Plans 2, 6
-- **Wave 3 (serial):** Plan 4, then Plan 7
+**The load vector lives in Postgres, not Redis.** RF-14 names Redis. The vector
+is instead derived from the `ATIVA` ride requests with a declared route, with concurrent declarations
+serialising on a `SELECT … FOR UPDATE` of the trip row. It is exact,
+transactional, and adds no infrastructure; the ceiling is serialisation per
+trip. `tests/integration/test_capacidade_concorrencia.py` proves the lock holds
+under two real connections — and was verified failing with the lock removed,
+because a sequential test would pass either way.
 
-Two agents can only run concurrently in the same repo if they don't share a git
-index or a test database. Give each its own `TEST_DATABASE_URI` (the guard in
-`tests/conftest.py` accepts any name ending `_test`), or use worktrees.
+**`SolicitacaoViagem` is the ride-request row** (PR #7), carrying the declared
+origin and destination. dev first reused `AlunosConfirmados` for it; that was
+replaced. `AlunosConfirmados` is now only the passenger list: the buffer close
+creates one row per declared request, and boarding (RF-15 to RF-18) reads it,
+the same as for fixed trips.
+
+### How the parallel run actually went
+
+Waves as suggested, except plans 4 and 7 ran concurrently rather than serially —
+their file sets are disjoint. What made it work was fixing the shared contract
+*first*: enums, models, migrations, `conftest.py` and the namespace registrations
+in `app/__init__.py` were written up front and declared off-limits, so no two
+agents could collide on them. Each agent got its own `TEST_DATABASE_URI` and none
+of them ran git commands.
 
 ---
 
 ## Code debt
 
-### 1. `RotaAluno` has readers but no writer — now Plan 3's to resolve
+### 1. ~~`RotaAluno` has readers but no writer~~ — RESOLVED in plan 2
 
-**Severity: high.** Task 4 removed route join/leave management but deliberately
-kept the `RotaAluno` roster, because it is load-bearing well beyond subscription
-bookkeeping. Rows now only arrive via provisioning or seed data.
+The five call sites now branch on whether the trip is a DRT round (`rota_id`)
+or an inherited scheduled trip (`horario_rota_id`):
 
-Plan 2 replaces standing enrollment with per-trip declaration (RF-13/RF-14) and
-must own all four dependent call sites:
+- `confirmar_presenca_aluno` — an on-demand trip rejects and points at the ride request;
+  the scheduled path keeps the enrollment gate, which is its only authorisation
+- `_popular_dados_da_viagem` — roster-based passenger pre-population removed;
+  rows are created per trip by confirmation or at the buffer close
+- `viagem_schema.get_total_alunos` — counts the route roster (PR #7's rule)
+- `notificacao_service.notificar_por_gestor` — the `viagem_id` branch also reaches
+  the `ATIVA` ride requests
 
-- `viagens_service.confirmar_presenca_aluno` — the enrollment check is the
-  authorisation gate ("Você não está inscrito na rota desta viagem")
-- `notificacao_service.notificar_por_gestor` — resolves which students to notify
-- `tasks/notificacao_tasks.verificar_viagens_24h` — same resolution
-- `schemas/viagem_schema.get_total_alunos` — occupancy count
-- `viagens_service._popular_dados_da_viagem` — passenger population
+**Two readers deliberately still use the roster**, documented in code:
+`notificar_por_gestor`'s `rota_id` branch (route-level broadcast only means
+something in the scheduled flow) and `verificar_viagens_24h` (it filters on
+`AGENDADA` + `horario_rota`, which no round ever satisfies — and its purpose is
+to nudge people who have *not* confirmed).
 
-Plan 2 did not resolve it: on-demand trips use `SolicitacaoViagem` (per-trip
-interest), but origin/destination declaration is RF-13/RF-14, so the successor
-for the call sites above lands with Plan 3. Fixed-route trips still depend on
-`RotaAluno`.
+The model and table remain. Deleting them is still a business decision, and
+still blocked on retiring the inherited scheduled flow.
 
-Do not delete `RotaAluno` before the successor exists. Deleting it is a
-business-logic decision, not a cleanup.
+### 2. ~~`alembic downgrade base` does not work~~ — FIXED on `dev`
 
-### 2. `alembic downgrade base` does not work
+Two inherited defects, both now corrected:
 
-**Severity: medium.** Inherited from the municipal product.
-`20260408_0237_dcc0d379db3c_expand_instituicao_for_external_catalog_.py` calls
-`op.create_foreign_key(None, ...)` and `op.drop_constraint(None, ...)` — an
-autogenerate artifact with no real constraint name:
+- `expand_instituicao` passed `None` as the constraint name to
+  `create_foreign_key` *and* `drop_constraint`. Named explicitly as
+  `instituicao_prefeitura_id_fkey` — the name Postgres already generates, so it
+  works against existing databases as well as fresh ones.
+- `add_ocorrencia` created `tipo_ocorrencia` / `status_ocorrencia` via
+  `sa.Enum` inside `create_table`, but its downgrade only dropped the table.
+  The orphaned types made the next `upgrade` fail with *"type tipo_ocorrencia
+  already exists"*.
 
-```
-CompileError: Can't emit DROP CONSTRAINT for constraint ForeignKeyConstraint(...); it has no name
-```
+Verified `base → head → base → head`, clean each way, zero orphaned types.
 
-Stepwise downgrades work; only a full unwind fails. This repo has no
-deployments, so it is cheap to fix here. `municipal-backend` *does* have
-deployments, so fixing it there needs care. Workaround documented in
-`docs/migrations.md`.
+**Still open in `municipal-backend`**, which *does* have deployments — port
+both fixes there with care. The FK fix is safe (it uses the name Postgres
+already assigned); the enum fix only affects downgrade.
 
 ### 3. Municipal concepts still in the API surface
 
@@ -159,17 +222,42 @@ handlers, so tests that construct multiple apps reset global logging mid-session
 Harmless today; will bite the first test that uses `caplog` alongside factory
 tests. Fix only if a logging test goes flaky.
 
-### 6. `docs/openapi.json` is stale
+### 6. ~~`docs/openapi.json` is stale~~ — FIXED on `dev`
 
-Still contains `prefeitura` and the old API title. It is a generated artifact —
-regenerate rather than hand-edit. Note that `municipal-frontend`'s `api:generate`
-consumes it from a sibling path; the durable fix is publishing it as a release
-artifact (see `ARQUITETURA_REPOSITORIOS.md`).
+Regenerated with `make docs-openapi`: now `MeBusKá API`, 45 paths, zero
+`prefeitura` references, removed subscription/batch endpoints gone.
 
-### 7. Ansible playbooks carry a developer's absolute path
+**Still open:** it is regenerated by hand, so it drifts silently whenever the
+API changes. `municipal-frontend`'s `api:generate` consumes it from a sibling
+path. The durable fix is publishing it as a release artifact and generating
+frontend types from the pinned version, plus running `api:generate` in CI so
+drift fails the build. See `ARQUITETURA_REPOSITORIOS.md`.
 
-`ansible/setup-dev.yml` and `ansible/run-docker.yml` default `project_dir` to
-`/Users/julio/Documents/25.2/projeto1/...`. Pre-existing, inherited.
+Regenerated after plans 2–8: 68 paths, 23 of them new, zero `prefeitura`
+references. It drifted three times during this work and had to be regenerated
+at the end — which is the argument for the CI check, not against the spec.
+
+### 8. `StatusViagem` carries two lifecycles
+
+**Severity: medium — deliberate, needs a business decision.** The enum holds the
+on-demand states (`SOLICITADA`, `BUFFER_ABERTO`) *and* the inherited `AGENDADA`
+scheduled flow, which still has live controllers, services and tests; `EM_ANDAMENTO`
+is shared. Functions that serve both branch on `Rota.tipo` or `horario_rota_id`. That branching is the price of
+keeping the municipal flow alive in the corporate product.
+
+Retiring the scheduled flow would delete that branching, `RotaAluno`, and a
+meaningful amount of `viagens_service`. It is the single largest simplification
+available here — and it is a product decision, not a refactor.
+
+### 7. ~~Ansible playbooks carry a developer's absolute path~~ — FIXED on `dev`
+
+`project_dir` now derives from `{{ playbook_dir | dirname }}`, correct for any
+checkout and any working directory. Both playbooks pass
+`ansible-playbook --syntax-check`.
+
+Note the original was doubly broken: `lookup('env','PWD') | default(...)` never
+fell back, because `lookup('env', ...)` returns an empty string when unset
+rather than being undefined, so `default` was skipped.
 
 ---
 

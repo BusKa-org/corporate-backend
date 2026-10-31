@@ -67,6 +67,9 @@ def register_models(api):
         {
             "aluno_id": fields.String(description="UUID do aluno"),
             "nome": fields.String(description="Nome do aluno"),
+            "foto_url": fields.String(description="Caminho da foto (GET autenticado)"),
+            "necessidades_acessibilidade": fields.List(fields.String),
+            "observacao_acessibilidade": fields.String(),
             "confirmacao": fields.Boolean(description="Confirmado"),
             "ponto_embarque": fields.String(description="UUID do ponto de embarque"),
         },
@@ -104,7 +107,22 @@ def register_models(api):
         },
     )
 
+    # ----- Declaração de trajeto sob demanda (RF-13) -----
+
+    declaracao_trajeto_request = api.model(
+        "DeclaracaoTrajetoRequest",
+        {
+            "ponto_origem_id": fields.String(
+                required=True, description="UUID do ponto de embarque"
+            ),
+            "ponto_destino_id": fields.String(
+                required=True, description="UUID do ponto de desembarque"
+            ),
+        },
+    )
+
     return {
+        "declaracao_trajeto_request": declaracao_trajeto_request,
         "viagem_create_request": viagem_create_request,
         "viagem_confirmacao_request": viagem_confirmacao_request,
         "viagem_acao_request": viagem_acao_request,

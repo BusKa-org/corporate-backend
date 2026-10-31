@@ -25,6 +25,7 @@ from app.models.convite import (
 from app.models.enum import UserRole, UserStatus
 from app.models.geo import Instituicao
 from app.models.user import Aluno, User
+from app.services.aluno_service import sem_repetidas
 from app.services.user_service import _get_gestor_or_403
 from app.utils import (
     audit_logger,
@@ -339,6 +340,10 @@ def concluir_convite(token: str, dados: dict[str, Any]) -> Aluno:
             status=UserStatus.ACTIVE,
             signup_completed_at=_agora(),
             instituicao_id=instituicao.id,
+            necessidades_acessibilidade=sem_repetidas(
+                dados.get("necessidades_acessibilidade") or []
+            ),
+            observacao_acessibilidade=_texto(dados, "observacao_acessibilidade"),
         )
         db.session.add(aluno)
         db.session.flush()

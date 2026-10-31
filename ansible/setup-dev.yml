@@ -3,7 +3,7 @@
   hosts: localhost
   connection: local
   vars:
-    project_dir: "{{ lookup('env', 'PWD') | default('/Users/julio/Documents/25.2/projeto1/mebuska-corporate') }}"
+    project_dir: "{{ playbook_dir | dirname }}"
     python_version: "3.12"
     venv_path: "{{ project_dir }}/.venv"
     clean_db: "{{ clean_database | default(false) }}"  # Pass as: -e clean_database=true
