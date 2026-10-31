@@ -246,7 +246,16 @@ def _e_passageiro_do_motorista(aluno_id, motorista_id) -> bool:
             AlunosConfirmados.aluno_id == aluno_id,
             AlunosConfirmados.confirmacao.is_(True),
             Viagem.motorista_id == motorista_id,
-            Viagem.status.in_([StatusViagem.AGENDADA, StatusViagem.EM_ANDAMENTO]),
+            # BUFFER_ABERTO e EM_ROTA são as rodadas sob demanda ainda abertas. Lá,
+            # `confirmacao` só é True para quem teve o trajeto confirmado (CONFIRMADO).
+            Viagem.status.in_(
+                [
+                    StatusViagem.AGENDADA,
+                    StatusViagem.EM_ANDAMENTO,
+                    StatusViagem.BUFFER_ABERTO,
+                    StatusViagem.EM_ROTA,
+                ]
+            ),
         )
         .first()
     )
