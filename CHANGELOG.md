@@ -101,6 +101,11 @@ All notable changes to this project will be documented in this file.
   Invitations replace all of them: nobody signs up on their own.
 
 ### Fixed
+- `DELETE /v1/users/me` cancels the student's active ride request with the same rules as
+  `DELETE /v1/viagens/<id>/solicitacao` (the segment is given back, a trip left with nobody is
+  cancelled). Before, the request kept its seat and could become a passenger with a boarding
+  credential at buffer close. With an on-demand trip already en route it returns 409, and a
+  deleted account can no longer request rides.
 - `POST /v1/auth/reset-password`: the same link used twice at the same time changed the
   password twice (or failed with 500). The token row is locked, so the second use gets 400.
 - `PUT /v1/alunos/me/foto`: a PNG and a JPEG uploaded at the same time could delete each

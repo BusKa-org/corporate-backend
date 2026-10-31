@@ -5,13 +5,13 @@ from datetime import UTC, date, datetime, timedelta
 
 from app.models.consentimento import REVOGACAO, Consentimento
 from app.models.credencial_embarque import CredencialEmbarque
-from app.models.enum import StatusViagem, UserStatus
+from app.models.enum import StatusSolicitacao, StatusViagem, UserStatus
 from app.models.geo import Endereco, Ponto
 from app.models.notificacao import Notificacao
 from app.models.retencao_legal import RetencaoLegal
 from app.models.user import Aluno
-from app.models.viagem import AlunosConfirmados
-from app.services import conta_service
+from app.models.viagem import AlunosConfirmados, SolicitacaoViagem, Viagem
+from app.services import buffer_service, conta_service
 from app.services.consentimento_service import VERSAO_TERMO_VIGENTE
 from app.tasks.retencao_tasks import job_anonimizar_retencoes
 from tests.factories.credencial_embarque_factory import CredencialEmbarqueFactory
@@ -138,6 +138,62 @@ def test_excluir_conta_bloqueia_com_viagem_em_andamento(
     response = _excluir(aluno, aluno.user.email, SENHA)
     assert response.status_code == 409
     assert aluno.user.status != UserStatus.DELETED
+
+
+def test_excluir_conta_cancela_solicitacao_e_viagem_sem_mais_ninguem(
+    aluno, motorista, viagem_solicitada, relogio, _db
+):
+    response = _excluir(aluno, aluno.user.email, SENHA)
+    assert response.status_code == 200, response.get_data(as_text=True)
+
+    _db.session.expire_all()
+    solicitacao = SolicitacaoViagem.query.filter_by(viagem_id=viagem_solicitada.id).one()
+    assert solicitacao.status == StatusSolicitacao.CANCELADA
+    # Mesmo efeito do cancelamento normal: a viagem sem ninguém é cancelada e o motorista avisado.
+    assert _db.session.get(Viagem, viagem_solicitada.id).status == StatusViagem.CANCELADA
+    assert Notificacao.query.filter_by(usuario_id=motorista.user.id).count() == 1
+
+
+def test_excluir_conta_no_buffer_devolve_o_trecho_e_nao_vira_passageiro(
+    aluno, viagem_solicitada, relogio, _db
+):
+    viagem_solicitada.status = StatusViagem.BUFFER_ABERTO
+    viagem_solicitada.buffer_fim = relogio.agora
+    solicitacao = SolicitacaoViagem.query.filter_by(viagem_id=viagem_solicitada.id).one()
+    ponto_embarque = PontoFactory(organizacao_id=aluno.user.organizacao_id)
+    _db.session.add(ponto_embarque)
+    _db.session.flush()
+    solicitacao.ponto_embarque_id = ponto_embarque.id
+    _db.session.commit()
+
+    response = _excluir(aluno, aluno.user.email, SENHA)
+    assert response.status_code == 200, response.get_data(as_text=True)
+    _db.session.expire_all()
+    assert _db.session.get(SolicitacaoViagem, solicitacao.id).status == StatusSolicitacao.CANCELADA
+    assert _db.session.get(Viagem, viagem_solicitada.id).status == StatusViagem.BUFFER_ABERTO
+
+    # O fechamento do buffer não transforma o aluno excluído em passageiro com credencial.
+    buffer_service.fechar_buffers_expirados()
+    assert AlunosConfirmados.query.filter_by(aluno_id=aluno.user.id).count() == 0
+    assert CredencialEmbarque.query.filter_by(aluno_id=aluno.user.id).count() == 0
+
+
+def test_excluir_conta_bloqueia_com_solicitacao_em_rota(aluno, viagem_solicitada, relogio, _db):
+    viagem_solicitada.status = StatusViagem.EM_ANDAMENTO
+    _db.session.commit()
+
+    response = _excluir(aluno, aluno.user.email, SENHA)
+    assert response.status_code == 409
+    _db.session.expire_all()
+    solicitacao = SolicitacaoViagem.query.filter_by(viagem_id=viagem_solicitada.id).one()
+    assert solicitacao.status == StatusSolicitacao.ATIVA
+
+
+def test_conta_excluida_nao_solicita_viagem(aluno, rota_sob_demanda, janela, relogio):
+    assert _excluir(aluno, aluno.user.email, SENHA).status_code == 200
+
+    response = aluno.client.post(f"/v1/rotas/{rota_sob_demanda.id}/solicitacoes")
+    assert response.status_code == 403
 
 
 def test_excluir_conta_anonimiza_e_preserva_historico(

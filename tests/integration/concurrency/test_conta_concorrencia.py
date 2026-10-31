@@ -7,12 +7,13 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from app.models.convite import PENDENTE, Convite
-from app.models.enum import TipoInstituicao
+from app.models.enum import StatusSolicitacao, TipoInstituicao, UserStatus
 from app.models.geo import Instituicao
 from app.models.onibus import JanelaDisponibilidade
 from app.models.password_reset import PasswordResetToken
 from app.models.retencao_legal import RetencaoLegal
 from app.models.user import Aluno, User
+from app.models.viagem import SolicitacaoViagem
 from app.services import convite_service
 from tests.factories.user_factory import SENHA_PADRAO
 from tests.helpers import imagens
@@ -128,6 +129,37 @@ def test_exclusao_dupla_da_conta_anonimiza_uma_vez(app, _db, aluno):
     _db.session.expire_all()
     retencao = _db.session.get(RetencaoLegal, aluno.user.id)
     assert retencao.email == email
+
+
+def test_exclusao_contra_solicitacao_nao_deixa_conta_excluida_com_solicitacao_ativa(
+    app, _db, aluno, rota_sob_demanda, janela, relogio
+):
+    email = aluno.user.email
+
+    def excluir():
+        return app.test_client().delete(
+            "/v1/users/me", json={"email": email, "senha": SENHA_PADRAO}, headers=aluno.headers
+        )
+
+    def solicitar():
+        return app.test_client().post(
+            f"/v1/rotas/{rota_sob_demanda.id}/solicitacoes", headers=aluno.headers
+        )
+
+    respostas = ao_mesmo_tempo(app, [excluir, solicitar])
+
+    # Qualquer ordem vale (exclusão antes: 403 na solicitação; solicitação antes: a exclusão
+    # cancela ou pede para tentar de novo), desde que nenhuma dê 500.
+    for codigo in status_de(respostas):
+        assert codigo in (200, 201, 403, 409)
+    _db.session.expire_all()
+    excluida = _db.session.get(User, aluno.user.id).status == UserStatus.DELETED
+    ativas = (
+        _db.session.query(SolicitacaoViagem)
+        .filter_by(aluno_id=aluno.user.id, status=StatusSolicitacao.ATIVA)
+        .count()
+    )
+    assert not (excluida and ativas)
 
 
 # ---------- foto ----------

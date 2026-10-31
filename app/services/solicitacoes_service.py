@@ -5,7 +5,7 @@ from sqlalchemy import select
 from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError, ValidationError
 from app.core.transaction import transactional
 from app.models.base import db
-from app.models.enum import StatusSolicitacao, StatusViagem, TipoViagem, UserRole
+from app.models.enum import StatusSolicitacao, StatusViagem, TipoViagem, UserRole, UserStatus
 from app.models.onibus import Onibus
 from app.models.rota import Rota
 from app.models.user import Aluno, User
@@ -73,6 +73,10 @@ def solicitar_viagem(user_id: str, rota_id: str) -> SolicitacaoViagem:
         db.session.execute(
             select(User.id).where(User.id == aluno.usuario_id).with_for_update(key_share=True)
         )
+        # Uma exclusão de conta que segurava o lock já pode ter anonimizado o aluno.
+        atual = db.session.get(Aluno, aluno.usuario_id, populate_existing=True)
+        if atual is None or atual.status != UserStatus.ACTIVE:
+            raise ForbiddenError("Conta inativa")
 
         agora_local = tempo.agora_local()
         janela = janelas_service.buscar_janela_ativa(veiculo_id, agora_local)
@@ -154,82 +158,91 @@ def cancelar_solicitacao(user_id: str, viagem_id: str) -> SolicitacaoViagem:
         raise NotFoundError("Viagem não encontrada")
 
     with transactional():
-        # Mesma ordem de locks da solicitação (veículo, depois viagem): quem entra na
-        # rodada, o início do percurso e o fechamento do buffer esperam este cancelamento.
-        if viagem.veiculo_id:
-            db.session.execute(
-                select(Onibus.id)
-                .where(Onibus.id == viagem.veiculo_id)
-                .with_for_update(key_share=True)
-            )
-        viagem = (
-            db.session.query(Viagem)
-            .filter(Viagem.id == viagem.id)
-            .with_for_update(key_share=True)
-            .populate_existing()
-            .one()
+        viagem = travar_viagem(viagem)
+        return cancelar_na_viagem_travada(aluno, viagem)
+
+
+def travar_viagem(viagem: Viagem) -> Viagem:
+    """Trava veículo e viagem e devolve a viagem relida.
+
+    Mesma ordem de locks da solicitação (veículo, depois viagem): quem entra na
+    rodada, o início do percurso e o fechamento do buffer esperam o cancelamento.
+    """
+    if viagem.veiculo_id:
+        db.session.execute(
+            select(Onibus.id).where(Onibus.id == viagem.veiculo_id).with_for_update(key_share=True)
+        )
+    return (
+        db.session.query(Viagem)
+        .filter(Viagem.id == viagem.id)
+        .with_for_update(key_share=True)
+        .populate_existing()
+        .one()
+    )
+
+
+def cancelar_na_viagem_travada(aluno: Aluno, viagem: Viagem) -> SolicitacaoViagem:
+    """Regras do cancelamento (RF-19), sem commit. A viagem precisa vir de `travar_viagem`."""
+    solicitacao = (
+        db.session.query(SolicitacaoViagem)
+        .filter_by(
+            viagem_id=viagem.id,
+            aluno_id=aluno.usuario_id,
+            status=StatusSolicitacao.ATIVA,
+        )
+        .populate_existing()
+        .first()
+    )
+    if not solicitacao:
+        raise NotFoundError("Solicitação ativa não encontrada para esta viagem")
+
+    if viagem.status in (StatusViagem.FINALIZADA, StatusViagem.CANCELADA):
+        raise ValidationError(
+            f"Não é possível cancelar a solicitação de uma viagem com status {viagem.status.name}"
         )
 
-        solicitacao = (
-            db.session.query(SolicitacaoViagem)
-            .filter_by(
-                viagem_id=viagem.id,
-                aluno_id=aluno.usuario_id,
-                status=StatusSolicitacao.ATIVA,
+    solicitacao.cancelada_em = tempo.agora_utc()
+
+    if viagem.status == StatusViagem.EM_ANDAMENTO:
+        # Lugar não é reaberto: o veículo já saiu contando com o passageiro.
+        solicitacao.status = StatusSolicitacao.DESISTENCIA
+        # Sai da lista de embarque do motorista (RF-16/RF-17).
+        passageiro = db.session.get(AlunosConfirmados, (viagem.id, aluno.usuario_id))
+        if passageiro:
+            passageiro.confirmacao = False
+        if viagem.motorista_id:
+            NotificacaoService._criar_notificacao_interna(
+                usuario_id=viagem.motorista_id,
+                titulo="Desistência de passageiro",
+                mensagem=f"O passageiro {aluno.nome} desistiu da viagem em andamento.",
             )
-            .populate_existing()
-            .first()
+        return solicitacao
+
+    if viagem.status not in (StatusViagem.SOLICITADA, StatusViagem.BUFFER_ABERTO):
+        raise ValidationError(
+            f"Não é possível cancelar a solicitação de uma viagem com status {viagem.status.name}"
         )
-        if not solicitacao:
-            raise NotFoundError("Solicitação ativa não encontrada para esta viagem")
 
-        if viagem.status in (StatusViagem.FINALIZADA, StatusViagem.CANCELADA):
-            raise ValidationError(
-                f"Não é possível cancelar a solicitação de uma viagem com status {viagem.status.name}"
-            )
+    # O vetor de carga só conta solicitações ATIVA: cancelar já devolve o trecho (RF-14).
+    solicitacao.status = StatusSolicitacao.CANCELADA
+    db.session.flush()
 
-        solicitacao.cancelada_em = tempo.agora_utc()
-
-        if viagem.status == StatusViagem.EM_ANDAMENTO:
-            # Lugar não é reaberto: o veículo já saiu contando com o passageiro.
-            solicitacao.status = StatusSolicitacao.DESISTENCIA
-            # Sai da lista de embarque do motorista (RF-16/RF-17).
-            passageiro = db.session.get(AlunosConfirmados, (viagem.id, aluno.usuario_id))
-            if passageiro:
-                passageiro.confirmacao = False
+    if viagem.status == StatusViagem.SOLICITADA:
+        restantes = (
+            db.session.query(SolicitacaoViagem.id)
+            .filter_by(viagem_id=viagem.id, status=StatusSolicitacao.ATIVA)
+            .count()
+        )
+        if restantes == 0:
+            viagem.status = StatusViagem.CANCELADA
             if viagem.motorista_id:
                 NotificacaoService._criar_notificacao_interna(
                     usuario_id=viagem.motorista_id,
-                    titulo="Desistência de passageiro",
-                    mensagem=f"O passageiro {aluno.nome} desistiu da viagem em andamento.",
+                    titulo="Solicitação de viagem cancelada",
+                    mensagem="Todos os passageiros cancelaram a solicitação. A viagem foi cancelada.",
                 )
-            return solicitacao
 
-        if viagem.status not in (StatusViagem.SOLICITADA, StatusViagem.BUFFER_ABERTO):
-            raise ValidationError(
-                f"Não é possível cancelar a solicitação de uma viagem com status {viagem.status.name}"
-            )
-
-        # O vetor de carga só conta solicitações ATIVA: cancelar já devolve o trecho (RF-14).
-        solicitacao.status = StatusSolicitacao.CANCELADA
-        db.session.flush()
-
-        if viagem.status == StatusViagem.SOLICITADA:
-            restantes = (
-                db.session.query(SolicitacaoViagem.id)
-                .filter_by(viagem_id=viagem.id, status=StatusSolicitacao.ATIVA)
-                .count()
-            )
-            if restantes == 0:
-                viagem.status = StatusViagem.CANCELADA
-                if viagem.motorista_id:
-                    NotificacaoService._criar_notificacao_interna(
-                        usuario_id=viagem.motorista_id,
-                        titulo="Solicitação de viagem cancelada",
-                        mensagem="Todos os passageiros cancelaram a solicitação. A viagem foi cancelada.",
-                    )
-
-        return solicitacao
+    return solicitacao
 
 
 def declarar_trajeto(user_id: str, viagem_id: str, data: dict) -> SolicitacaoViagem:
