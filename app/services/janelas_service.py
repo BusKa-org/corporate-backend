@@ -13,6 +13,7 @@ from app.models.onibus import JanelaDisponibilidade, Onibus
 from app.models.user import Motorista, User
 from app.services import onibus_service
 from app.services.viagens_service import _get_dia_semana_enum
+from app.utils.validators import validate_uuid
 
 
 def buscar_janela_ativa(onibus_id, momento_local: datetime) -> JanelaDisponibilidade | None:
@@ -139,7 +140,7 @@ def remover_janela(user_id: str, onibus_id: str, janela_id: str) -> None:
     _exigir_gestor(user_id)
     onibus = onibus_service.get_by_id(user_id, onibus_id)
 
-    janela = db.session.get(JanelaDisponibilidade, janela_id)
+    janela = db.session.get(JanelaDisponibilidade, validate_uuid(janela_id, "ID da janela"))
     if not janela or janela.onibus_id != onibus.id:
         raise NotFoundError("Janela de disponibilidade não encontrada")
 

@@ -13,6 +13,7 @@ from app.models.viagem import AlunosConfirmados, SolicitacaoViagem, Viagem
 from app.services import janelas_service, viagens_service
 from app.services.notificacao_service import NotificacaoService
 from app.utils import tempo
+from app.utils.validators import validate_uuid
 
 
 def _buscar_aluno(user_id: str) -> Aluno:
@@ -48,7 +49,7 @@ def solicitar_viagem(user_id: str, rota_id: str) -> SolicitacaoViagem:
     """
     aluno = _buscar_aluno(user_id)
 
-    rota = db.session.get(Rota, rota_id)
+    rota = db.session.get(Rota, validate_uuid(rota_id, "ID da rota"))
     if not rota:
         raise NotFoundError("Rota não encontrada")
 
@@ -143,7 +144,7 @@ def cancelar_solicitacao(user_id: str, viagem_id: str) -> SolicitacaoViagem:
     """
     aluno = _buscar_aluno(user_id)
 
-    viagem = db.session.get(Viagem, viagem_id)
+    viagem = db.session.get(Viagem, validate_uuid(viagem_id, "ID da viagem"))
     if not viagem:
         raise NotFoundError("Viagem não encontrada")
 
@@ -203,3 +204,4 @@ def cancelar_solicitacao(user_id: str, viagem_id: str) -> SolicitacaoViagem:
                     )
 
         return solicitacao
+

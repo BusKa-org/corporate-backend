@@ -12,6 +12,7 @@ from app.models.viagem import SolicitacaoViagem, Viagem
 from app.services import consentimento_service
 from app.services.notificacao_service import NotificacaoService
 from app.utils import tempo
+from app.utils.validators import validate_uuid
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +20,12 @@ logger = logging.getLogger(__name__)
 def iniciar_percurso(user_id: str, viagem_id: str) -> Viagem:
     """RF-11: o motorista da viagem abre a janela de buffer."""
     # Trava a linha: dois toques no botão não podem abrir o buffer duas vezes.
-    viagem = db.session.query(Viagem).filter(Viagem.id == viagem_id).with_for_update().first()
+    viagem = (
+        db.session.query(Viagem)
+        .filter(Viagem.id == validate_uuid(viagem_id, "ID da viagem"))
+        .with_for_update()
+        .first()
+    )
     if not viagem:
         raise NotFoundError("Viagem não encontrada")
 
