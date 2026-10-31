@@ -56,13 +56,14 @@ class Settings:
         # Link de download do app, incluído no e-mail de convite (opcional)
         self.APP_DOWNLOAD_URL = os.getenv("APP_DOWNLOAD_URL", "")
 
-        # Fuso das janelas de disponibilidade (RF-05): a hora local que o gestor cadastra
-        self.FUSO_HORARIO = os.getenv("FUSO_HORARIO", "America/Fortaleza")
+        # Fuso da organização: hora local das janelas de disponibilidade (RF-05) e da
+        # jornada do motorista. Paraíba não segue o fuso de São Paulo.
+        self.TIMEZONE = os.getenv("TIMEZONE", "America/Fortaleza")
         try:
-            ZoneInfo(self.FUSO_HORARIO)
+            ZoneInfo(self.TIMEZONE)
         except (ZoneInfoNotFoundError, ValueError):
-            self._errors.append(f"FUSO_HORARIO is not a valid IANA timezone: '{self.FUSO_HORARIO}'")
-            self.FUSO_HORARIO = "UTC"
+            self._errors.append(f"TIMEZONE is not a valid IANA timezone: '{self.TIMEZONE}'")
+            self.TIMEZONE = "UTC"
 
         # Intervalos dos jobs de viagem sob demanda: fechar buffer expirado e
         # avisar o gestor quando o motorista estoura o prazo de início (RF-11)
@@ -82,8 +83,6 @@ class Settings:
         self.MOTORISTA_DESCANSO_MINUTOS = self._get_int(
             "MOTORISTA_DESCANSO_MINUTOS", default=30, min_val=1, max_val=1440
         )
-        # Fuso usado para comparar o horário de trabalho do motorista com o relógio
-        self.TIMEZONE = os.getenv("TIMEZONE", "America/Sao_Paulo")
         # Fotos dos alunos (RF-15/RF-17). Vazio = <instance_path>/fotos_aluno.
         self.FOTOS_ALUNO_DIR = os.getenv("FOTOS_ALUNO_DIR", "")
         self.FOTO_ALUNO_MAX_BYTES = self._get_int(

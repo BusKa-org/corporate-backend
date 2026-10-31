@@ -29,7 +29,7 @@ class Onibus(db.Model):
 class JanelaDisponibilidade(db.Model):
     """Horário em que o veículo opera sob demanda, com o motorista designado (RF-05).
 
-    hora_inicio/hora_fim são hora local da organização (Settings.FUSO_HORARIO).
+    hora_inicio/hora_fim são hora local da organização (Settings.TIMEZONE).
     O intervalo é [hora_inicio, hora_fim): janelas encostadas não se sobrepõem.
     """
 

@@ -35,7 +35,7 @@ All notable changes to this project will be documented in this file.
   trip is en route; the active round of a route with the buffer countdown
   (`GET /v1/rotas/<id>/viagem-ativa`). Scheduler jobs close expired buffers (`EM_ANDAMENTO`) and alert the
   gestor once when the driver misses the start deadline. Trips now carry `rota_id`,
-  `buffer_fim` and the new statuses. New settings `FUSO_HORARIO`,
+  `buffer_fim` and the new statuses. New settings
   `JOB_BUFFER_INTERVALO_SEGUNDOS`, `JOB_PRAZO_INICIO_INTERVALO_SEGUNDOS`.
 - On-demand capacity and boarding on top of that lifecycle (RF-13 to RF-18, RF-21, RF-22).
   During the buffer the student declares origin and destination
@@ -58,7 +58,8 @@ All notable changes to this project will be documented in this file.
   driving time was reached. Starting a trip returns 409 if the driver is `EM_ROTA` and 403
   during rest or outside working hours. It locks the trip and driver rows, so two
   simultaneous starts can't both pass.
-  New settings `MOTORISTA_HORAS_MAX_DIRECAO`, `MOTORISTA_DESCANSO_MINUTOS` and `TIMEZONE`.
+  New settings `MOTORISTA_HORAS_MAX_DIRECAO`, `MOTORISTA_DESCANSO_MINUTOS` and `TIMEZONE` (default `America/Fortaleza`; also used for the
+  availability windows).
 - Passenger accessibility needs (`necessidades_acessibilidade`, `observacao_acessibilidade`)
   on registration and `PUT /v1/alunos/me`, shown to the gestor and to the driver of the trip.
 - Passenger photo: `PUT /v1/alunos/me/foto` (multipart, JPEG/PNG/WEBP, EXIF/GPS and text

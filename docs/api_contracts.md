@@ -16,7 +16,7 @@ Trip states for `SOB_DEMANDA` routes:
 - The trip "time" is `created_at` (request time) until it starts, then `inicio_real`.
   `horario_saida` / `horario_inicio` / `sentido` are `null` for on-demand trips.
 - Trip responses carry `rota_id`, `status` and `buffer_fim`.
-- Window hours are local time in `FUSO_HORARIO` (default `America/Fortaleza`).
+- Window hours are local time in `TIMEZONE` (default `America/Fortaleza`).
   A window is `[hora_inicio, hora_fim)`: the start minute is inside, the end minute is not.
 
 ### Availability windows (RF-05)
