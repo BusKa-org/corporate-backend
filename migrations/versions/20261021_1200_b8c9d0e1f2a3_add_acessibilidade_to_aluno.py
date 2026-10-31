@@ -1,6 +1,6 @@
 """add acessibilidade to aluno
 
-Revision ID: a7b8c9d0e1f2
+Revision ID: b8c9d0e1f2a3
 Revises: e5f6a7b8c9d0
 Create Date: 2026-10-21 12:00:00.000000+00:00
 """
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision: str = "a7b8c9d0e1f2"
+revision: str = "b8c9d0e1f2a3"
 down_revision: Union[str, None] = "e5f6a7b8c9d0"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
