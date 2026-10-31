@@ -22,6 +22,15 @@ from app.utils.validators import validate_uuid
 logger = logging.getLogger(__name__)
 
 
+def sem_repetidas(necessidades: list[str]) -> list[str]:
+    """Remove necessidades repetidas, mantendo a ordem em que apareceram."""
+    resultado: list[str] = []
+    for necessidade in necessidades:
+        if necessidade not in resultado:
+            resultado.append(necessidade)
+    return resultado
+
+
 def update_me(user_id: str, data: dict[str, Any]) -> Aluno:
     """
     Atualiza perfil do aluno.
@@ -40,11 +49,12 @@ def update_me(user_id: str, data: dict[str, Any]) -> Aluno:
             "matricula",
             "nome_responsavel",
             "cpf_responsavel",
-            "necessidades_acessibilidade",
             "observacao_acessibilidade",
         ):
             if field in data:
                 setattr(aluno, field, data[field])
+        if "necessidades_acessibilidade" in data:
+            aluno.necessidades_acessibilidade = sem_repetidas(data["necessidades_acessibilidade"])
 
         if "endereco_casa" in data:
             end_data = data["endereco_casa"]
