@@ -360,6 +360,11 @@ def calcular_fim_descanso(
     return ultimo_fim + descanso
 
 
+def _agora() -> datetime:
+    """Current time; a function so tests can patch it."""
+    return datetime.now(UTC)
+
+
 def _periodos_de_direcao(
     motorista_id: Any, agora: datetime
 ) -> list[tuple[datetime, datetime | None]]:
@@ -397,8 +402,10 @@ def disponibilidade_motorista(
     """Whether the driver can start a trip at `agora`, without raising.
 
     Returns (pode_trabalhar, motivo, livre_a_partir_de). `livre_a_partir_de` is only
-    known for a mandatory rest; it is None otherwise.
+    known for a mandatory rest; it is None otherwise. May fix a stale EM_ROTA on the
+    object (see `corrigir_em_rota_sem_viagem`); the caller's commit persists it.
     """
+    corrigir_em_rota_sem_viagem(motorista, agora)
     fuso = ZoneInfo(current_app.config["TIMEZONE"])
     agora_local = agora.astimezone(fuso)
 
@@ -448,6 +455,7 @@ def disponibilidade_motorista(
 
 def _validar_jornada_motorista(motorista: Motorista, agora: datetime) -> None:
     """Block starting a trip while on another trip, outside working hours or during rest."""
+    corrigir_em_rota_sem_viagem(motorista, agora)
     if motorista.status_atual(agora) == StatusMotorista.EM_ROTA:
         raise ConflictError("Motorista já está em rota em outra viagem")
     pode, motivo, _ = disponibilidade_motorista(motorista, agora)
@@ -464,6 +472,28 @@ def _atualizar_status_apos_viagem(motorista: Motorista, agora: datetime) -> None
     else:
         motorista.status_motorista = StatusMotorista.EM_DESCANSO_OBRIGATORIO
         motorista.descanso_ate = descanso_ate
+
+
+def corrigir_em_rota_sem_viagem(motorista: Motorista, agora: datetime) -> bool:
+    """Fix a driver left EM_ROTA with no trip in progress (e.g. the trip was deleted).
+
+    Recomputes ATIVO or EM_DESCANSO_OBRIGATORIO from the trip history. Does not commit.
+    Returns True if the status changed.
+    """
+    if motorista.status_motorista != StatusMotorista.EM_ROTA:
+        return False
+    em_andamento = (
+        db.session.query(Viagem.id)
+        .filter(
+            Viagem.motorista_id == motorista.id,
+            Viagem.status == StatusViagem.EM_ANDAMENTO,
+        )
+        .first()
+    )
+    if em_andamento is not None:
+        return False
+    _atualizar_status_apos_viagem(motorista, agora)
+    return True
 
 
 def list_viagens_motorista(user_id: str) -> list[Viagem]:
@@ -491,15 +521,31 @@ def controlar_viagem(user_id: str, viagem_id: str, data: dict[str, Any]) -> Viag
 
     with transactional():
         if acao == "INICIAR":
+            # Trava viagem e motorista até o commit: dois INICIAR ao mesmo tempo
+            # esperam um pelo outro e o segundo vê o estado já atualizado.
+            viagem = (
+                db.session.query(Viagem)
+                .filter(Viagem.id == viagem.id)
+                .with_for_update(of=Viagem)
+                .populate_existing()
+                .one()
+            )
             if viagem.status != StatusViagem.AGENDADA:
                 raise ValidationError(
                     f"Não é possível iniciar viagem com status {viagem.status.name}"
                 )
-            agora = datetime.now(UTC)
-            if viagem.motorista is not None:
-                _validar_jornada_motorista(viagem.motorista, agora)
-                viagem.motorista.status_motorista = StatusMotorista.EM_ROTA
-                viagem.motorista.descanso_ate = None
+            agora = _agora()
+            if viagem.motorista_id is not None:
+                motorista = (
+                    db.session.query(Motorista)
+                    .filter(Motorista.id == viagem.motorista_id)
+                    .with_for_update(of=Motorista)
+                    .populate_existing()
+                    .one()
+                )
+                _validar_jornada_motorista(motorista, agora)
+                motorista.status_motorista = StatusMotorista.EM_ROTA
+                motorista.descanso_ate = None
             viagem.status = StatusViagem.EM_ANDAMENTO
             viagem.inicio_real = agora
 
@@ -509,7 +555,7 @@ def controlar_viagem(user_id: str, viagem_id: str, data: dict[str, Any]) -> Viag
             if viagem.status != StatusViagem.EM_ANDAMENTO:
                 raise ValidationError("A viagem precisa estar em andamento para ser finalizada")
             viagem.status = StatusViagem.FINALIZADA
-            viagem.fim_real = datetime.now(UTC)
+            viagem.fim_real = _agora()
             db.session.flush()
             if viagem.motorista is not None:
                 _atualizar_status_apos_viagem(viagem.motorista, viagem.fim_real)
@@ -589,7 +635,7 @@ def cancelar_viagem(user_id: str, viagem_id: str) -> dict[str, Any]:
         viagem.status = StatusViagem.CANCELADA
         if estava_em_andamento:
             # A direção até o cancelamento conta para o descanso
-            viagem.fim_real = datetime.now(UTC)
+            viagem.fim_real = _agora()
             db.session.flush()
             if viagem.motorista is not None:
                 _atualizar_status_apos_viagem(viagem.motorista, viagem.fim_real)
