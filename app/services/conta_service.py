@@ -68,6 +68,9 @@ def _anonimizar(user: User) -> None:
     if isinstance(user, Aluno):
         user.matricula = None
         user.foto_url = None
+        # Dado de saúde (LGPD art. 11), sem valor estatístico depois da exclusão.
+        user.necessidades_acessibilidade = []
+        user.observacao_acessibilidade = None
         user.data_nascimento = None
         user.nome_responsavel = None
         user.cpf_responsavel = None
