@@ -153,24 +153,41 @@ def cancelar_solicitacao(user_id: str, viagem_id: str) -> SolicitacaoViagem:
     if not viagem:
         raise NotFoundError("Viagem não encontrada")
 
-    solicitacao = (
-        db.session.query(SolicitacaoViagem)
-        .filter_by(
-            viagem_id=viagem.id,
-            aluno_id=aluno.usuario_id,
-            status=StatusSolicitacao.ATIVA,
-        )
-        .first()
-    )
-    if not solicitacao:
-        raise NotFoundError("Solicitação ativa não encontrada para esta viagem")
-
-    if viagem.status in (StatusViagem.FINALIZADA, StatusViagem.CANCELADA):
-        raise ValidationError(
-            f"Não é possível cancelar a solicitação de uma viagem com status {viagem.status.name}"
-        )
-
     with transactional():
+        # Mesma ordem de locks da solicitação (veículo, depois viagem): quem entra na
+        # rodada, o início do percurso e o fechamento do buffer esperam este cancelamento.
+        if viagem.veiculo_id:
+            db.session.execute(
+                select(Onibus.id)
+                .where(Onibus.id == viagem.veiculo_id)
+                .with_for_update(key_share=True)
+            )
+        viagem = (
+            db.session.query(Viagem)
+            .filter(Viagem.id == viagem.id)
+            .with_for_update(key_share=True)
+            .populate_existing()
+            .one()
+        )
+
+        solicitacao = (
+            db.session.query(SolicitacaoViagem)
+            .filter_by(
+                viagem_id=viagem.id,
+                aluno_id=aluno.usuario_id,
+                status=StatusSolicitacao.ATIVA,
+            )
+            .populate_existing()
+            .first()
+        )
+        if not solicitacao:
+            raise NotFoundError("Solicitação ativa não encontrada para esta viagem")
+
+        if viagem.status in (StatusViagem.FINALIZADA, StatusViagem.CANCELADA):
+            raise ValidationError(
+                f"Não é possível cancelar a solicitação de uma viagem com status {viagem.status.name}"
+            )
+
         solicitacao.cancelada_em = tempo.agora_utc()
 
         if viagem.status == StatusViagem.EM_ANDAMENTO:

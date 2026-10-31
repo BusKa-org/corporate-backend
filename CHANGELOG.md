@@ -99,6 +99,9 @@ All notable changes to this project will be documented in this file.
   Invitations replace all of them: nobody signs up on their own.
 
 ### Fixed
+- `DELETE /v1/viagens/<id>/solicitacao` now locks the vehicle and the trip. Before, cancelling
+  the last request while another student joined left that student in a cancelled trip, and
+  cancelling while the driver started the route overwrote the open buffer with `CANCELADA`.
 - A ride request and `POST /v1/viagens/<id>/iniciar-percurso` at the same time deadlocked
   and one of them returned 500. The serialization locks on vehicle, student and trip are now
   `FOR NO KEY UPDATE`, which does not block the foreign key checks of the other request.
