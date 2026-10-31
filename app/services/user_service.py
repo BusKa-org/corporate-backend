@@ -1,6 +1,7 @@
 """User service - CRUD operations, driver creation, password management."""
 
 import logging
+from datetime import UTC, datetime
 from typing import Any, cast
 
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -16,6 +17,7 @@ from app.core.exceptions import (
 from app.models.base import db
 from app.models.enum import UserRole, UserStatus
 from app.models.user import Gestor, Motorista, User
+from app.services.viagens_service import corrigir_em_rota_sem_viagem
 from app.utils import audit_logger, validate_cpf, validate_email, validate_password, validate_uuid
 
 logger = logging.getLogger(__name__)
@@ -45,10 +47,23 @@ def _get_gestor_or_403(
     return cast(Gestor, user)
 
 
+def _corrigir_status_motoristas(users: list[User]) -> None:
+    """Self-heal drivers stuck EM_ROTA before showing them (one query per EM_ROTA driver)."""
+    agora = datetime.now(UTC)
+    mudou = False
+    for user in users:
+        if isinstance(user, Motorista) and corrigir_em_rota_sem_viagem(user, agora):
+            mudou = True
+    if mudou:
+        db.session.commit()
+
+
 def get_all_users(current_user_id: str) -> list[User]:
     """List all users in the same organizacao (gestor only)."""
     gestor = _get_gestor_or_403(current_user_id, "Apenas gestores podem listar usuários")
-    return db.session.query(User).filter_by(organizacao_id=gestor.organizacao_id).all()
+    users = db.session.query(User).filter_by(organizacao_id=gestor.organizacao_id).all()
+    _corrigir_status_motoristas(users)
+    return users
 
 
 def get_user_by_id(user_id: str, current_user_id: str | None = None) -> User:
@@ -66,10 +81,12 @@ def get_user_by_id(user_id: str, current_user_id: str | None = None) -> User:
 
     # Allow self-access
     if str(user_id) == str(current_user_id):
+        _corrigir_status_motoristas([user])
         return user
 
     # Allow gestor access within same organizacao
     if current_user.role == UserRole.GESTOR and user.organizacao_id == current_user.organizacao_id:
+        _corrigir_status_motoristas([user])
         return user
 
     # Log unauthorized access attempt
@@ -270,6 +287,7 @@ def get_motoristas_by_municipio(gestor_id: str):
     motoristas = User.query.filter(
         User.organizacao_id == gestor.organizacao_id, User.role == UserRole.MOTORISTA
     ).all()
+    _corrigir_status_motoristas(motoristas)
 
     return motoristas
 
