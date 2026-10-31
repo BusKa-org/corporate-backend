@@ -79,6 +79,8 @@ All notable changes to this project will be documented in this file.
   Invitations replace all of them: nobody signs up on their own.
 
 ### Fixed
+- `PUT /v1/rotas/<id>` with a different `tipo` returns 400 instead of 200 doing nothing; the
+  route type can't be changed (send the current one or leave it out).
 - `PUT /v1/viagens/<id>/cancelar` checks that the trip belongs to the gestor's
   organization (403 otherwise). Before, any gestor could cancel any trip.
 - `POST /v1/viagens/` returns the created trip serialized; it returned the raw ORM object.
