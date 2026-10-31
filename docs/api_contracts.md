@@ -284,6 +284,11 @@ rede: com o `qr_segredo` o app confere o código do QR sem conexão, e as fotos 
   sem uso, porque pode chegar depois do embarque manual do passageiro real.
 - `EMBARQUE_MANUAL`, `CHEGADA_PONTO` e `POSICAO` sem mudança.
 
+O `evento_id` é um texto livre (1 a 64 caracteres) e só precisa ser único dentro da fila da
+viagem: o mesmo `evento_id` em outra viagem é outro evento.
+Use um UUID gerado no aparelho: se o app for reinstalado no meio da viagem e a numeração
+recomeçar em "1", uma recusa real seria respondida `ja_aplicado` e perdida.
+
 Os eventos são aplicados em ordem de `ocorrido_em` (empate: ordem da fila) e `resultados` sai
 nessa ordem. Uma `RECUSA` bloqueia qualquer embarque posterior do mesmo QR, no mesmo lote ou
 num lote seguinte (`CREDENCIAL_RECUSADA`). O `ocorrido_em` é limitado: mais de

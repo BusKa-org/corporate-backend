@@ -634,7 +634,8 @@ def sincronizar(
     de estado que já é observável (o passageiro embarcou, a parada foi
     transposta), então reenviar o lote encontra o estado pronto e não faz nada.
     As exceções são a posição e a recusa, que são append-only: o `id` da linha
-    (telemetria ou ocorrência) é derivado do identificador do evento (UUIDv5),
+    (telemetria ou ocorrência) é derivado da viagem e do identificador do evento
+    (UUIDv5),
     e a chave primária cuida da duplicata.
 
     Eventos chegam fora de ordem e atrasados, então valem pelo carimbo que
@@ -704,7 +705,7 @@ def _aplicar_evento(
         return "ja_aplicado" if resultado is None else "aplicado"
 
     if tipo == "RECUSA":
-        ocorrencia_id = uuid.uuid5(uuid.NAMESPACE_OID, str(evento.get("evento_id")))
+        ocorrencia_id = _id_do_evento(viagem, evento)
         if db.session.get(Ocorrencia, ocorrencia_id):
             return "ja_aplicado"
         credencial = _credencial_do_qr(
@@ -761,6 +762,14 @@ def _aplicar_evento(
     raise ValidationError(f"Tipo de evento desconhecido: {tipo}")
 
 
+def _id_do_evento(viagem: Viagem, evento: dict[str, Any]) -> uuid.UUID:
+    """Id estável do registro gravado pelo evento, para o reenvio da fila não duplicar.
+
+    Leva a viagem: o `evento_id` é do app e só é único dentro da fila da viagem.
+    """
+    return uuid.uuid5(uuid.NAMESPACE_OID, f"{viagem.id}:{evento.get('evento_id')}")
+
+
 def _aplicar_posicao(viagem: Viagem, evento: dict[str, Any], momento: datetime) -> str:
     latitude, longitude = evento.get("latitude"), evento.get("longitude")
     if latitude is None or longitude is None:
@@ -772,7 +781,7 @@ def _aplicar_posicao(viagem: Viagem, evento: dict[str, Any], momento: datetime) 
         key_share=True
     ).populate_existing().one()
 
-    rastro_id = uuid.uuid5(uuid.NAMESPACE_OID, str(evento.get("evento_id")))
+    rastro_id = _id_do_evento(viagem, evento)
     if db.session.get(TelemetriaViagem, rastro_id):
         return "ja_aplicado"
 
