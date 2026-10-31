@@ -5,7 +5,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
 from .base import db
-from .enum import StatusViagem
+from .enum import StatusSolicitacao, StatusViagem
 
 
 class Viagem(db.Model):
@@ -15,6 +15,10 @@ class Viagem(db.Model):
     data = db.Column(db.Date, nullable=False)
     horario_rota_id = db.Column(
         UUID(as_uuid=True), db.ForeignKey("horario_rota.id", ondelete="SET NULL"), nullable=True
+    )
+    # Viagem sob demanda não tem horario_rota, então a rota fica aqui também.
+    rota_id = db.Column(
+        UUID(as_uuid=True), db.ForeignKey("rota.id", ondelete="SET NULL"), nullable=True, index=True
     )
 
     motorista_id = db.Column(
@@ -39,12 +43,19 @@ class Viagem(db.Model):
     aviso_24h_enviado = db.Column(db.Boolean, default=False, nullable=False)
     aviso_10min_enviado = db.Column(db.Boolean, default=False, nullable=False)
 
+    buffer_fim = db.Column(db.DateTime(timezone=True), nullable=True)
+    # Gestor avisado de que o motorista não iniciou dentro do prazo (RF-11, fluxo secundário).
+    aviso_prazo_enviado = db.Column(
+        db.Boolean, default=False, server_default="false", nullable=False
+    )
+
     created_at = db.Column(db.DateTime(timezone=True), server_default=db.func.now())
     updated_at = db.Column(
         db.DateTime(timezone=True), server_default=db.func.now(), onupdate=db.func.now()
     )
 
     horario_rota = relationship("HorarioRota")
+    rota = relationship("Rota")
     motorista = relationship("Motorista")
     veiculo = relationship("Onibus")
 
@@ -58,6 +69,47 @@ class Viagem(db.Model):
     alunos_confirmados = relationship(
         "AlunosConfirmados", back_populates="viagem", cascade="all, delete-orphan"
     )
+
+    solicitacoes = relationship(
+        "SolicitacaoViagem", back_populates="viagem", cascade="all, delete-orphan"
+    )
+
+
+class SolicitacaoViagem(db.Model):
+    """Interesse de um aluno numa viagem sob demanda (RF-10, RF-19)."""
+
+    __tablename__ = "solicitacao_viagem"
+    __table_args__ = (
+        db.Index(
+            "uq_solicitacao_ativa",
+            "viagem_id",
+            "aluno_id",
+            unique=True,
+            postgresql_where=db.text("status = 'ATIVA'"),
+        ),
+    )
+
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    viagem_id = db.Column(
+        UUID(as_uuid=True), db.ForeignKey("viagem.id", ondelete="CASCADE"), nullable=False
+    )
+    aluno_id = db.Column(
+        UUID(as_uuid=True),
+        db.ForeignKey("aluno.usuario_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    status = db.Column(
+        db.Enum(StatusSolicitacao, name="status_solicitacao"),
+        nullable=False,
+        default=StatusSolicitacao.ATIVA,
+        server_default=StatusSolicitacao.ATIVA.value,
+    )
+    created_at = db.Column(db.DateTime(timezone=True), server_default=db.func.now())
+    cancelada_em = db.Column(db.DateTime(timezone=True), nullable=True)
+
+    viagem = relationship("Viagem", back_populates="solicitacoes")
+    aluno = relationship("Aluno")
 
 
 class ViagemPonto(db.Model):

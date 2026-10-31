@@ -33,9 +33,21 @@ class TipoViagem(enum.Enum):
 
 class StatusViagem(enum.Enum):
     AGENDADA = "AGENDADA"
+    # Só rotas sob demanda: o aluno pediu e o motorista ainda não iniciou (RF-10).
+    SOLICITADA = "SOLICITADA"
+    # Só rotas sob demanda: motorista iniciou, alunos ainda podem entrar (RF-11).
+    BUFFER_ABERTO = "BUFFER_ABERTO"
+    # Também é o "Em rota" das viagens sob demanda.
     EM_ANDAMENTO = "EM_ANDAMENTO"
     FINALIZADA = "FINALIZADA"
     CANCELADA = "CANCELADA"
+
+
+class StatusSolicitacao(enum.Enum):
+    ATIVA = "ATIVA"
+    CANCELADA = "CANCELADA"
+    # Cancelou depois do início do percurso: no-show previsto (RF-19).
+    DESISTENCIA = "DESISTENCIA"
 
 
 class UserRole(enum.Enum):

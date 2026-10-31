@@ -641,3 +641,23 @@ def obter_progresso_viagem(gestor_id: str, viagem_id: str):
         }
         for vp in pontos_visitados
     ]
+
+
+# Estados em que a rodada sob demanda ocupa o veículo. Sem viagem nesses estados = Ociosa.
+ESTADOS_ATIVOS_SOB_DEMANDA = (
+    StatusViagem.SOLICITADA,
+    StatusViagem.BUFFER_ABERTO,
+    StatusViagem.EM_ANDAMENTO,
+)
+
+
+def buscar_viagem_ativa_do_veiculo(onibus_id) -> Viagem | None:
+    return (
+        db.session.query(Viagem)
+        .filter(
+            Viagem.veiculo_id == onibus_id,
+            Viagem.status.in_(ESTADOS_ATIVOS_SOB_DEMANDA),
+        )
+        .order_by(Viagem.created_at.desc())
+        .first()
+    )
