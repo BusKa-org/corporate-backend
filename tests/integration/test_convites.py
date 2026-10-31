@@ -353,6 +353,24 @@ def test_concluir_guarda_a_acessibilidade_informada(gestor, client, instituicao,
     assert aluno.observacao_acessibilidade == "Cadeira motorizada"
 
 
+def test_convite_aceite_com_necessidade_invalida_400(gestor, client, instituicao, _db):
+    _convidar(gestor, [{"email": "rui@parque.test"}])
+    convite = _convite(_db, "rui@parque.test")
+
+    resposta = _concluir(
+        client,
+        convite.token,
+        nome="Rui Lima",
+        cpf=CPF_A,
+        instituicao_id=str(instituicao.id),
+        senha=SENHA,
+        necessidades_acessibilidade=["VOAR"],
+    )
+
+    assert resposta.status_code == 400
+    assert Aluno.query.filter_by(email="rui@parque.test").first() is None
+
+
 def test_concluir_com_dados_do_gestor_aceita_correcao(gestor, client, instituicao, _db, caplog):
     _convidar(
         gestor,
