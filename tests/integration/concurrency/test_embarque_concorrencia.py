@@ -132,3 +132,23 @@ def test_mesma_fila_offline_enviada_duas_vezes_ao_mesmo_tempo(
     assert _db.session.query(Ocorrencia).filter_by(viagem_id=rodada.id).count() == 2
     assert _db.session.query(TelemetriaViagem).filter_by(viagem_id=rodada.id).count() == 1
     assert _registro(_db, rodada, aluno).embarcou is True
+
+
+def test_duplo_toque_na_primeira_confirmacao_de_presenca_e_idempotente(
+    app, _db, aluno, rota_aluno, viagem_futura_agendada_com_motorista, dia_operacao, rota_ponto
+):
+    viagem_id = viagem_futura_agendada_com_motorista.id
+    corpo = {"confirmacao": True, "ponto_embarque_id": str(rota_ponto.ponto_id)}
+
+    def confirmar():
+        return app.test_client().put(
+            f"/v1/viagens/{viagem_id}/confirmacao", json=corpo, headers=aluno.headers
+        )
+
+    respostas = ao_mesmo_tempo(app, [confirmar, confirmar])
+
+    assert status_de(respostas) == [200, 200]
+    assert respostas[0].get_json() == respostas[1].get_json()
+    _db.session.expire_all()
+    registro = _db.session.get(AlunosConfirmados, (viagem_id, aluno.user.id))
+    assert registro.confirmacao is True

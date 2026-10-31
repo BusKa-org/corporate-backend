@@ -101,6 +101,10 @@ All notable changes to this project will be documented in this file.
   Invitations replace all of them: nobody signs up on their own.
 
 ### Fixed
+- `PUT /v1/viagens/<id>/confirmacao`: a double tap on the first attendance confirmation of a
+  fixed-route trip returned 409 (primary key) for the second tap. The student row is now locked
+  before reading the confirmation, so the second tap gets 200 with the same result. Confirming
+  while already in another trip en route still returns 409.
 - `POST /v1/convites/pin` sent twice at the same time e-mailed two PINs and only the second one
   worked. The invitation row is now locked, so the second request sees the 60-second interval
   between PINs and sends nothing: one valid PIN, one e-mail. Asking again after the interval
