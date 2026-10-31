@@ -24,8 +24,10 @@ All notable changes to this project will be documented in this file.
   A person who types an enabled e-mail straight into the app gets a 10-minute PIN by e-mail
   (`POST /v1/convites/pin`, `POST /v1/convites/pin/validar`) instead of using the link.
 - Trip types (`TipoViagem`: `FIXA`, `SOB_DEMANDA`) on `Rota`. On-demand routes
-  take `buffer_minutos` (1–30, default 5) and `prazo_inicio_minutos` (1–120,
-  default 10) instead of a timetable; `POST`/`PUT /v1/rotas` accept and return them.
+  take `buffer_minutos` and `prazo_inicio_minutos` instead of a timetable;
+  `POST`/`PUT /v1/rotas` accept and return them. Defaults and limits are settings:
+  `ROTA_BUFFER_MINUTOS_PADRAO` (5), `ROTA_BUFFER_MINUTOS_MAX` (30),
+  `ROTA_PRAZO_INICIO_MINUTOS_PADRAO` (10), `ROTA_PRAZO_INICIO_MINUTOS_MAX` (120).
 - On-demand trip lifecycle (Plan 2, RF-05/10/11/12/19). Availability windows per
   vehicle with an assigned driver (`/v1/onibus/<id>/janelas`); ride requests
   (`POST /v1/rotas/<id>/solicitacoes`) that open a `SOLICITADA` trip and notify the
@@ -58,7 +60,7 @@ All notable changes to this project will be documented in this file.
   driving time was reached. Starting a trip returns 409 if the driver is `EM_ROTA` and 403
   during rest or outside working hours. It locks the trip and driver rows, so two
   simultaneous starts can't both pass.
-  New settings `MOTORISTA_HORAS_MAX_DIRECAO`, `MOTORISTA_DESCANSO_MINUTOS` and `TIMEZONE` (default `America/Fortaleza`; also used for the
+  New settings `MOTORISTA_HORAS_MAX_DIRECAO`, `MOTORISTA_DESCANSO_MINUTOS` and `TIMEZONE` (default `America/Sao_Paulo`; also used for the
   availability windows).
 - Passenger accessibility needs (`necessidades_acessibilidade`, `observacao_acessibilidade`)
   on registration and `PUT /v1/alunos/me`, shown to the gestor and to the driver of the trip.

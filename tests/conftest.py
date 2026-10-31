@@ -452,7 +452,7 @@ def confirmacao_aluno(_db, viagem_futura_agendada_com_motorista, aluno, ponto):
 # Viagens sob demanda (RF-05, RF-10, RF-11, RF-12, RF-19)
 # ---------------------------------------------------------------------------
 
-# Segunda-feira, 10:00 em America/Fortaleza (UTC-3): dentro da janela padrão 08:00-12:00.
+# Segunda-feira, 10:00 no fuso padrão (America/Sao_Paulo, UTC-3): dentro da janela padrão 08:00-12:00.
 SEGUNDA_10H_LOCAL = datetime(2026, 11, 2, 13, 0, tzinfo=UTC)
 
 

@@ -253,7 +253,7 @@ def test_job_troca_e_mail_e_cpf_vencidos_por_hash_e_nao_mexe_nos_outros(organiza
     _db.session.add(
         RetencaoLegal(
             usuario_id=vencido.id,
-            email="velho@parque.test",
+            email="velho@org.test",
             cpf="52998224725",
             reter_ate=agora - timedelta(days=1),
         )
@@ -261,7 +261,7 @@ def test_job_troca_e_mail_e_cpf_vencidos_por_hash_e_nao_mexe_nos_outros(organiza
     _db.session.add(
         RetencaoLegal(
             usuario_id=no_prazo.id,
-            email="recente@parque.test",
+            email="recente@org.test",
             cpf="11144477735",
             reter_ate=agora + timedelta(days=30),
         )
@@ -279,7 +279,7 @@ def test_job_troca_e_mail_e_cpf_vencidos_por_hash_e_nao_mexe_nos_outros(organiza
     assert anonimizado.cpf != "52998224725"
 
     intacto = _db.session.get(RetencaoLegal, no_prazo.id)
-    assert intacto.email == "recente@parque.test"
+    assert intacto.email == "recente@org.test"
     assert intacto.cpf == "11144477735"
     assert intacto.anonimizado_em is None
 
@@ -291,7 +291,7 @@ def test_job_nao_refaz_a_anonimizacao_de_quem_ja_foi(organizacao, _db):
     _db.session.add(
         RetencaoLegal(
             usuario_id=aluno.id,
-            email="velho@parque.test",
+            email="velho@org.test",
             cpf="52998224725",
             reter_ate=datetime.now(UTC) - timedelta(days=1),
         )

@@ -59,8 +59,8 @@ class Settings:
         self.APP_DOWNLOAD_URL = os.getenv("APP_DOWNLOAD_URL", "")
 
         # Fuso da organização: hora local das janelas de disponibilidade (RF-05) e da
-        # jornada do motorista. Paraíba não segue o fuso de São Paulo.
-        self.TIMEZONE = os.getenv("TIMEZONE", "America/Fortaleza")
+        # jornada do motorista.
+        self.TIMEZONE = os.getenv("TIMEZONE", "America/Sao_Paulo")
         try:
             ZoneInfo(self.TIMEZONE)
         except (ZoneInfoNotFoundError, ValueError):
@@ -74,6 +74,24 @@ class Settings:
         )
         self.JOB_PRAZO_INICIO_INTERVALO_SEGUNDOS = self._get_int(
             "JOB_PRAZO_INICIO_INTERVALO_SEGUNDOS", default=60, min_val=5, max_val=3600
+        )
+
+        # Rotas sob demanda (RF-11): duração do buffer e prazo do motorista para iniciar,
+        # em minutos. O padrão vale quando o gestor cria a rota sem informar o valor.
+        self.ROTA_BUFFER_MINUTOS_MAX = self._get_int(
+            "ROTA_BUFFER_MINUTOS_MAX", default=30, min_val=1, max_val=1440
+        )
+        self.ROTA_BUFFER_MINUTOS_PADRAO = self._get_int(
+            "ROTA_BUFFER_MINUTOS_PADRAO", default=5, min_val=1, max_val=self.ROTA_BUFFER_MINUTOS_MAX
+        )
+        self.ROTA_PRAZO_INICIO_MINUTOS_MAX = self._get_int(
+            "ROTA_PRAZO_INICIO_MINUTOS_MAX", default=120, min_val=1, max_val=1440
+        )
+        self.ROTA_PRAZO_INICIO_MINUTOS_PADRAO = self._get_int(
+            "ROTA_PRAZO_INICIO_MINUTOS_PADRAO",
+            default=10,
+            min_val=1,
+            max_val=self.ROTA_PRAZO_INICIO_MINUTOS_MAX,
         )
 
         # Jornada do motorista. Padrão do CTB (Lei 9.503/97) art. 67-C §1º-A, incluído pela
@@ -151,19 +169,27 @@ class Settings:
         self, key: str, default: int, min_val: int | None = None, max_val: int | None = None
     ) -> int:
         """Get an integer value with optional range validation."""
+        # The fallback stays in range: max_val can come from another setting
+        # (e.g. ROTA_BUFFER_MINUTOS_MAX=3 with the default PADRAO of 5).
+        fallback = default
+        if max_val is not None and fallback > max_val:
+            fallback = max_val
+        if min_val is not None and fallback < min_val:
+            fallback = min_val
+
         raw = os.getenv(key, str(default))
         try:
             value = int(raw)
         except ValueError:
             self._errors.append(f"{key} must be an integer, got '{raw}'")
-            return default
+            return fallback
 
         if min_val is not None and value < min_val:
             self._errors.append(f"{key} must be >= {min_val}, got {value}")
-            return default
+            return fallback
         if max_val is not None and value > max_val:
             self._errors.append(f"{key} must be <= {max_val}, got {value}")
-            return default
+            return fallback
 
         return value
 

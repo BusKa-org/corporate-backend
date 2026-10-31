@@ -116,6 +116,10 @@ def create_app(
     app.config["MOTORISTA_HORAS_MAX_DIRECAO"] = settings.MOTORISTA_HORAS_MAX_DIRECAO
     app.config["MOTORISTA_DESCANSO_MINUTOS"] = settings.MOTORISTA_DESCANSO_MINUTOS
     app.config["TIMEZONE"] = settings.TIMEZONE
+    app.config["ROTA_BUFFER_MINUTOS_PADRAO"] = settings.ROTA_BUFFER_MINUTOS_PADRAO
+    app.config["ROTA_BUFFER_MINUTOS_MAX"] = settings.ROTA_BUFFER_MINUTOS_MAX
+    app.config["ROTA_PRAZO_INICIO_MINUTOS_PADRAO"] = settings.ROTA_PRAZO_INICIO_MINUTOS_PADRAO
+    app.config["ROTA_PRAZO_INICIO_MINUTOS_MAX"] = settings.ROTA_PRAZO_INICIO_MINUTOS_MAX
     app.config["FOTOS_ALUNO_DIR"] = settings.FOTOS_ALUNO_DIR or os.path.join(
         app.instance_path, "fotos_aluno"
     )
