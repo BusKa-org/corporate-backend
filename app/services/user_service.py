@@ -4,6 +4,7 @@ import logging
 from datetime import UTC, datetime
 from typing import Any, cast
 
+from sqlalchemy.orm import with_polymorphic
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from app.core.exceptions import (
@@ -61,7 +62,9 @@ def _corrigir_status_motoristas(users: list[User]) -> None:
 def get_all_users(current_user_id: str) -> list[User]:
     """List all users in the same organizacao (gestor only)."""
     gestor = _get_gestor_or_403(current_user_id, "Apenas gestores podem listar usuários")
-    users = db.session.query(User).filter_by(organizacao_id=gestor.organizacao_id).all()
+    # with_polymorphic carrega as colunas de cada subtipo na mesma query (sem N+1)
+    todos = with_polymorphic(User, "*")
+    users = db.session.query(todos).filter(todos.organizacao_id == gestor.organizacao_id).all()
     _corrigir_status_motoristas(users)
     return users
 
@@ -280,13 +283,12 @@ def change_password(user_id: str, data: dict[str, Any]) -> None:
 
 
 def get_motoristas_by_municipio(gestor_id: str):
-    from app.models.user import User
-
     gestor = _get_user_or_404(gestor_id)
 
-    motoristas = User.query.filter(
-        User.organizacao_id == gestor.organizacao_id, User.role == UserRole.MOTORISTA
-    ).all()
+    # Consulta Motorista direto: via User, as colunas de motorista vinham uma query por linha
+    motoristas = (
+        db.session.query(Motorista).filter(Motorista.organizacao_id == gestor.organizacao_id).all()
+    )
     _corrigir_status_motoristas(motoristas)
 
     return motoristas
