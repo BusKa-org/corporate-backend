@@ -111,6 +111,9 @@ All notable changes to this project will be documented in this file.
   Invitations replace all of them: nobody signs up on their own.
 
 ### Fixed
+- Rate limit keys no longer hold the raw password reset / invitation token, the
+  e-mail or the client IP: all are stored as an HMAC-SHA256 keyed with
+  `JWT_SECRET_KEY`, so they no longer appear in Redis key names.
 - After `DELETE /v1/users/me` the old JWT kept working for up to 2 hours. Every authenticated
   request now loads the user and returns 401 `TOKEN_REVOKED` when the user no longer exists or
   has a status login refuses (`DELETED`, `DISABLED`, `PENDING_APPROVAL`). The rate limiter
