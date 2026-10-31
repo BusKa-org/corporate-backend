@@ -68,6 +68,25 @@ All notable changes to this project will be documented in this file.
   Photos over `FOTO_ALUNO_MAX_PIXELS` (default 25 MP) are rejected with a 400.
   New settings `FOTOS_ALUNO_DIR`, `FOTO_ALUNO_MAX_BYTES` and `FOTO_ALUNO_MAX_PIXELS`; production keeps photos in the
   `fotos_aluno` volume. Account deletion removes the photo file and the accessibility data.
+- Photo check on QR boarding (RF-15/RF-17/RF-18). `POST /v1/embarque/viagens/<id>/conferencia`
+  checks the credential and returns the passenger with `foto_url`/`sem_foto`, without boarding.
+  The driver then calls `POST .../confirmacao` (boards and uses the credential, with row locks so
+  two simultaneous confirmations board once) or `POST .../recusa` (`FOTO_NAO_CONFERE`/`SEM_FOTO`:
+  no boarding, the credential becomes rejected and boards no one else, an open ocorrência for
+  the gestor). The old `POST .../validacao` returns 410 `ENDPOINT_DESCONTINUADO`. A student with
+  no photo cannot board by QR (`SEM_FOTO_EXIGE_MANUAL`); the driver uses the manual path.
+  Online boarding uses the server clock and ignores `ocorrido_em`.
+- Rotating boarding QR (RF-15). The credential keeps a 32-byte secret instead of a static token;
+  the student app derives a TOTP code (RFC 6238, HMAC-SHA1, 30 s, 6 digits) and shows
+  `<credencial_id>.<codigo>`. New settings `QR_PASSO_SEGUNDOS`, `QR_DIGITOS`, `QR_JANELA_PASSOS`.
+  At most one active credential per student and trip; re-issuing for another stop revokes the
+  old one, and a credential for a stop that is no longer the student's is refused
+  (`CREDENCIAL_DESATUALIZADA`). Migration `c1d2e3f4a5b6`.
+- Offline sync: QR boardings use the new event type `EMBARQUE_CONFIRMADO` (the old `EMBARQUE` is
+  refused per event with `EVENTO_DESCONTINUADO`), events apply in event-time order, a `RECUSA`
+  blocks later boardings with the same QR, and event times are bounded (`EVENTO_NO_FUTURO`,
+  `EVENTO_ANTES_DA_CREDENCIAL`, setting `SYNC_TOLERANCIA_SEGUNDOS`).
+  **Breaking for both apps:** see `docs/api_contracts.md`.
 
 ### Removed
 - dev's first on-demand implementation, replaced by the one above before any release:

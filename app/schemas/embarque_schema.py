@@ -4,25 +4,34 @@ from marshmallow import fields
 from marshmallow.validate import Length, OneOf, Range
 
 from app.schemas.common import BaseSchema
-from app.services.embarque_service import TIPOS_EVENTO
+from app.services.embarque_service import MOTIVOS_RECUSA, TIPOS_EVENTO
 
 # ==========================================
 # Input Schemas (Validation)
 # ==========================================
 
 
-class ValidarEmbarqueRequestSchema(BaseSchema):
-    """POST /embarque/viagens/<id>/validacao"""
+class QrRequestSchema(BaseSchema):
+    """POST /embarque/viagens/<id>/conferencia e /confirmacao
 
+    Sem `ocorrido_em`: online vale o relógio do servidor.
+    """
+
+    # `<credencial_id>.<codigo>`: 36 do UUID, o ponto e até 8 dígitos.
     qr_token = fields.String(required=True, validate=Length(min=1, max=64))
-    ocorrido_em = fields.DateTime(load_default=None, allow_none=True)
+
+
+class RecusarEmbarqueRequestSchema(QrRequestSchema):
+    """POST /embarque/viagens/<id>/recusa"""
+
+    motivo = fields.String(required=True, validate=OneOf(MOTIVOS_RECUSA))
+    observacao = fields.String(load_default=None, allow_none=True, validate=Length(max=500))
 
 
 class EmbarqueManualRequestSchema(BaseSchema):
     """POST /embarque/viagens/<id>/manual"""
 
     aluno_id = fields.UUID(required=True)
-    ocorrido_em = fields.DateTime(load_default=None, allow_none=True)
 
 
 class AvancarPontoRequestSchema(BaseSchema):
@@ -39,6 +48,8 @@ class EventoOfflineSchema(BaseSchema):
     ocorrido_em = fields.DateTime(required=True)
     qr_token = fields.String(load_default=None, allow_none=True)
     aluno_id = fields.UUID(load_default=None, allow_none=True)
+    motivo = fields.String(load_default=None, allow_none=True, validate=OneOf(MOTIVOS_RECUSA))
+    observacao = fields.String(load_default=None, allow_none=True, validate=Length(max=500))
     ponto_id = fields.UUID(load_default=None, allow_none=True)
     latitude = fields.Decimal(load_default=None, allow_none=True, validate=Range(-90, 90))
     longitude = fields.Decimal(load_default=None, allow_none=True, validate=Range(-180, 180))
@@ -60,9 +71,12 @@ class SincronizacaoRequestSchema(BaseSchema):
 class PassageiroDoPontoSchema(BaseSchema):
     aluno_id = fields.String()
     nome = fields.String(allow_none=True)
-    qr_token = fields.String(allow_none=True)
+    credencial_id = fields.String(allow_none=True)
+    qr_segredo = fields.String(allow_none=True)
     embarcou = fields.Boolean()
     ponto_destino_id = fields.String(allow_none=True)
+    foto_url = fields.String(allow_none=True)
+    sem_foto = fields.Boolean()
 
 
 class PontoRoteiroSchema(BaseSchema):
@@ -92,6 +106,25 @@ class EmbarqueResponseSchema(BaseSchema):
     ponto_embarque_id = fields.String(allow_none=True)
     embarcado_em = fields.DateTime(allow_none=True)
     manual = fields.Boolean()
+    foto_url = fields.String(allow_none=True)
+    sem_foto = fields.Boolean()
+
+
+class ConferenciaResponseSchema(BaseSchema):
+    viagem_id = fields.String()
+    aluno_id = fields.String()
+    nome = fields.String(allow_none=True)
+    foto_url = fields.String(allow_none=True)
+    sem_foto = fields.Boolean()
+    ponto_embarque_id = fields.String(allow_none=True)
+    ponto_destino_id = fields.String(allow_none=True)
+
+
+class RecusaResponseSchema(BaseSchema):
+    viagem_id = fields.String()
+    aluno_id = fields.String()
+    motivo = fields.String()
+    ocorrencia_id = fields.String()
 
 
 class ResultadoEventoSchema(BaseSchema):

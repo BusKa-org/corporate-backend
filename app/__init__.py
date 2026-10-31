@@ -117,6 +117,10 @@ def create_app(
     )
     app.config["FOTO_ALUNO_MAX_BYTES"] = settings.FOTO_ALUNO_MAX_BYTES
     app.config["FOTO_ALUNO_MAX_PIXELS"] = settings.FOTO_ALUNO_MAX_PIXELS
+    app.config["QR_PASSO_SEGUNDOS"] = settings.QR_PASSO_SEGUNDOS
+    app.config["QR_DIGITOS"] = settings.QR_DIGITOS
+    app.config["QR_JANELA_PASSOS"] = settings.QR_JANELA_PASSOS
+    app.config["SYNC_TOLERANCIA_SEGUNDOS"] = settings.SYNC_TOLERANCIA_SEGUNDOS
 
     # Maximum request size (16MB)
     app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024

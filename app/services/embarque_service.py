@@ -1,18 +1,25 @@
 """RF-15 a RF-18 — credencial de embarque, roteiro do motorista e sincronização.
 
-A credencial é a `CredencialEmbarque` da main (PR #5): um token opaco que o
-app do aluno desenha como QR e busca em `GET /v1/viagens/<id>/credencial-embarque`.
-Este módulo a emite na consolidação do buffer e a consome no embarque.
+A credencial é a `CredencialEmbarque`: o app do aluno busca o segredo em
+`GET /v1/viagens/<id>/credencial-embarque` e desenha o QR `<credencial_id>.<codigo>`,
+com um código que muda a cada passo (`credencial_embarque_service`). Este módulo
+a emite na consolidação do buffer e concentra as regras que a consomem no
+embarque.
 
-Escopo: a conferência visual por fotografia prevista no RF-15/RF-17 está fora
-do escopo desta entrega por decisão do cliente. O que existe aqui é a validação
-da credencial contra o roteiro (viagem e ponto corretos) e o fallback manual.
+Embarque por QR em dois passos (RF-17): a conferência confere a credencial e
+devolve o passageiro com a foto, sem embarcar ninguém; o embarque só é
+registrado quando o motorista confirma que a foto é da pessoa à sua frente.
+Se não for, ele recusa, fica uma ocorrência para o gestor e a credencial fica
+recusada: aquele QR não embarca mais ninguém nesta viagem. O passageiro real
+embarca pelo fallback manual, conferido pela foto da lista do ponto.
 """
 
 import logging
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
+
+from flask import current_app
 
 from app.core.exceptions import AppError, ForbiddenError, NotFoundError, ValidationError
 from app.core.transaction import transactional
@@ -23,6 +30,7 @@ from app.models.ocorrencia import Ocorrencia
 from app.models.user import User
 from app.models.viagem import AlunosConfirmados, TelemetriaViagem, Viagem, ViagemPonto
 from app.services import credencial_embarque_service
+from app.utils import tempo
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +42,19 @@ EM_PERCURSO = (StatusViagem.EM_ANDAMENTO,)
 # pode chegar depois que o motorista finalizou o percurso.
 SINCRONIZAVEL = EM_PERCURSO + (StatusViagem.FINALIZADA,)
 
-TIPOS_EVENTO = ("EMBARQUE", "EMBARQUE_MANUAL", "CHEGADA_PONTO", "POSICAO")
+# EMBARQUE_CONFIRMADO é o QR conferido e confirmado pelo motorista; RECUSA é o QR
+# recusado por ele. EMBARQUE é o tipo antigo, de antes da conferência da foto: fica
+# aceito no esquema só para ser recusado evento a evento com EVENTO_DESCONTINUADO.
+TIPOS_EVENTO = (
+    "EMBARQUE_CONFIRMADO",
+    "EMBARQUE_MANUAL",
+    "RECUSA",
+    "CHEGADA_PONTO",
+    "POSICAO",
+    "EMBARQUE",
+)
+
+MOTIVOS_RECUSA = ("FOTO_NAO_CONFERE", "SEM_FOTO")
 
 
 class EmbarqueRecusado(AppError):
@@ -59,7 +79,7 @@ def _uuid(valor: IdLike, rotulo: str) -> uuid.UUID:
 def _aware(momento: datetime | None) -> datetime:
     """Carimbo do evento offline; sem fuso, assume UTC."""
     if momento is None:
-        return datetime.now(UTC)
+        return tempo.agora_utc()
     return momento if momento.tzinfo else momento.replace(tzinfo=UTC)
 
 
@@ -84,6 +104,11 @@ def _viagem_do_motorista(user_id: IdLike, viagem_id: IdLike, estados: tuple) -> 
 def _embarques(viagem: Viagem) -> list[AlunosConfirmados]:
     """Quem o motorista espera embarcar: confirmados que não desistiram (RF-19)."""
     return [c for c in viagem.alunos_confirmados if c.confirmacao]
+
+
+def _foto(registro: AlunosConfirmados) -> dict[str, Any]:
+    foto_url = registro.aluno.foto_url if registro.aluno else None
+    return {"foto_url": foto_url, "sem_foto": foto_url is None}
 
 
 def _ponto_atual(viagem: Viagem) -> ViagemPonto | None:
@@ -141,22 +166,39 @@ def _materializar_pontos(viagem: Viagem) -> None:
 def roteiro(user_id: IdLike, viagem_id: IdLike) -> dict[str, Any]:
     """RF-16: paradas em ordem, com quantos embarcam e desembarcam em cada uma.
 
-    Vai junto a matriz de permissões (credenciais válidas por ponto), que é o
-    que o app baixa antes da partida para validar embarques sem rede (RF-18).
+    Vai junto a matriz de permissões (credencial e foto de cada passageiro por
+    ponto), que é o que o app baixa antes da partida para conferir embarques
+    sem rede (RF-18). É também a lista que o motorista usa no fallback manual.
     """
     viagem = _viagem_do_motorista(user_id, viagem_id, EM_PERCURSO)
     embarques = _embarques(viagem)
     atual = _ponto_atual(viagem)
 
-    token_por_aluno: dict[uuid.UUID, str] = {}
-    for credencial in CredencialEmbarque.query.filter_by(viagem_id=viagem.id).all():
-        token_por_aluno[credencial.aluno_id] = credencial.token
+    credencial_por_aluno: dict[uuid.UUID, CredencialEmbarque] = {}
+    ativas = CredencialEmbarque.query.filter_by(viagem_id=viagem.id, revogada_em=None).all()
+    for credencial in ativas:
+        credencial_por_aluno[credencial.aluno_id] = credencial
 
     pontos = []
     for vp in viagem.pontos_visitados:
         sobem = [c for c in embarques if c.ponto_embarque_id == vp.ponto_id]
         descem = sum(1 for c in embarques if c.ponto_destino_id == vp.ponto_id)
         apelido = vp.ponto.apelido if vp.ponto else "ponto"
+
+        passageiros = []
+        for c in sobem:
+            credencial = credencial_por_aluno.get(c.aluno_id)
+            passageiro = {
+                "aluno_id": str(c.aluno_id),
+                "nome": c.aluno.nome if c.aluno else None,
+                # O segredo deixa o app conferir o código do QR sem rede (RF-18).
+                "credencial_id": str(credencial.id) if credencial else None,
+                "qr_segredo": credencial.segredo if credencial else None,
+                "embarcou": c.embarcou,
+                "ponto_destino_id": str(c.ponto_destino_id) if c.ponto_destino_id else None,
+            }
+            passageiro.update(_foto(c))
+            passageiros.append(passageiro)
 
         pontos.append(
             {
@@ -169,18 +211,7 @@ def roteiro(user_id: IdLike, viagem_id: IdLike) -> dict[str, Any]:
                 "desembarcam": descem,
                 "instrucao": f"Aproximando-se de {apelido}: "
                 f"embarcam {len(sobem)}, desembarcam {descem}",
-                "passageiros": [
-                    {
-                        "aluno_id": str(c.aluno_id),
-                        "nome": c.aluno.nome if c.aluno else None,
-                        "qr_token": token_por_aluno.get(c.aluno_id),
-                        "embarcou": c.embarcou,
-                        "ponto_destino_id": (
-                            str(c.ponto_destino_id) if c.ponto_destino_id else None
-                        ),
-                    }
-                    for c in sobem
-                ],
+                "passageiros": passageiros,
             }
         )
 
@@ -226,36 +257,103 @@ def _marcar_visitado(vp: ViagemPonto, momento: datetime) -> None:
 # ==========================================
 
 
-def _registro_por_token(qr_token: str, viagem: Viagem, momento: datetime) -> AlunosConfirmados:
-    credencial = CredencialEmbarque.query.filter_by(token=(qr_token or "").strip()).first()
-    if not credencial:
+def _tolerancia() -> timedelta:
+    return timedelta(seconds=current_app.config["SYNC_TOLERANCIA_SEGUNDOS"])
+
+
+def _credencial_do_qr(
+    qr: str, viagem: Viagem, momento: datetime, conferir_codigo: bool = True
+) -> CredencialEmbarque:
+    """Regras da credencial lida, as mesmas online e offline.
+
+    `momento` é o relógio do servidor online, ou o carimbo já limitado do evento
+    offline. A recusa não confere o código: ela só fecha a porta, e o código
+    pode ter girado enquanto o motorista olhava a foto.
+    """
+    partes = credencial_embarque_service.separar_qr(qr)
+    credencial = db.session.get(CredencialEmbarque, partes[0]) if partes else None
+    if partes is None or credencial is None:
         raise EmbarqueRecusado("Credencial não reconhecida", "CREDENCIAL_DESCONHECIDA", 404)
 
     if credencial.viagem_id != viagem.id:
         raise EmbarqueRecusado("Credencial emitida para outra viagem", "CREDENCIAL_DE_OUTRA_VIAGEM")
 
-    # Vale o carimbo do evento, não a hora da chegada: a fila offline chega atrasada.
+    if credencial.revogada_em is not None:
+        raise EmbarqueRecusado(
+            "Credencial substituída por outra mais recente", "CREDENCIAL_DESATUALIZADA"
+        )
+
+    emitida_em = credencial.created_at
+    if emitida_em is not None and momento < emitida_em - _tolerancia():
+        raise EmbarqueRecusado(
+            "Evento anterior à emissão da credencial", "EVENTO_ANTES_DA_CREDENCIAL", 422
+        )
+
     if momento >= credencial.expires_at:
         raise EmbarqueRecusado("Credencial de embarque expirada", "CREDENCIAL_EXPIRADA")
 
-    registro = db.session.get(AlunosConfirmados, (viagem.id, credencial.aluno_id))
-    if not registro:
+    if conferir_codigo and not credencial_embarque_service.codigo_confere(
+        credencial, partes[1], momento
+    ):
         raise EmbarqueRecusado(
-            "Passageiro não consta na lista de embarque desta viagem", "PASSAGEIRO_NAO_PREVISTO"
+            "Código do QR expirado ou inválido: peça ao aluno para abrir o QR de novo",
+            "CODIGO_EXPIRADO",
         )
-    return registro
+
+    return credencial
 
 
-def _conferir(registro: AlunosConfirmados, ponto_esperado: uuid.UUID | None) -> None:
+def _travar_registro(viagem_id: uuid.UUID, aluno_id: uuid.UUID) -> AlunosConfirmados | None:
+    """Trava as credenciais e depois a linha do passageiro, sempre nessa ordem.
+
+    Duas confirmações simultâneas do mesmo passageiro se enfileiram aqui: a
+    segunda lê `embarcou`/`usado` já gravados pela primeira. A ordem fixa evita
+    deadlock entre o QR, o manual e a fila offline.
+    """
+    db.session.query(CredencialEmbarque).filter_by(viagem_id=viagem_id, aluno_id=aluno_id).order_by(
+        CredencialEmbarque.id
+    ).with_for_update().populate_existing().all()
+
+    return (
+        db.session.query(AlunosConfirmados)
+        .filter_by(viagem_id=viagem_id, aluno_id=aluno_id)
+        .with_for_update()
+        .populate_existing()
+        .one_or_none()
+    )
+
+
+def _conferir(
+    registro: AlunosConfirmados | None,
+    credencial: CredencialEmbarque | None,
+    ponto_esperado: uuid.UUID | None,
+) -> AlunosConfirmados:
     """Recusas do RF-17, cada uma com seu código.
 
+    `credencial` nula é o fallback manual, que não tem QR lido por trás.
     `ponto_esperado` nulo dispensa a conferência de ponto: é o caso do evento
     offline que não informa em qual parada o motorista estava.
     """
-    if not registro.confirmacao:
+    if registro is None or not registro.confirmacao:
         raise EmbarqueRecusado(
             "Passageiro não consta na lista de embarque desta viagem", "PASSAGEIRO_NAO_PREVISTO"
         )
+
+    if credencial is not None:
+        if credencial.recusada_em is not None:
+            raise EmbarqueRecusado(
+                "Credencial recusada pelo motorista nesta viagem: embarque só pela lista do ponto",
+                "CREDENCIAL_RECUSADA",
+            )
+        if credencial.ponto_embarque_id != registro.ponto_embarque_id:
+            raise EmbarqueRecusado(
+                "Credencial emitida para um ponto que não é mais o do passageiro",
+                "CREDENCIAL_DESATUALIZADA",
+            )
+        if credencial.usado:
+            raise EmbarqueRecusado(
+                "Credencial já utilizada nesta viagem", "CREDENCIAL_JA_UTILIZADA"
+            )
 
     if registro.embarcou:
         raise EmbarqueRecusado("Credencial já utilizada nesta viagem", "CREDENCIAL_JA_UTILIZADA")
@@ -264,6 +362,8 @@ def _conferir(registro: AlunosConfirmados, ponto_esperado: uuid.UUID | None) -> 
         raise EmbarqueRecusado(
             "Credencial é de outro ponto de embarque", "CREDENCIAL_DE_OUTRO_PONTO"
         )
+
+    return registro
 
 
 def _registrar_embarque(registro: AlunosConfirmados, momento: datetime) -> dict[str, Any]:
@@ -287,52 +387,196 @@ def _registrar_embarque(registro: AlunosConfirmados, momento: datetime) -> dict[
     }
 
 
-def validar_embarque(
-    user_id: IdLike,
-    viagem_id: IdLike,
-    qr_token: str,
-    ocorrido_em: datetime | None = None,
-) -> dict[str, Any]:
-    """RF-17: o motorista lê a credencial e o embarque é registrado.
+def _ocorrencia(
+    viagem: Viagem,
+    motorista_id: IdLike,
+    descricao: str,
+    status: StatusOcorrencia,
+    ocorrencia_id: uuid.UUID | None = None,
+) -> Ocorrencia:
+    ocorrencia = Ocorrencia(
+        id=ocorrencia_id or uuid.uuid4(),
+        autor_id=_uuid(motorista_id, "ID do motorista"),
+        viagem_id=viagem.id,
+        tipo=TipoOcorrencia.OUTRO,
+        status=status,
+        descricao=descricao,
+    )
+    db.session.add(ocorrencia)
+    return ocorrencia
 
-    Sem a conferência de fotografia (descopada), a leitura da credencial é o
-    único vínculo entre a pessoa e a reserva: quem apresentar o token embarca.
+
+def _embarque_por_qr(
+    viagem: Viagem,
+    qr: str,
+    ponto_esperado: uuid.UUID | None,
+    momento: datetime,
+    ja_aplicado_ok: bool = False,
+) -> dict[str, Any] | None:
+    """Confirma o embarque por QR, online ou da fila offline.
+
+    Com `ja_aplicado_ok` (fila offline reenviada), um passageiro que já embarcou
+    devolve None em vez de recusar; uma credencial recusada recusa sempre.
     """
-    viagem = _viagem_do_motorista(user_id, viagem_id, EM_PERCURSO)
-    atual = _ponto_atual(viagem)
-    if not atual:
-        raise ValidationError("Não há parada em atendimento nesta viagem")
+    credencial = _credencial_do_qr(qr, viagem, momento)
+    registro = _travar_registro(viagem.id, credencial.aluno_id)
 
-    momento = _aware(ocorrido_em)
-    with transactional():
-        registro = _registro_por_token(qr_token, viagem, momento)
-        _conferir(registro, atual.ponto_id)
-        resultado = _registrar_embarque(registro, momento)
+    if ja_aplicado_ok and registro is not None and registro.embarcou:
+        if credencial.recusada_em is None:
+            return None
 
+    registro = _conferir(registro, credencial, ponto_esperado)
+
+    # Sem foto não há o que conferir: o QR sozinho não embarca ninguém.
+    if _foto(registro)["sem_foto"]:
+        raise EmbarqueRecusado(
+            "Aluno sem foto cadastrada: embarque só pela lista do ponto, no fallback manual",
+            "SEM_FOTO_EXIGE_MANUAL",
+        )
+
+    resultado = _registrar_embarque(registro, momento)
+    resultado.update(_foto(registro))
     resultado["manual"] = False
     return resultado
 
 
-def confirmar_manual(
-    user_id: IdLike,
-    viagem_id: IdLike,
-    aluno_id: IdLike,
-    ocorrido_em: datetime | None = None,
-) -> dict[str, Any]:
-    """RF-17 fallback: falhou a leitura, o motorista acha o aluno na lista do ponto.
-
-    Sem a conferência de fotografia (descopada) este caminho não tem nenhuma
-    verificação de identidade por trás: vale a palavra do motorista. Por isso
-    cada uso fica registrado como ocorrência, para o gestor auditar.
-    """
-    viagem = _viagem_do_motorista(user_id, viagem_id, EM_PERCURSO)
+def _parada_em_atendimento(viagem: Viagem) -> ViagemPonto:
     atual = _ponto_atual(viagem)
     if not atual:
         raise ValidationError("Não há parada em atendimento nesta viagem")
+    return atual
+
+
+def endpoint_descontinuado() -> None:
+    """`POST .../validacao` antigo, que embarcava na leitura. Falha alto para o app velho."""
+    raise EmbarqueRecusado(
+        "Esta versão do app do motorista não é mais suportada. Atualize o app para "
+        "conferir a foto do passageiro antes de confirmar o embarque.",
+        "ENDPOINT_DESCONTINUADO",
+        410,
+    )
+
+
+def conferir_embarque(user_id: IdLike, viagem_id: IdLike, qr: str) -> dict[str, Any]:
+    """RF-17 passo 1: confere a credencial lida e devolve o passageiro com a foto.
+
+    Só leitura: não embarca ninguém nem marca a credencial como usada. Uma
+    credencial fora do roteiro é recusada aqui, sem mostrar foto (fluxo
+    secundário 2). Sem foto cadastrada, volta `sem_foto` e o motorista segue
+    pelo fallback manual.
+    """
+    viagem = _viagem_do_motorista(user_id, viagem_id, EM_PERCURSO)
+    atual = _parada_em_atendimento(viagem)
+
+    credencial = _credencial_do_qr(qr, viagem, tempo.agora_utc())
+    registro = db.session.get(AlunosConfirmados, (viagem.id, credencial.aluno_id))
+    registro = _conferir(registro, credencial, atual.ponto_id)
+
+    resultado = {
+        "viagem_id": str(viagem.id),
+        "aluno_id": str(registro.aluno_id),
+        "nome": registro.aluno.nome if registro.aluno else None,
+        "ponto_embarque_id": (
+            str(registro.ponto_embarque_id) if registro.ponto_embarque_id else None
+        ),
+        "ponto_destino_id": str(registro.ponto_destino_id) if registro.ponto_destino_id else None,
+    }
+    resultado.update(_foto(registro))
+    return resultado
+
+
+def confirmar_embarque(user_id: IdLike, viagem_id: IdLike, qr: str) -> dict[str, Any]:
+    """RF-17 passo 2: a foto confere e o motorista confirma; o embarque é registrado.
+
+    Refaz todas as conferências da leitura, com as linhas travadas: entre a
+    leitura e a confirmação o mesmo QR pode ter sido usado em outro aparelho.
+    """
+    viagem = _viagem_do_motorista(user_id, viagem_id, EM_PERCURSO)
+    atual = _parada_em_atendimento(viagem)
 
     with transactional():
-        resultado = _embarque_manual(viagem, aluno_id, atual.ponto_id, _aware(ocorrido_em), user_id)
+        resultado = _embarque_por_qr(viagem, qr, atual.ponto_id, tempo.agora_utc())
 
+    assert resultado is not None
+    return resultado
+
+
+def recusar_embarque(
+    user_id: IdLike,
+    viagem_id: IdLike,
+    qr: str,
+    motivo: str,
+    observacao: str | None = None,
+) -> dict[str, Any]:
+    """RF-17 fluxo secundário 1: a foto não é da pessoa e o motorista recusa.
+
+    O embarque não é registrado e a credencial fica recusada: o mesmo QR não
+    embarca mais ninguém nesta viagem, nem online nem pela fila offline. O
+    passageiro real, se aparecer, embarca pelo fallback manual depois de o
+    motorista conferir a foto da lista do ponto. A recusa vira ocorrência
+    aberta para o gestor. Não há como desfazer a recusa pela API.
+    """
+    viagem = _viagem_do_motorista(user_id, viagem_id, EM_PERCURSO)
+    atual = _parada_em_atendimento(viagem)
+
+    momento = tempo.agora_utc()
+    with transactional():
+        credencial = _credencial_do_qr(qr, viagem, momento, conferir_codigo=False)
+        registro = _travar_registro(viagem.id, credencial.aluno_id)
+        registro = _conferir(registro, credencial, atual.ponto_id)
+        ocorrencia = _registrar_recusa(
+            viagem, registro, credencial, motivo, observacao, user_id, momento
+        )
+
+    return {
+        "viagem_id": str(viagem.id),
+        "aluno_id": str(registro.aluno_id),
+        "motivo": motivo,
+        "ocorrencia_id": str(ocorrencia.id),
+    }
+
+
+def _registrar_recusa(
+    viagem: Viagem,
+    registro: AlunosConfirmados,
+    credencial: CredencialEmbarque,
+    motivo: str,
+    observacao: str | None,
+    motorista_id: IdLike,
+    momento: datetime,
+    ocorrencia_id: uuid.UUID | None = None,
+) -> Ocorrencia:
+    if motivo not in MOTIVOS_RECUSA:
+        raise ValidationError(f"Motivo de recusa desconhecido: {motivo}")
+
+    if credencial.recusada_em is None:
+        credencial.recusada_em = momento
+        credencial.motivo_recusa = motivo
+
+    descricao = (
+        f"Embarque recusado ({motivo}) do aluno {registro.aluno_id} "
+        f"no ponto {registro.ponto_embarque_id}."
+    )
+    if observacao:
+        descricao = f"{descricao} Observação do motorista: {observacao}"
+    return _ocorrencia(viagem, motorista_id, descricao, StatusOcorrencia.ABERTA, ocorrencia_id)
+
+
+def confirmar_manual(user_id: IdLike, viagem_id: IdLike, aluno_id: IdLike) -> dict[str, Any]:
+    """RF-17 fallback: falhou a leitura, o motorista acha o aluno na lista do ponto.
+
+    O motorista confere o rosto pela foto da lista do ponto (o roteiro traz a
+    foto de cada passageiro). Não há credencial lida por trás, então cada uso
+    fica registrado como ocorrência, para o gestor auditar. É também o caminho
+    do passageiro real depois de uma recusa e do aluno sem foto.
+    """
+    viagem = _viagem_do_motorista(user_id, viagem_id, EM_PERCURSO)
+    atual = _parada_em_atendimento(viagem)
+
+    with transactional():
+        resultado = _embarque_manual(viagem, aluno_id, atual.ponto_id, tempo.agora_utc(), user_id)
+
+    assert resultado is not None
     return resultado
 
 
@@ -342,30 +586,26 @@ def _embarque_manual(
     ponto_esperado: uuid.UUID | None,
     momento: datetime,
     motorista_id: IdLike,
-) -> dict[str, Any]:
-    registro = db.session.get(AlunosConfirmados, (viagem.id, _uuid(aluno_id, "ID do aluno")))
-    if not registro:
-        raise EmbarqueRecusado(
-            "Passageiro não consta na lista de embarque desta viagem", "PASSAGEIRO_NAO_PREVISTO"
-        )
+    ja_aplicado_ok: bool = False,
+) -> dict[str, Any] | None:
+    registro = _travar_registro(viagem.id, _uuid(aluno_id, "ID do aluno"))
+    if ja_aplicado_ok and registro is not None and registro.embarcou:
+        return None
 
-    _conferir(registro, ponto_esperado)
+    registro = _conferir(registro, None, ponto_esperado)
     resultado = _registrar_embarque(registro, momento)
+    resultado.update(_foto(registro))
 
     # ponytail: o "foi manual" mora numa ocorrência em vez de numa coluna nova —
     # o esquema está fechado e a tabela existe justamente para registrar
     # desvios de operação. Vira coluna se o dashboard precisar contar isso.
-    db.session.add(
-        Ocorrencia(
-            autor_id=_uuid(motorista_id, "ID do motorista"),
-            viagem_id=viagem.id,
-            tipo=TipoOcorrencia.OUTRO,
-            status=StatusOcorrencia.RESOLVIDA,
-            descricao=(
-                f"Embarque manual (falha de leitura do QR) do aluno {registro.aluno_id} "
-                f"no ponto {registro.ponto_embarque_id}. Sem conferência de identidade."
-            ),
-        )
+    conferencia = "sem foto cadastrada" if resultado["sem_foto"] else "foto da lista do ponto"
+    _ocorrencia(
+        viagem,
+        motorista_id,
+        f"Embarque manual (falha de leitura do QR) do aluno {registro.aluno_id} "
+        f"no ponto {registro.ponto_embarque_id}. Conferência: {conferencia}.",
+        StatusOcorrencia.RESOLVIDA,
     )
 
     resultado["manual"] = True
@@ -386,24 +626,41 @@ def sincronizar(
     um evento inválido não derruba o lote, e o app sabe exatamente o que pode
     tirar da fila (§2.3.2).
 
+    Os eventos são aplicados em ordem de `ocorrido_em` (empate: ordem da fila),
+    e os resultados saem nessa mesma ordem. Assim uma RECUSA anterior bloqueia o
+    EMBARQUE_CONFIRMADO do mesmo QR que veio depois, no mesmo lote ou num próximo.
+
     Idempotência sem tabela de eventos: o efeito de cada evento é uma mudança
     de estado que já é observável (o passageiro embarcou, a parada foi
     transposta), então reenviar o lote encontra o estado pronto e não faz nada.
-    A exceção é a posição, que é append-only: o `id` da linha de telemetria é
-    derivado do identificador do evento (UUIDv5), e a chave primária cuida da
-    duplicata.
+    As exceções são a posição e a recusa, que são append-only: o `id` da linha
+    (telemetria ou ocorrência) é derivado do identificador do evento (UUIDv5),
+    e a chave primária cuida da duplicata.
 
     Eventos chegam fora de ordem e atrasados, então valem pelo carimbo que
-    trazem, nunca pela hora em que chegaram.
+    trazem, nunca pela hora em que chegaram; um carimbo no futuro além da
+    tolerância é recusado.
     """
     viagem = _viagem_do_motorista(user_id, viagem_id, SINCRONIZAVEL)
+    limite = tempo.agora_utc() + _tolerancia()
+
+    fila = []
+    for posicao, evento in enumerate(eventos):
+        fila.append((_aware(evento.get("ocorrido_em")), posicao, evento))
+    fila.sort(key=lambda item: (item[0], item[1]))
 
     resultados = []
-    for evento in eventos:
+    for momento, _posicao, evento in fila:
         evento_id = evento.get("evento_id")
         try:
+            if momento > limite:
+                raise EmbarqueRecusado(
+                    "Horário do evento no futuro: confira o relógio do aparelho",
+                    "EVENTO_NO_FUTURO",
+                    422,
+                )
             with transactional():
-                situacao = _aplicar_evento(viagem, evento, user_id)
+                situacao = _aplicar_evento(viagem, evento, momento, user_id)
             resultados.append({"evento_id": evento_id, "situacao": situacao})
         except AppError as e:
             logger.info(f"Evento offline recusado: viagem={viagem.id} evento={evento_id} {e.code}")
@@ -425,27 +682,64 @@ def sincronizar(
     }
 
 
-def _aplicar_evento(viagem: Viagem, evento: dict[str, Any], motorista_id: IdLike) -> str:
+def _aplicar_evento(
+    viagem: Viagem, evento: dict[str, Any], momento: datetime, motorista_id: IdLike
+) -> str:
     tipo = evento.get("tipo")
-    momento = _aware(evento.get("ocorrido_em"))
     ponto_id = evento.get("ponto_id")
     ponto_esperado = _uuid(ponto_id, "ID do ponto") if ponto_id else None
 
     if tipo == "EMBARQUE":
-        registro = _registro_por_token(evento.get("qr_token") or "", viagem, momento)
-        if registro.embarcou:
+        raise EmbarqueRecusado(
+            "Evento EMBARQUE descontinuado: atualize o app do motorista, que agora "
+            "envia EMBARQUE_CONFIRMADO depois de conferir a foto",
+            "EVENTO_DESCONTINUADO",
+            410,
+        )
+
+    if tipo == "EMBARQUE_CONFIRMADO":
+        resultado = _embarque_por_qr(
+            viagem, evento.get("qr_token") or "", ponto_esperado, momento, ja_aplicado_ok=True
+        )
+        return "ja_aplicado" if resultado is None else "aplicado"
+
+    if tipo == "RECUSA":
+        ocorrencia_id = uuid.uuid5(uuid.NAMESPACE_OID, str(evento.get("evento_id")))
+        if db.session.get(Ocorrencia, ocorrencia_id):
             return "ja_aplicado"
-        _conferir(registro, ponto_esperado)
-        _registrar_embarque(registro, momento)
+        credencial = _credencial_do_qr(
+            evento.get("qr_token") or "", viagem, momento, conferir_codigo=False
+        )
+        registro = _travar_registro(viagem.id, credencial.aluno_id)
+        if registro is None:
+            raise EmbarqueRecusado(
+                "Passageiro não consta na lista de embarque desta viagem",
+                "PASSAGEIRO_NAO_PREVISTO",
+            )
+        # Sem `_conferir`: o embarque manual do passageiro real pode vir antes, e
+        # a recusa ainda precisa chegar ao gestor e fechar o QR.
+        _registrar_recusa(
+            viagem,
+            registro,
+            credencial,
+            evento.get("motivo") or "",
+            evento.get("observacao"),
+            motorista_id,
+            momento,
+            ocorrencia_id,
+        )
         return "aplicado"
 
     if tipo == "EMBARQUE_MANUAL":
-        aluno_id = _uuid(evento.get("aluno_id") or "", "ID do aluno")
-        ja_embarcado = db.session.get(AlunosConfirmados, (viagem.id, aluno_id))
-        if ja_embarcado is not None and ja_embarcado.embarcou:
-            return "ja_aplicado"
-        _embarque_manual(viagem, aluno_id, ponto_esperado, momento, motorista_id)
-        return "aplicado"
+        resultado = _embarque_manual(
+            viagem,
+            evento.get("aluno_id") or "",
+            ponto_esperado,
+            momento,
+            motorista_id,
+            ja_aplicado_ok=True,
+        )
+        return "ja_aplicado" if resultado is None else "aplicado"
 
     if tipo == "CHEGADA_PONTO":
         if ponto_esperado is None:

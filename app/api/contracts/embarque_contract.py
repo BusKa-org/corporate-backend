@@ -11,9 +11,14 @@ def register_models(api):
         {
             "aluno_id": fields.String(description="UUID do aluno"),
             "nome": fields.String(description="Nome do passageiro"),
-            "qr_token": fields.String(description="Credencial válida (matriz de permissões)"),
+            "credencial_id": fields.String(description="Credencial ativa (matriz de permissões)"),
+            "qr_segredo": fields.String(
+                description="Segredo do QR, para conferir o código sem rede (hex)"
+            ),
             "embarcou": fields.Boolean(description="Embarque já registrado"),
             "ponto_destino_id": fields.String(description="UUID do ponto de desembarque"),
+            "foto_url": fields.String(description="Caminho da foto (GET autenticado)"),
+            "sem_foto": fields.Boolean(description="Aluno sem foto cadastrada"),
         },
     )
 
@@ -43,11 +48,46 @@ def register_models(api):
         },
     )
 
-    validar_request = api.model(
-        "ValidarEmbarqueRequest",
+    qr_request = api.model(
+        "QrEmbarqueRequest",
         {
-            "qr_token": fields.String(required=True, description="Credencial lida do QR Code"),
-            "ocorrido_em": fields.DateTime(description="Momento da leitura (ISO 8601)"),
+            "qr_token": fields.String(
+                required=True, description="Conteúdo do QR lido: <credencial_id>.<codigo>"
+            ),
+        },
+    )
+
+    recusar_request = api.model(
+        "RecusarEmbarqueRequest",
+        {
+            "qr_token": fields.String(
+                required=True, description="Conteúdo do QR lido: <credencial_id>.<codigo>"
+            ),
+            "motivo": fields.String(required=True, description="FOTO_NAO_CONFERE ou SEM_FOTO"),
+            "observacao": fields.String(description="Texto livre do motorista (até 500)"),
+        },
+    )
+
+    conferencia_response = api.model(
+        "ConferenciaResponse",
+        {
+            "viagem_id": fields.String(description="UUID da viagem"),
+            "aluno_id": fields.String(description="UUID do aluno"),
+            "nome": fields.String(description="Nome do passageiro"),
+            "foto_url": fields.String(description="Caminho da foto (GET autenticado)"),
+            "sem_foto": fields.Boolean(description="Aluno sem foto cadastrada"),
+            "ponto_embarque_id": fields.String(description="UUID do ponto de embarque"),
+            "ponto_destino_id": fields.String(description="UUID do ponto de desembarque"),
+        },
+    )
+
+    recusa_response = api.model(
+        "RecusaResponse",
+        {
+            "viagem_id": fields.String(description="UUID da viagem"),
+            "aluno_id": fields.String(description="UUID do aluno"),
+            "motivo": fields.String(description="Motivo da recusa"),
+            "ocorrencia_id": fields.String(description="Ocorrência aberta para o gestor"),
         },
     )
 
@@ -55,7 +95,6 @@ def register_models(api):
         "EmbarqueManualRequest",
         {
             "aluno_id": fields.String(required=True, description="UUID do aluno na lista do ponto"),
-            "ocorrido_em": fields.DateTime(description="Momento do embarque (ISO 8601)"),
         },
     )
 
@@ -73,6 +112,8 @@ def register_models(api):
             "ponto_embarque_id": fields.String(description="UUID do ponto de embarque"),
             "embarcado_em": fields.DateTime(description="Momento do embarque"),
             "manual": fields.Boolean(description="Embarque registrado pelo fallback manual"),
+            "foto_url": fields.String(description="Caminho da foto (GET autenticado)"),
+            "sem_foto": fields.Boolean(description="Embarcou sem foto cadastrada"),
         },
     )
 
@@ -82,10 +123,17 @@ def register_models(api):
             "evento_id": fields.String(required=True, description="Identificador gerado no app"),
             "tipo": fields.String(
                 required=True,
-                description="EMBARQUE, EMBARQUE_MANUAL, CHEGADA_PONTO ou POSICAO",
+                description=(
+                    "EMBARQUE_CONFIRMADO, EMBARQUE_MANUAL, RECUSA, CHEGADA_PONTO ou POSICAO "
+                    "(EMBARQUE é recusado com EVENTO_DESCONTINUADO)"
+                ),
             ),
             "ocorrido_em": fields.DateTime(required=True, description="Carimbo local do evento"),
-            "qr_token": fields.String(description="Credencial lida (EMBARQUE)"),
+            "qr_token": fields.String(
+                description="QR lido, <credencial_id>.<codigo> (EMBARQUE_CONFIRMADO, RECUSA)"
+            ),
+            "motivo": fields.String(description="FOTO_NAO_CONFERE ou SEM_FOTO (RECUSA)"),
+            "observacao": fields.String(description="Texto livre do motorista (RECUSA)"),
             "aluno_id": fields.String(description="UUID do aluno (EMBARQUE_MANUAL)"),
             "ponto_id": fields.String(description="UUID do ponto (CHEGADA_PONTO, embarques)"),
             "latitude": fields.Float(description="Latitude (POSICAO)"),
@@ -121,8 +169,11 @@ def register_models(api):
 
     return {
         "roteiro_response": roteiro_response,
-        "validar_request": validar_request,
+        "qr_request": qr_request,
         "manual_request": manual_request,
+        "recusar_request": recusar_request,
+        "conferencia_response": conferencia_response,
+        "recusa_response": recusa_response,
         "avancar_request": avancar_request,
         "embarque_response": embarque_response,
         "sincronizacao_request": sincronizacao_request,
