@@ -65,3 +65,27 @@ def test_rota_sob_demanda_nao_aceita_grade_de_horarios(gestor):
     ).get_json()["id"]
     r = gestor.client.post(f"/v1/rotas/{rota_id}/horarios", json=horario)
     assert r.status_code == 400
+
+
+def test_update_rejeita_parametros_nulos_ou_fora_do_limite(gestor):
+    rota_id = gestor.client.post(
+        "/v1/rotas/", json={"nome": "Circuito", "tipo": "SOB_DEMANDA"}
+    ).get_json()["id"]
+
+    for payload in ({"buffer_minutos": None}, {"buffer_minutos": 31}, {"prazo_inicio_minutos": 0}):
+        r = gestor.client.put(f"/v1/rotas/{rota_id}", json=payload)
+        assert r.status_code == 400, payload
+
+
+def test_leitura_retorna_tipo_e_parametros(gestor):
+    rota_id = gestor.client.post(
+        "/v1/rotas/", json={"nome": "Circuito", "tipo": "SOB_DEMANDA"}
+    ).get_json()["id"]
+    esperado = {"tipo": "SOB_DEMANDA", "buffer_minutos": 5, "prazo_inicio_minutos": 10}
+
+    detalhe = gestor.client.get(f"/v1/rotas/{rota_id}").get_json()
+    assert {k: detalhe[k] for k in esperado} == esperado
+
+    itens = gestor.client.get("/v1/rotas/").get_json()["items"]
+    item = next(i for i in itens if i["id"] == rota_id)
+    assert {k: item[k] for k in esperado} == esperado
