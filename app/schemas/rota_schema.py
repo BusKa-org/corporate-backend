@@ -34,6 +34,8 @@ class RotaHorarioCreateRequestSchema(BaseSchema):
 
 BUFFER_MINUTOS_RANGE = validate.Range(min=1, max=30)
 PRAZO_INICIO_MINUTOS_RANGE = validate.Range(min=1, max=120)
+BUFFER_MINUTOS_PADRAO = 5
+PRAZO_INICIO_MINUTOS_PADRAO = 10
 
 
 class RotaCreateRequestSchema(BaseSchema):

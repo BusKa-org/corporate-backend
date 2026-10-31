@@ -20,13 +20,12 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Upgrade database schema."""
-    postgresql.ENUM("FIXA", "SOB_DEMANDA", name="tipo_viagem").create(
-        op.get_bind(), checkfirst=True
-    )
+    tipo_viagem = postgresql.ENUM("FIXA", "SOB_DEMANDA", name="tipo_viagem", create_type=False)
+    tipo_viagem.create(op.get_bind())
 
     op.add_column(
         "rota",
-        sa.Column("tipo", sa.Enum(name="tipo_viagem"), nullable=False, server_default="FIXA"),
+        sa.Column("tipo", tipo_viagem, nullable=False, server_default="FIXA"),
     )
     op.add_column("rota", sa.Column("buffer_minutos", sa.Integer(), nullable=True))
     op.add_column("rota", sa.Column("prazo_inicio_minutos", sa.Integer(), nullable=True))
@@ -43,4 +42,4 @@ def downgrade() -> None:
     op.drop_column("rota", "prazo_inicio_minutos")
     op.drop_column("rota", "buffer_minutos")
     op.drop_column("rota", "tipo")
-    postgresql.ENUM(name="tipo_viagem").drop(op.get_bind(), checkfirst=True)
+    postgresql.ENUM(name="tipo_viagem").drop(op.get_bind())

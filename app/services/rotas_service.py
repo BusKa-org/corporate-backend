@@ -14,12 +14,11 @@ from app.models.enum import DiaDaSemana, SentidoViagem, TipoViagem, UserRole
 from app.models.geo import Ponto
 from app.models.rota import DiasOperacao, HorarioRota, Rota, RotaAluno, RotaPonto
 from app.models.user import User
+from app.schemas.rota_schema import BUFFER_MINUTOS_PADRAO, PRAZO_INICIO_MINUTOS_PADRAO
 from app.utils import audit_logger, validate_uuid
 
 logger = logging.getLogger(__name__)
 
-BUFFER_MINUTOS_PADRAO = 5
-PRAZO_INICIO_MINUTOS_PADRAO = 10
 PARAMETROS_SOB_DEMANDA = ("buffer_minutos", "prazo_inicio_minutos")
 
 
@@ -78,14 +77,20 @@ def create_rota(gestor_id: str, data: dict[str, Any]) -> Rota:
     if not nome:
         raise ValidationError("Nome da rota é obrigatório")
 
-    tipo = data["tipo"]
+    tipo = data.get("tipo", TipoViagem.FIXA)
     parametros = {}
     if tipo == TipoViagem.SOB_DEMANDA:
         if data.get("horarios"):
             raise ValidationError("Rotas sob demanda não possuem grade de horários")
+        buffer_minutos = data.get("buffer_minutos")
+        prazo_inicio_minutos = data.get("prazo_inicio_minutos")
         parametros = {
-            "buffer_minutos": data.get("buffer_minutos") or BUFFER_MINUTOS_PADRAO,
-            "prazo_inicio_minutos": data.get("prazo_inicio_minutos") or PRAZO_INICIO_MINUTOS_PADRAO,
+            "buffer_minutos": BUFFER_MINUTOS_PADRAO if buffer_minutos is None else buffer_minutos,
+            "prazo_inicio_minutos": (
+                PRAZO_INICIO_MINUTOS_PADRAO
+                if prazo_inicio_minutos is None
+                else prazo_inicio_minutos
+            ),
         }
     elif any(data.get(k) is not None for k in PARAMETROS_SOB_DEMANDA):
         raise ValidationError("Parâmetros de buffer só se aplicam a rotas sob demanda")
