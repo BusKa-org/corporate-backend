@@ -99,6 +99,8 @@ All notable changes to this project will be documented in this file.
   Invitations replace all of them: nobody signs up on their own.
 
 ### Fixed
+- The buffer close job locks the trips it closes. Before, a cancellation running at the same
+  time could still turn the student into a confirmed passenger with a boarding credential.
 - `DELETE /v1/viagens/<id>/solicitacao` now locks the vehicle and the trip. Before, cancelling
   the last request while another student joined left that student in a cancelled trip, and
   cancelling while the driver started the route overwrote the open buffer with `CANCELADA`.

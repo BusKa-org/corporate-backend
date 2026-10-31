@@ -107,10 +107,18 @@ def colocar_em_rota(viagem: Viagem, momento: datetime, declaradas: list[Solicita
 def fechar_buffers_expirados() -> int:
     """Job: buffer expirado vira EM_ANDAMENTO com quem declarou trajeto; sem ninguém, é cancelada."""
     agora = tempo.agora_utc()
-    viagens = Viagem.query.filter(
-        Viagem.status == StatusViagem.BUFFER_ABERTO,
-        Viagem.buffer_fim <= agora,
-    ).all()
+    # Trava as viagens: uma declaração ou um cancelamento em curso termina antes do
+    # fechamento ler as solicitações. A ordem por id evita deadlock entre dois jobs.
+    viagens = (
+        Viagem.query.filter(
+            Viagem.status == StatusViagem.BUFFER_ABERTO,
+            Viagem.buffer_fim <= agora,
+        )
+        .order_by(Viagem.id)
+        .with_for_update(key_share=True)
+        .populate_existing()
+        .all()
+    )
 
     for viagem in viagens:
         # O instante em que o buffer fechou de fato, não o atraso do job.
