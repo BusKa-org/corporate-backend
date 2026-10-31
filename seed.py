@@ -279,7 +279,7 @@ def seed_demo_data() -> None:
     # Instituições
     p_ufcg = _ponto(pref.id, -7.21676, -35.90820, "UFCG — Campus I (Rua Aprígio Veloso)")
     p_uepb = _ponto(pref.id, -7.23260, -35.89430, "UEPB — Campus I (Baraúnas)")
-    p_cesg = _ponto(pref.id, -7.22140, -35.88790, "CESG — Escola Estadual Assis Chateaubriand")
+    _ponto(pref.id, -7.22140, -35.88790, "CESG — Escola Estadual Assis Chateaubriand")
 
     # Terminais / pontos centrais
     p_terminal = _ponto(pref.id, -7.23050, -35.88090, "Terminal de Integração CG")
@@ -290,7 +290,7 @@ def seed_demo_data() -> None:
     p_mirande = _ponto(pref.id, -7.28950, -35.95200, "Praça Central — Galante (distrito)")
     p_queimadas = _ponto(pref.id, -7.61860, -35.90050, "Terminal Rodoviário — Queimadas")
     p_cruz_armas = _ponto(pref.id, -7.23800, -35.88300, "Cruz das Armas — CG")
-    p_pedregal = _ponto(pref.id, -7.20680, -35.89490, "Av. Dinamarca — Pedregal")
+    _ponto(pref.id, -7.20680, -35.89490, "Av. Dinamarca — Pedregal")
     p_prata = _ponto(pref.id, -7.23770, -35.87980, "Bairro Prata — CG")
 
     # Casas dos alunos (pontos de embarque individuais)
@@ -676,7 +676,7 @@ def seed_demo_data() -> None:
     # Confirmar alunos em viagens finalizadas
     pontos_embarque_a = [p_mirande, p_catole, p_terminal, p_mirande, p_catole]
     for v in viagens_fin[:2]:
-        for aluno, ponto in zip(alunos[:5], pontos_embarque_a):
+        for aluno, ponto in zip(alunos[:5], pontos_embarque_a, strict=False):
             _confirmar(v, aluno, ponto, confirmado=True)
 
     # Viagem finalizada de rota B (3 dias atrás)
@@ -685,12 +685,12 @@ def seed_demo_data() -> None:
         hor_b_ida, mot2, bus2, d3, StatusViagem.FINALIZADA, _dt(d3, 6, 0), _dt(d3, 7, 30)
     )
     db.session.flush()
-    for aluno, ponto in zip(alunos[5:10], [p_bodocongo, p_liberdade] * 3):
+    for aluno, ponto in zip(alunos[5:10], [p_bodocongo, p_liberdade] * 3, strict=False):
         _confirmar(vb_fin, aluno, ponto)
 
     # CANCELADAS
     vc1 = _viagem(hor_c_ida, mot3, bus3, today - timedelta(days=2), StatusViagem.CANCELADA)
-    vc2 = _viagem(hor_d_tarde, mot1, bus4, today - timedelta(days=1), StatusViagem.CANCELADA)
+    _viagem(hor_d_tarde, mot1, bus4, today - timedelta(days=1), StatusViagem.CANCELADA)
 
     # EM_ANDAMENTO (hoje)
     v_em1 = _viagem(
@@ -701,9 +701,9 @@ def seed_demo_data() -> None:
     db.session.flush()
 
     # Confirmações em andamento
-    for aluno, ponto in zip(alunos[:5], pontos_embarque_a):
+    for aluno, ponto in zip(alunos[:5], pontos_embarque_a, strict=False):
         _confirmar(v_em1, aluno, ponto)
-    for aluno, ponto in zip(alunos[5:10], [p_bodocongo, p_liberdade] * 3):
+    for aluno, ponto in zip(alunos[5:10], [p_bodocongo, p_liberdade] * 3, strict=False):
         _confirmar(v_em2, aluno, ponto)
 
     # AGENDADAS (próximos 3 dias)
@@ -718,7 +718,7 @@ def seed_demo_data() -> None:
 
     # Confirmar alguns alunos em viagens agendadas
     for v in viagens_ag[:2]:
-        for aluno, ponto in zip(alunos[:3], pontos_embarque_a[:3]):
+        for aluno, ponto in zip(alunos[:3], pontos_embarque_a[:3], strict=False):
             _confirmar(v, aluno, ponto)
 
     # ── 11. Ocorrências ───────────────────────────────────────────────────────
