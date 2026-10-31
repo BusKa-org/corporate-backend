@@ -186,3 +186,26 @@ class RotaResource(Resource):
         current_user_id = get_jwt_identity()
         rotas_service.delete_rota(current_user_id, id)
         return {"message": "Rota removida com sucesso"}, 200
+
+
+# RF-10: solicitação de viagem sob demanda
+from app.api.contracts import solicitacao_contract  # noqa: E402
+from app.schemas.solicitacao_schema import SolicitacaoResponseSchema  # noqa: E402
+from app.services import solicitacoes_service  # noqa: E402
+from app.services.consentimento_service import exige_consentimento  # noqa: E402
+
+solicitacao_models = solicitacao_contract.register_models(api)
+solicitacao_response_schema = SolicitacaoResponseSchema()
+
+
+@api.route("/<string:id>/solicitacoes")
+class RotaSolicitacoesResource(Resource):
+    @api.doc("solicitar_viagem")
+    @api.response(201, "Created", solicitacao_models["solicitacao_response"])
+    @jwt_required()
+    @exige_consentimento
+    def post(self, id: str) -> tuple[dict[str, Any], int]:
+        """(Aluno) Solicita o veículo da rota sob demanda dentro da janela de disponibilidade."""
+        user_id = get_jwt_identity()
+        solicitacao = solicitacoes_service.solicitar_viagem(user_id, id)
+        return solicitacao_response_schema.dump(solicitacao), 201

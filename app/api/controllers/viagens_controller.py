@@ -242,3 +242,24 @@ class ViagemLocalizacaoAluno(Resource):
         )
 
         return resultado, 200
+
+
+# RF-19: cancelamento da solicitação de viagem sob demanda
+from app.api.contracts import solicitacao_contract  # noqa: E402
+from app.schemas.solicitacao_schema import SolicitacaoResponseSchema  # noqa: E402
+from app.services import solicitacoes_service  # noqa: E402
+
+solicitacao_models = solicitacao_contract.register_models(api)
+solicitacao_response_schema = SolicitacaoResponseSchema()
+
+
+@api.route("/<string:id>/solicitacao")
+class ViagemSolicitacaoResource(Resource):
+    @api.doc("cancelar_solicitacao")
+    @api.response(200, "Success", solicitacao_models["solicitacao_response"])
+    @jwt_required()
+    def delete(self, id: str) -> tuple[dict[str, Any], int]:
+        """(Aluno) Cancela a própria solicitação. Depois do início do percurso vira desistência."""
+        user_id = get_jwt_identity()
+        solicitacao = solicitacoes_service.cancelar_solicitacao(user_id, id)
+        return solicitacao_response_schema.dump(solicitacao), 200
