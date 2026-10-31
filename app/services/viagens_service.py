@@ -18,7 +18,13 @@ from app.core.exceptions import (
 from app.core.transaction import transactional
 from app.extensions import scheduler
 from app.models.base import db
-from app.models.enum import DiaDaSemana, SentidoViagem, StatusViagem, UserRole
+from app.models.enum import (
+    DiaDaSemana,
+    SentidoViagem,
+    StatusMotorista,
+    StatusViagem,
+    UserRole,
+)
 from app.models.geo import Ponto
 from app.models.rota import DiasOperacao, HorarioRota, Rota, RotaAluno, RotaPonto
 from app.models.user import Aluno, Motorista, User
@@ -354,17 +360,56 @@ def calcular_fim_descanso(
     return ultimo_fim + descanso
 
 
-def _validar_jornada_motorista(motorista: Motorista) -> None:
-    """Block starting a trip outside the driver's working hours or during mandatory rest."""
+def _periodos_de_direcao(
+    motorista_id: Any, agora: datetime
+) -> list[tuple[datetime, datetime | None]]:
+    """(inicio_real, fim_real) of the driver's trips started in the last 24 h."""
+    # Uma sequência de direção contínua maior que 24 h já teria sido bloqueada antes.
+    viagens = (
+        db.session.query(Viagem.inicio_real, Viagem.fim_real)
+        .filter(
+            Viagem.motorista_id == motorista_id,
+            Viagem.inicio_real.isnot(None),
+            Viagem.inicio_real >= agora - timedelta(hours=24),
+        )
+        .all()
+    )
+    periodos: list[tuple[datetime, datetime | None]] = []
+    for inicio_real, fim_real in viagens:
+        periodos.append((inicio_real, fim_real))
+    return periodos
+
+
+def _fim_descanso_motorista(motorista: Motorista, agora: datetime) -> datetime | None:
+    horas_max = current_app.config["MOTORISTA_HORAS_MAX_DIRECAO"]
+    minutos_descanso = current_app.config["MOTORISTA_DESCANSO_MINUTOS"]
+    return calcular_fim_descanso(
+        _periodos_de_direcao(motorista.id, agora),
+        agora,
+        timedelta(hours=horas_max),
+        timedelta(minutes=minutos_descanso),
+    )
+
+
+def disponibilidade_motorista(
+    motorista: Motorista, agora: datetime
+) -> tuple[bool, str | None, datetime | None]:
+    """Whether the driver can start a trip at `agora`, without raising.
+
+    Returns (pode_trabalhar, motivo, livre_a_partir_de). `livre_a_partir_de` is only
+    known for a mandatory rest; it is None otherwise.
+    """
     fuso = ZoneInfo(current_app.config["TIMEZONE"])
-    agora = datetime.now(UTC)
     agora_local = agora.astimezone(fuso)
+
+    if motorista.status_atual(agora) == StatusMotorista.EM_ROTA:
+        return False, "Motorista já está em rota", None
 
     if motorista.dias_trabalho:
         dia = _get_dia_semana_enum(agora_local.date())
         if dia.value not in motorista.dias_trabalho:
             dias = ", ".join(motorista.dias_trabalho)
-            raise ForbiddenError(f"Hoje não é dia de trabalho do motorista (dias: {dias})")
+            return False, f"Hoje não é dia de trabalho do motorista (dias: {dias})", None
 
     inicio = motorista.horario_inicio
     fim = motorista.horario_fim
@@ -376,36 +421,49 @@ def _validar_jornada_motorista(motorista: Motorista) -> None:
             # Turno que atravessa a meia-noite, ex.: 22:00-06:00
             dentro = hora >= inicio or hora < fim
         if not dentro:
-            raise ForbiddenError(
+            motivo = (
                 "Fora do horário de trabalho do motorista "
                 f"({inicio.strftime('%H:%M')} às {fim.strftime('%H:%M')})"
             )
+            return False, motivo, None
 
-    horas_max = current_app.config["MOTORISTA_HORAS_MAX_DIRECAO"]
-    minutos_descanso = current_app.config["MOTORISTA_DESCANSO_MINUTOS"]
-    # Uma sequência de direção contínua maior que 24 h já teria sido bloqueada antes.
-    viagens = (
-        db.session.query(Viagem.inicio_real, Viagem.fim_real)
-        .filter(
-            Viagem.motorista_id == motorista.id,
-            Viagem.inicio_real.isnot(None),
-            Viagem.inicio_real >= agora - timedelta(hours=24),
-        )
-        .all()
-    )
-    periodos: list[tuple[datetime, datetime | None]] = []
-    for inicio_real, fim_real in viagens:
-        periodos.append((inicio_real, fim_real))
-
-    liberado_em = calcular_fim_descanso(
-        periodos, agora, timedelta(hours=horas_max), timedelta(minutes=minutos_descanso)
-    )
+    liberado_em = None
+    if motorista.status_atual(agora) == StatusMotorista.EM_DESCANSO:
+        liberado_em = motorista.descanso_ate
+    else:
+        # Recalcula pelo histórico também: cobre viagens anteriores ao status existir.
+        liberado_em = _fim_descanso_motorista(motorista, agora)
     if liberado_em is not None:
+        horas_max = current_app.config["MOTORISTA_HORAS_MAX_DIRECAO"]
+        minutos_descanso = current_app.config["MOTORISTA_DESCANSO_MINUTOS"]
         horario = liberado_em.astimezone(fuso).strftime("%H:%M")
-        raise ForbiddenError(
+        motivo = (
             f"Motorista atingiu {horas_max}h de direção contínua e precisa descansar "
             f"{minutos_descanso} min. Poderá dirigir novamente às {horario}."
         )
+        return False, motivo, liberado_em
+
+    return True, None, None
+
+
+def _validar_jornada_motorista(motorista: Motorista, agora: datetime) -> None:
+    """Block starting a trip while on another trip, outside working hours or during rest."""
+    if motorista.status_atual(agora) == StatusMotorista.EM_ROTA:
+        raise ConflictError("Motorista já está em rota em outra viagem")
+    pode, motivo, _ = disponibilidade_motorista(motorista, agora)
+    if not pode:
+        raise ForbiddenError(motivo or "Motorista indisponível")
+
+
+def _atualizar_status_apos_viagem(motorista: Motorista, agora: datetime) -> None:
+    """After a started trip ends (finished or cancelled): rest if owed, else ATIVO."""
+    descanso_ate = _fim_descanso_motorista(motorista, agora)
+    if descanso_ate is None:
+        motorista.status_motorista = StatusMotorista.ATIVO
+        motorista.descanso_ate = None
+    else:
+        motorista.status_motorista = StatusMotorista.EM_DESCANSO
+        motorista.descanso_ate = descanso_ate
 
 
 def list_viagens_motorista(user_id: str) -> list[Viagem]:
@@ -437,10 +495,13 @@ def controlar_viagem(user_id: str, viagem_id: str, data: dict[str, Any]) -> Viag
                 raise ValidationError(
                     f"Não é possível iniciar viagem com status {viagem.status.name}"
                 )
+            agora = datetime.now(UTC)
             if viagem.motorista is not None:
-                _validar_jornada_motorista(viagem.motorista)
+                _validar_jornada_motorista(viagem.motorista, agora)
+                viagem.motorista.status_motorista = StatusMotorista.EM_ROTA
+                viagem.motorista.descanso_ate = None
             viagem.status = StatusViagem.EM_ANDAMENTO
-            viagem.inicio_real = datetime.now(UTC)
+            viagem.inicio_real = agora
 
             NotificacaoService.notificar_alunos_viagem_iniciada(viagem_id=viagem_id)
 
@@ -449,6 +510,9 @@ def controlar_viagem(user_id: str, viagem_id: str, data: dict[str, Any]) -> Viag
                 raise ValidationError("A viagem precisa estar em andamento para ser finalizada")
             viagem.status = StatusViagem.FINALIZADA
             viagem.fim_real = datetime.now(UTC)
+            db.session.flush()
+            if viagem.motorista is not None:
+                _atualizar_status_apos_viagem(viagem.motorista, viagem.fim_real)
 
             rastros = (
                 TelemetriaViagem.query.filter_by(viagem_id=viagem.id)
@@ -521,7 +585,14 @@ def cancelar_viagem(user_id: str, viagem_id: str) -> dict[str, Any]:
         raise ValidationError(f"Não é possível cancelar uma viagem com status {viagem.status.name}")
 
     try:
+        estava_em_andamento = viagem.status == StatusViagem.EM_ANDAMENTO
         viagem.status = StatusViagem.CANCELADA
+        if estava_em_andamento:
+            # A direção até o cancelamento conta para o descanso
+            viagem.fim_real = datetime.now(UTC)
+            db.session.flush()
+            if viagem.motorista is not None:
+                _atualizar_status_apos_viagem(viagem.motorista, viagem.fim_real)
 
         confirmados = AlunosConfirmados.query.filter_by(viagem_id=viagem.id, confirmacao=True).all()
         data_formatada = viagem.data.strftime("%d/%m/%Y")
