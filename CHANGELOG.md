@@ -99,6 +99,8 @@ All notable changes to this project will be documented in this file.
   Invitations replace all of them: nobody signs up on their own.
 
 ### Fixed
+- `DELETE /v1/users/me` sent twice at the same time returned 500 for one of them; the account
+  row is now locked and the second request gets 401.
 - `POST /v1/convites/pin/validar` locks the invitation. Parallel wrong guesses were counted as
   one attempt (the 5-attempt limit could be bypassed) and the right PIN could be used twice.
 - `POST /v1/embarque/viagens/<id>/sincronizacao`: the same offline queue sent twice at the

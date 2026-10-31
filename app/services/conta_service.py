@@ -10,6 +10,7 @@ import logging
 import secrets
 from datetime import UTC, datetime, timedelta
 
+from sqlalchemy import select
 from werkzeug.security import check_password_hash
 
 from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError, UnauthorizedError
@@ -107,7 +108,9 @@ def _apagar_dados_sem_valor_estatistico(aluno_id) -> None:
 
 
 def excluir_conta(user_id: str, email: str, senha: str) -> None:
-    user = db.session.get(User, user_id)
+    # Trava a conta: um segundo pedido simultâneo espera e já vê a conta anonimizada.
+    db.session.execute(select(User.id).where(User.id == user_id).with_for_update(key_share=True))
+    user = db.session.get(User, user_id, populate_existing=True)
     if user is None:
         raise NotFoundError("Usuário não encontrado")
     if user.role != UserRole.ALUNO:
