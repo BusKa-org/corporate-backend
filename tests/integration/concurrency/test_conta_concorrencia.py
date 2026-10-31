@@ -4,6 +4,7 @@ import io
 import os
 import re
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 
 import pytest
 
@@ -85,11 +86,11 @@ def _validar_pin(app, email, pin):
 
 def test_palpites_de_pin_em_paralelo_nao_furam_o_limite_de_tentativas(app, _db, convite):
     """Dez palpites errados de uma vez contam dez tentativas, e o PIN morre na quinta."""
-    _com_pin(_db, convite, "123456")
+    _com_pin(_db, convite, "12345678")
 
     tarefas = []
     for palpite in range(10):
-        tarefas.append(_validar_pin(app, convite.email, f"{palpite:06d}"))
+        tarefas.append(_validar_pin(app, convite.email, f"{palpite:08d}"))
     respostas = ao_mesmo_tempo(app, tarefas)
 
     assert status_de(respostas) == [400] * 10
@@ -98,18 +99,18 @@ def test_palpites_de_pin_em_paralelo_nao_furam_o_limite_de_tentativas(app, _db, 
     assert recarregado.pin_hash is None
     assert recarregado.pin_erros_total == 5
     # E o PIN certo também não vale mais.
-    assert _validar_pin(app, convite.email, "123456")().status_code == 400
+    assert _validar_pin(app, convite.email, "12345678")().status_code == 400
 
 
 def test_palpites_em_paralelo_contam_cada_um_no_total_do_convite(app, _db, convite, monkeypatch):
     """Faltando 2 erros para o limite do convite, dez palpites juntos param exatamente nele."""
     monkeypatch.setitem(app.config, "CONVITE_PIN_MAX_ERROS_TOTAL", 20)
     convite.pin_erros_total = 18
-    _com_pin(_db, convite, "123456")
+    _com_pin(_db, convite, "12345678")
 
     tarefas = []
     for palpite in range(10):
-        tarefas.append(_validar_pin(app, convite.email, f"{palpite:06d}"))
+        tarefas.append(_validar_pin(app, convite.email, f"{palpite:08d}"))
     respostas = ao_mesmo_tempo(app, tarefas)
 
     assert status_de(respostas) == [400] * 10
@@ -117,14 +118,18 @@ def test_palpites_em_paralelo_contam_cada_um_no_total_do_convite(app, _db, convi
     recarregado = _db.session.get(Convite, convite.id)
     assert recarregado.pin_erros_total == 20
     assert recarregado.pin_hash is None
+    assert recarregado.pin_bloqueado_ate is not None
 
 
 def test_pin_certo_enviado_duas_vezes_vale_uma_vez(app, _db, convite):
-    _com_pin(_db, convite, "123456")
+    _com_pin(_db, convite, "12345678")
 
     respostas = ao_mesmo_tempo(
         app,
-        [_validar_pin(app, convite.email, "123456"), _validar_pin(app, convite.email, "123456")],
+        [
+            _validar_pin(app, convite.email, "12345678"),
+            _validar_pin(app, convite.email, "12345678"),
+        ],
     )
 
     assert status_de(respostas) == [200, 400]
@@ -138,6 +143,9 @@ def test_dois_pedidos_de_pin_juntos_mandam_um_e_mail_com_pin_valido(app, _db, co
     monkeypatch.setattr(
         convite_service, "send_email", lambda to, subject, body_plain: enviados.append(body_plain)
     )
+    monkeypatch.setattr(
+        convite_service, "_envios_de_pin", SimpleNamespace(submit=lambda fn, *args: fn(*args))
+    )
 
     def pedir():
         return app.test_client().post("/v1/convites/pin", json={"email": convite.email})
@@ -146,7 +154,7 @@ def test_dois_pedidos_de_pin_juntos_mandam_um_e_mail_com_pin_valido(app, _db, co
 
     assert status_de(respostas) == [200, 200]
     assert len(enviados) == 1
-    pin = re.search(r"\d{6}", enviados[0]).group()
+    pin = re.search(r"\d{8}", enviados[0]).group()
     assert _validar_pin(app, convite.email, pin)().status_code == 200
 
 

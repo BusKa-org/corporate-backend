@@ -126,13 +126,21 @@ All notable changes to this project will be documented in this file.
   still sends a new PIN.
 - Invitation PIN brute force: every new PIN reset the 5-try counter and a new PIN could be asked
   every 60 seconds, so anyone who knew an invited e-mail got about 50,000 guesses over the 7 days
-  of the invitation (about 5% odds of creating the account). Wrong guesses now also add up per
-  invitation (`convite.pin_erros_total`, migration `d2e3f4a5b6c7`), across every PIN. At
-  `CONVITE_PIN_MAX_ERROS_TOTAL` (new setting, default 20) the invitation stops taking PINs:
+  of the invitation (about 5% odds of creating the account). The PIN now has 8 digits instead
+  of 6 (client change: the apps must accept 8 digits; a `pin` that is not 8 digits is a 400
+  validation error that costs no try). Wrong guesses also add up per invitation
+  (`convite.pin_erros_total`, migration `d2e3f4a5b6c7`), across every PIN. At
+  `CONVITE_PIN_MAX_ERROS_TOTAL` (new setting, default 20) PIN entry pauses for
+  `CONVITE_PIN_BLOQUEIO_MINUTOS` (new setting, default 60, stored in `convite.pin_bloqueado_ate`):
   `POST /v1/convites/pin` sends nothing and `POST /v1/convites/pin/validar` refuses even the
   right PIN, with the same answers as always. A `convite_pin_bloqueado` security event is
-  logged. The gestor's resend (`POST /v1/convites/<id>/reenviar`) resets the count; the e-mailed
-  link keeps working meanwhile.
+  logged. When the pause ends the count resets. The pause is temporary so an attacker cannot
+  lock a real invitee out for good. The gestor's resend (`POST /v1/convites/<id>/reenviar`)
+  clears it at once; the e-mailed link keeps working meanwhile.
+- `POST /v1/convites/pin` sent the PIN e-mail inside the request only for an enabled e-mail, so
+  an enabled e-mail answered measurably slower than an unknown one (account enumeration). The
+  e-mail now goes out from a background thread pool; the PIN still only exists in memory and
+  as a hash.
 - `DELETE /v1/users/me` cancels the student's active ride request with the same rules as
   `DELETE /v1/viagens/<id>/solicitacao` (the segment is given back, a trip left with nobody is
   cancelled). Before, the request kept its seat and could become a passenger with a boarding

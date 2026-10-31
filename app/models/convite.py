@@ -58,8 +58,10 @@ class Convite(db.Model):
     pin_hash = db.Column(db.String(64))
     pin_expira_em = db.Column(db.DateTime(timezone=True))
     pin_tentativas = db.Column(db.Integer, nullable=False, default=0)
-    # Erros somados de todos os PINs do convite. Só o reenvio pelo gestor zera.
+    # Erros somados de todos os PINs do convite. Zeram no fim da pausa ou no reenvio pelo gestor.
     pin_erros_total = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+    # Fim da pausa do PIN depois de CONVITE_PIN_MAX_ERROS_TOTAL erros; None quando não há pausa.
+    pin_bloqueado_ate = db.Column(db.DateTime(timezone=True))
     pin_enviado_em = db.Column(db.DateTime(timezone=True))
 
     envio_estado = db.Column(db.String(10), nullable=False, default=ENVIO_PENDENTE)

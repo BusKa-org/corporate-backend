@@ -4,10 +4,11 @@ import hashlib
 import hmac
 import logging
 import secrets
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from flask import current_app
+from flask import Flask, current_app
 from werkzeug.security import generate_password_hash
 
 from app.core.exceptions import ConflictError, NotFoundError, ValidationError
@@ -48,6 +49,11 @@ PIN_MAX_TENTATIVAS = 5
 PIN_INTERVALO_SEGUNDOS = 60
 ESTADOS_DO_CONVITE = (PENDENTE, CONCLUIDO, CANCELADO)
 
+# O e-mail do PIN sai fora da requisição: enviar dentro dela deixava o e-mail habilitado
+# mais lento que o desconhecido. Thread e não fila no banco para o PIN nunca ser gravado em
+# texto puro, e porque o job de convites roda a cada minuto (a pessoa está esperando).
+_envios_de_pin = ThreadPoolExecutor(max_workers=4, thread_name_prefix="pin-email")
+
 
 def _agora() -> datetime:
     return datetime.now(UTC)
@@ -63,6 +69,7 @@ def _renovar(convite: Convite) -> None:
     _limpar_pin(convite)
     convite.pin_enviado_em = None
     convite.pin_erros_total = 0
+    convite.pin_bloqueado_ate = None
 
 
 def _limpar_pin(convite: Convite) -> None:
@@ -394,9 +401,32 @@ def _convite_pendente_do_email(email_bruto: str, travar: bool = False) -> Convit
     return convite
 
 
-def _pin_bloqueado(convite: Convite) -> bool:
-    """Erros somados de todos os PINs do convite chegaram no limite; só o reenvio pelo gestor libera."""
-    return convite.pin_erros_total >= current_app.config["CONVITE_PIN_MAX_ERROS_TOTAL"]
+def _pin_bloqueado(convite: Convite, agora: datetime) -> bool:
+    """O PIN do convite está em pausa. Pausa vencida é desfeita aqui, com os erros zerados."""
+    if convite.pin_bloqueado_ate is None:
+        return False
+    if convite.pin_bloqueado_ate > agora:
+        return True
+    convite.pin_bloqueado_ate = None
+    convite.pin_erros_total = 0
+    return False
+
+
+def _enviar_pin(app: Flask, convite_id: str, email: str, pin: str) -> None:
+    """Roda numa thread de _envios_de_pin, fora da thread da requisição."""
+    with app.app_context():
+        try:
+            send_email(
+                to=email,
+                subject="Seu código de verificação",
+                body_plain=(
+                    f"Seu código de verificação é {pin}.\n\n"
+                    f"Ele vale por {PIN_VALIDADE_MINUTOS} minutos. "
+                    "Se você não pediu este código, ignore este e-mail."
+                ),
+            )
+        except Exception:
+            logger.exception("Falha ao enviar o PIN do convite %s", convite_id)
 
 
 def solicitar_pin(email_bruto: str) -> None:
@@ -407,10 +437,12 @@ def solicitar_pin(email_bruto: str) -> None:
     então fica um PIN válido e um e-mail só.
     """
     convite = _convite_pendente_do_email(email_bruto, travar=True)
-    if convite is None or _pin_bloqueado(convite):
+    if convite is None:
         return
 
     agora = _agora()
+    if _pin_bloqueado(convite, agora):
+        return
     if convite.pin_enviado_em is not None:
         if agora - convite.pin_enviado_em < timedelta(seconds=PIN_INTERVALO_SEGUNDOS):
             return
@@ -419,26 +451,20 @@ def solicitar_pin(email_bruto: str) -> None:
         logger.warning("E-mail não configurado: PIN não enviado.")
         return
 
-    pin = f"{secrets.randbelow(1_000_000):06d}"
+    pin = f"{secrets.randbelow(100_000_000):08d}"
     convite.pin_hash = _hash_do_pin(convite, pin)
     convite.pin_expira_em = agora + timedelta(minutes=PIN_VALIDADE_MINUTOS)
     convite.pin_tentativas = 0
     convite.pin_enviado_em = agora
     db.session.commit()
 
-    # ponytail: envio dentro da requisição. É um e-mail só, e a pessoa está esperando o código.
-    try:
-        send_email(
-            to=convite.email,
-            subject="Seu código de verificação",
-            body_plain=(
-                f"Seu código de verificação é {pin}.\n\n"
-                f"Ele vale por {PIN_VALIDADE_MINUTOS} minutos. "
-                "Se você não pediu este código, ignore este e-mail."
-            ),
-        )
-    except Exception:
-        logger.exception("Falha ao enviar o PIN do convite %s", convite.id)
+    _envios_de_pin.submit(
+        _enviar_pin,
+        current_app._get_current_object(),  # type: ignore[attr-defined,unused-ignore]
+        str(convite.id),
+        convite.email,
+        pin,
+    )
 
 
 def validar_pin(email_bruto: str, pin: str) -> str:
@@ -448,16 +474,22 @@ def validar_pin(email_bruto: str, pin: str) -> str:
     convite = _convite_pendente_do_email(email_bruto, travar=True)
     if convite is None or convite.pin_hash is None or convite.pin_expira_em is None:
         raise erro
-    if _pin_bloqueado(convite):
+    agora = _agora()
+    if _pin_bloqueado(convite, agora):
         raise erro
-    if convite.pin_expira_em <= _agora():
+    if convite.pin_expira_em <= agora:
         raise erro
 
     if not hmac.compare_digest(convite.pin_hash, _hash_do_pin(convite, pin.strip())):
         convite.pin_tentativas += 1
         # Não zera com PIN novo: sem isso, um PIN por minuto dá 5 palpites/minuto por 7 dias.
         convite.pin_erros_total += 1
-        bloqueou = _pin_bloqueado(convite)
+        config = current_app.config
+        bloqueou = convite.pin_erros_total >= config["CONVITE_PIN_MAX_ERROS_TOTAL"]
+        if bloqueou:
+            # Pausa e não bloqueio definitivo: senão um atacante tranca o convidado de vez.
+            minutos = config["CONVITE_PIN_BLOQUEIO_MINUTOS"]
+            convite.pin_bloqueado_ate = agora + timedelta(minutes=minutos)
         if convite.pin_tentativas >= PIN_MAX_TENTATIVAS or bloqueou:
             _limpar_pin(convite)
         db.session.commit()
@@ -465,7 +497,11 @@ def validar_pin(email_bruto: str, pin: str) -> str:
             audit_logger.log_security_event(
                 event_type="convite_pin_bloqueado",
                 severity="medium",
-                details={"convite_id": str(convite.id), "erros": convite.pin_erros_total},
+                details={
+                    "convite_id": str(convite.id),
+                    "erros": convite.pin_erros_total,
+                    "bloqueado_ate": convite.pin_bloqueado_ate.isoformat(),
+                },
             )
         raise erro
 
