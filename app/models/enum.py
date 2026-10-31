@@ -62,3 +62,9 @@ class TipoOcorrencia(enum.Enum):
 class StatusOcorrencia(enum.Enum):
     ABERTA = "ABERTA"
     RESOLVIDA = "RESOLVIDA"
+
+
+class StatusMotorista(enum.Enum):
+    ATIVO = "ATIVO"
+    EM_ROTA = "EM_ROTA"
+    EM_DESCANSO = "EM_DESCANSO"

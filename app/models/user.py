@@ -1,10 +1,10 @@
 import uuid
-from datetime import date
+from datetime import date, datetime
 
 from sqlalchemy.dialects.postgresql import ARRAY, UUID
 
 from .base import db
-from .enum import UserRole, UserStatus
+from .enum import StatusMotorista, UserRole, UserStatus
 from .notificacao import Notificacao  # noqa: F401
 
 
@@ -61,9 +61,25 @@ class Motorista(User):
     horario_fim = db.Column(db.Time, nullable=True)
     dias_trabalho = db.Column(ARRAY(db.String(3)), nullable=True)
 
+    # Estado operacional, mudado só pelo sistema. Não é `status`: esse nome já é da conta (User).
+    status_motorista = db.Column(
+        db.Enum(StatusMotorista, name="status_motorista"),
+        nullable=False,
+        default=StatusMotorista.ATIVO,
+        server_default=StatusMotorista.ATIVO.value,
+    )
+    descanso_ate = db.Column(db.DateTime(timezone=True), nullable=True)
+
     __mapper_args__ = {
         "polymorphic_identity": UserRole.MOTORISTA,
     }
+
+    def status_atual(self, agora: datetime) -> StatusMotorista:
+        """Status considering that a rest whose `descanso_ate` has passed is over."""
+        if self.status_motorista == StatusMotorista.EM_DESCANSO:
+            if self.descanso_ate is None or self.descanso_ate <= agora:
+                return StatusMotorista.ATIVO
+        return self.status_motorista
 
 
 class Gestor(User):
