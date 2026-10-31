@@ -161,13 +161,13 @@ def upgrade() -> None:
 
     # Linhas herdadas: quem já tinha confirmação vira CONFIRMADO, o resto fica
     # INTERESSADO pelo server_default.
-    op.execute(
-        "UPDATE alunos_confirmados SET status = 'CONFIRMADO' WHERE confirmacao IS TRUE"
-    )
+    op.execute("UPDATE alunos_confirmados SET status = 'CONFIRMADO' WHERE confirmacao IS TRUE")
 
     op.add_column("viagem", sa.Column("rota_id", sa.UUID(), nullable=True))
     op.add_column("viagem", sa.Column("janela_id", sa.UUID(), nullable=True))
-    op.add_column("viagem", sa.Column("buffer_expira_em", sa.DateTime(timezone=True), nullable=True))
+    op.add_column(
+        "viagem", sa.Column("buffer_expira_em", sa.DateTime(timezone=True), nullable=True)
+    )
     op.create_foreign_key(
         "viagem_janela_id_fkey",
         "viagem",
@@ -206,9 +206,7 @@ def downgrade() -> None:
     # Postgres não remove valor de enum: o tipo é recriado sem os novos. As
     # viagens que estiverem num estado da rodada caem no equivalente legado
     # mais próximo, senão o cast falha.
-    op.execute(
-        "UPDATE viagem SET status = 'EM_ANDAMENTO' WHERE status::text = 'EM_ROTA'"
-    )
+    op.execute("UPDATE viagem SET status = 'EM_ANDAMENTO' WHERE status::text = 'EM_ROTA'")
     op.execute(
         "UPDATE viagem SET status = 'AGENDADA' "
         "WHERE status::text IN ('OCIOSA', 'SOLICITADA', 'BUFFER_ABERTO')"
