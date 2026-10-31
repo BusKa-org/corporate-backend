@@ -114,7 +114,7 @@ def login_user(data: dict[str, Any]) -> dict[str, Any]:
         and hasattr(user, "status")
         and user.status == UserStatus.PENDING_SIGNUP
     ):
-        aluno = Aluno.query.get(str(user.id))
+        aluno = db.session.get(Aluno, str(user.id))
         if aluno and aluno.email_responsavel and not aluno.guardian_consented_at:
             audit_logger.log_auth(
                 action="login_attempt",
@@ -178,7 +178,7 @@ def register_user(data: dict[str, Any]) -> User:
     email = validate_email(data.get("email", ""))
     cpf_clean = validate_cpf(data.get("cpf", ""))
 
-    if not Organizacao.query.get(organizacao_id):
+    if not db.session.get(Organizacao, organizacao_id):
         logger.warning(f"Registration attempt with invalid organizacao_id: {organizacao_id}")
         raise NotFoundError("Organizacao not found")
 
@@ -339,7 +339,7 @@ def reset_password(token: str, new_password: str) -> None:
         raise ValidationError("Link expirado. Solicite uma nova recuperação de senha.")
 
     new_password = validate_password(new_password, "Nova senha")
-    user = User.query.get(record.user_id)
+    user = db.session.get(User, record.user_id)
     if not user:
         db.session.delete(record)
         db.session.commit()
