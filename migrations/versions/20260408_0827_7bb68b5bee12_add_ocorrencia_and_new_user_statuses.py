@@ -47,3 +47,10 @@ def downgrade() -> None:
     op.drop_index('idx_ocorrencia_autor', table_name='ocorrencia')
     op.drop_table('ocorrencia')
     # ### end Alembic commands ###
+
+    # drop_table does not drop the enum types sa.Enum() created alongside it.
+    # Leaving them orphaned makes a later `upgrade` fail with
+    # "type tipo_ocorrencia already exists", which is half of what broke the
+    # downgrade base -> upgrade head round-trip.
+    op.execute("DROP TYPE IF EXISTS tipo_ocorrencia")
+    op.execute("DROP TYPE IF EXISTS status_ocorrencia")
