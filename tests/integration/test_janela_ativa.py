@@ -6,7 +6,7 @@ from app.utils import tempo
 
 
 def _local(hora: int, minuto: int):
-    # 2026-11-02 é segunda-feira; Fortaleza é UTC-3.
+    # 2026-11-02 é segunda-feira; o fuso padrão é UTC-3.
     return datetime(2026, 11, 2, hora + 3, minuto, tzinfo=UTC)
 
 

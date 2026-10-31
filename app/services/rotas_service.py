@@ -3,6 +3,7 @@
 import logging
 from typing import Any
 
+from flask import current_app
 from sqlalchemy import or_
 
 from app.core.exceptions import (
@@ -18,7 +19,6 @@ from app.models.geo import Ponto
 from app.models.rota import DiasOperacao, HorarioRota, Rota, RotaAluno, RotaPonto
 from app.models.user import User
 from app.models.viagem import Viagem
-from app.schemas.rota_schema import BUFFER_MINUTOS_PADRAO, PRAZO_INICIO_MINUTOS_PADRAO
 from app.utils import audit_logger, validate_uuid
 
 logger = logging.getLogger(__name__)
@@ -141,13 +141,15 @@ def create_rota(gestor_id: str, data: dict[str, Any]) -> Rota:
         buffer_minutos = data.get("buffer_minutos")
         prazo_inicio_minutos = data.get("prazo_inicio_minutos")
         parametros = {
-            "buffer_minutos": BUFFER_MINUTOS_PADRAO if buffer_minutos is None else buffer_minutos,
-            "prazo_inicio_minutos": (
-                PRAZO_INICIO_MINUTOS_PADRAO
-                if prazo_inicio_minutos is None
-                else prazo_inicio_minutos
-            ),
+            "buffer_minutos": buffer_minutos,
+            "prazo_inicio_minutos": prazo_inicio_minutos,
         }
+        if buffer_minutos is None:
+            parametros["buffer_minutos"] = current_app.config["ROTA_BUFFER_MINUTOS_PADRAO"]
+        if prazo_inicio_minutos is None:
+            parametros["prazo_inicio_minutos"] = current_app.config[
+                "ROTA_PRAZO_INICIO_MINUTOS_PADRAO"
+            ]
     elif any(data.get(k) is not None for k in PARAMETROS_SOB_DEMANDA):
         raise ValidationError("Parâmetros de buffer só se aplicam a rotas sob demanda")
 

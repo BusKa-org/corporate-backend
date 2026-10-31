@@ -4,21 +4,12 @@ from flask_restx import fields
 
 from app.api.contracts.ponto_contract import register_models as register_ponto_models
 from app.models.enum import TipoViagem
-from app.schemas.rota_schema import (
-    BUFFER_MINUTOS_PADRAO,
-    BUFFER_MINUTOS_RANGE,
-    PRAZO_INICIO_MINUTOS_PADRAO,
-    PRAZO_INICIO_MINUTOS_RANGE,
-)
 
 TIPOS_VIAGEM = [t.value for t in TipoViagem]
-BUFFER_DESC = (
-    f"SOB_DEMANDA: duração do buffer "
-    f"({BUFFER_MINUTOS_RANGE.min}-{BUFFER_MINUTOS_RANGE.max} min)"
-)
+BUFFER_DESC = "SOB_DEMANDA: duração do buffer em minutos (1 até ROTA_BUFFER_MINUTOS_MAX)"
 PRAZO_DESC = (
-    f"SOB_DEMANDA: prazo do motorista para iniciar "
-    f"({PRAZO_INICIO_MINUTOS_RANGE.min}-{PRAZO_INICIO_MINUTOS_RANGE.max} min)"
+    "SOB_DEMANDA: prazo do motorista para iniciar, em minutos "
+    "(1 até ROTA_PRAZO_INICIO_MINUTOS_MAX)"
 )
 
 
@@ -62,10 +53,10 @@ def register_models(api):
             "nome": fields.String(required=True, description="Nome da rota"),
             "tipo": fields.String(enum=TIPOS_VIAGEM, description="Padrão: FIXA"),
             "buffer_minutos": fields.Integer(
-                description=f"{BUFFER_DESC}, padrão {BUFFER_MINUTOS_PADRAO}"
+                description=f"{BUFFER_DESC}, padrão ROTA_BUFFER_MINUTOS_PADRAO"
             ),
             "prazo_inicio_minutos": fields.Integer(
-                description=f"{PRAZO_DESC}, padrão {PRAZO_INICIO_MINUTOS_PADRAO}"
+                description=f"{PRAZO_DESC}, padrão ROTA_PRAZO_INICIO_MINUTOS_PADRAO"
             ),
             "motorista_padrao_id": fields.String(description="UUID do motorista padrão"),
             "veiculo_padrao_id": fields.String(description="UUID do veículo padrão"),

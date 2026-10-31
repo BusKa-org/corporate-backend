@@ -110,3 +110,19 @@ def test_update_com_tipo_invalido_e_400(gestor, rota_sob_demanda):
     r = gestor.client.put(f"/v1/rotas/{rota_sob_demanda.id}", json={"tipo": "EXPRESSA"})
 
     assert r.status_code == 400
+
+
+def test_padroes_e_limites_vem_dos_settings(gestor, app, monkeypatch):
+    monkeypatch.setitem(app.config, "ROTA_BUFFER_MINUTOS_PADRAO", 8)
+    monkeypatch.setitem(app.config, "ROTA_PRAZO_INICIO_MINUTOS_PADRAO", 15)
+    monkeypatch.setitem(app.config, "ROTA_BUFFER_MINUTOS_MAX", 10)
+
+    r = gestor.client.post("/v1/rotas/", json={"nome": "Circuito", "tipo": "SOB_DEMANDA"})
+    assert r.status_code == 201, r.get_data(as_text=True)
+    assert (r.get_json()["buffer_minutos"], r.get_json()["prazo_inicio_minutos"]) == (8, 15)
+
+    r = gestor.client.post(
+        "/v1/rotas/",
+        json={"nome": "Circuito", "tipo": "SOB_DEMANDA", "buffer_minutos": 11},
+    )
+    assert r.status_code == 400

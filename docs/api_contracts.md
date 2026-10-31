@@ -16,7 +16,7 @@ Trip states for `SOB_DEMANDA` routes:
 - The trip "time" is `created_at` (request time) until it starts, then `inicio_real`.
   `horario_saida` / `horario_inicio` / `sentido` are `null` for on-demand trips.
 - Trip responses carry `rota_id`, `status` and `buffer_fim`.
-- Window hours are local time in `TIMEZONE` (default `America/Fortaleza`).
+- Window hours are local time in `TIMEZONE` (default `America/Sao_Paulo`).
   A window is `[hora_inicio, hora_fim)`: the start minute is inside, the end minute is not.
 
 ### Availability windows (RF-05)
@@ -184,7 +184,10 @@ Never released. App clients built against `dev` must move to:
 
 Trip statuses `OCIOSA` and `EM_ROTA` are gone: "ociosa" is no active trip and "em rota"
 is `EM_ANDAMENTO`. The buffer end is `buffer_fim` (was `buffer_expira_em`), and the buffer
-length is set per route (`buffer_minutos`), not per window.
+length is set per route (`buffer_minutos`), not per window. A route created without
+`buffer_minutos` / `prazo_inicio_minutos` gets `ROTA_BUFFER_MINUTOS_PADRAO` (5) /
+`ROTA_PRAZO_INICIO_MINUTOS_PADRAO` (10); values above `ROTA_BUFFER_MINUTOS_MAX` (30) /
+`ROTA_PRAZO_INICIO_MINUTOS_MAX` (120) are rejected with 400.
 
 ## Embarque por QR com conferência da foto (RF-15 a RF-18)
 
