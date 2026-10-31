@@ -378,7 +378,7 @@ def _convite_pendente_do_email(email_bruto: str, travar: bool = False) -> Convit
     """Convite pendente e dentro da validade para o e-mail, ou None.
 
     Com `travar`, a linha fica presa até o commit: palpites de PIN simultâneos
-    entram em fila e cada um conta uma tentativa.
+    entram em fila e cada um conta uma tentativa, e pedidos de PIN simultâneos geram um só.
     """
     try:
         email = validate_email(email_bruto)
@@ -394,8 +394,13 @@ def _convite_pendente_do_email(email_bruto: str, travar: bool = False) -> Convit
 
 
 def solicitar_pin(email_bruto: str) -> None:
-    """Envia um PIN ao e-mail habilitado. Nunca revela se o e-mail está habilitado."""
-    convite = _convite_pendente_do_email(email_bruto)
+    """Envia um PIN ao e-mail habilitado. Nunca revela se o e-mail está habilitado.
+
+    Um novo PIN só sai depois de PIN_INTERVALO_SEGUNDOS do anterior. O lock faz dois pedidos
+    simultâneos verem esse intervalo: o segundo encontra o PIN recém-gravado e não envia nada,
+    então fica um PIN válido e um e-mail só.
+    """
+    convite = _convite_pendente_do_email(email_bruto, travar=True)
     if convite is None:
         return
 

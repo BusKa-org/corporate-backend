@@ -101,6 +101,10 @@ All notable changes to this project will be documented in this file.
   Invitations replace all of them: nobody signs up on their own.
 
 ### Fixed
+- `POST /v1/convites/pin` sent twice at the same time e-mailed two PINs and only the second one
+  worked. The invitation row is now locked, so the second request sees the 60-second interval
+  between PINs and sends nothing: one valid PIN, one e-mail. Asking again after the interval
+  still sends a new PIN.
 - `DELETE /v1/users/me` cancels the student's active ride request with the same rules as
   `DELETE /v1/viagens/<id>/solicitacao` (the segment is given back, a trip left with nobody is
   cancelled). Before, the request kept its seat and could become a passenger with a boarding

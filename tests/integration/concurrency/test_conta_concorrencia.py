@@ -2,6 +2,7 @@
 
 import io
 import os
+import re
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -107,6 +108,26 @@ def test_pin_certo_enviado_duas_vezes_vale_uma_vez(app, _db, convite):
     )
 
     assert status_de(respostas) == [200, 400]
+
+
+def test_dois_pedidos_de_pin_juntos_mandam_um_e_mail_com_pin_valido(app, _db, convite, monkeypatch):
+    monkeypatch.setitem(app.config, "MAIL_SERVER", "smtp.teste")
+    monkeypatch.setitem(app.config, "MAIL_USERNAME", "app@teste")
+    monkeypatch.setitem(app.config, "MAIL_PASSWORD", "segredo")
+    enviados = []
+    monkeypatch.setattr(
+        convite_service, "send_email", lambda to, subject, body_plain: enviados.append(body_plain)
+    )
+
+    def pedir():
+        return app.test_client().post("/v1/convites/pin", json={"email": convite.email})
+
+    respostas = ao_mesmo_tempo(app, [pedir, pedir])
+
+    assert status_de(respostas) == [200, 200]
+    assert len(enviados) == 1
+    pin = re.search(r"\d{6}", enviados[0]).group()
+    assert _validar_pin(app, convite.email, pin)().status_code == 200
 
 
 # ---------- exclusão de conta (LGPD) ----------
