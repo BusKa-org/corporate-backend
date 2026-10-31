@@ -51,6 +51,14 @@ Is *MeBuska* the company rebrand or the name of product 2? The requirements doc
 uses "MeBusKa" for the PaqTcPB system, which reads like product 2. This blocks
 final repo naming; renaming twice is the expensive part.
 
+### Accessibility needs are health data (open product decision)
+
+`necessidades_acessibilidade` and `observacao_acessibilidade` on `Aluno` describe
+disabilities, which is sensitive personal data under LGPD art. 11. The current
+consent term (`VERSAO_TERMO_VIGENTE`) does not mention it. Product/legal must decide
+whether the term needs to name it explicitly (and bump the version). Account deletion
+already clears both fields.
+
 ---
 
 ## Remaining plans

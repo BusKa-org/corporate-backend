@@ -69,7 +69,7 @@ class AlunoFotoResource(Resource):
     @api.produces(["image/jpeg", "image/png", "image/webp"])
     @jwt_required()
     def get(self, aluno_id: str) -> Response:
-        """Foto do aluno (o próprio aluno, gestor ou motorista da organização)"""
+        """Foto do aluno (o próprio aluno, gestor da organização ou motorista da viagem)"""
         user_id = get_jwt_identity()
         caminho, tipo = aluno_service.buscar_foto(user_id, aluno_id)
         return send_file(caminho, mimetype=tipo, max_age=0)

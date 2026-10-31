@@ -23,6 +23,13 @@ All notable changes to this project will be documented in this file.
   the background by a scheduler job. New optional setting `APP_DOWNLOAD_URL`.
   A person who types an enabled e-mail straight into the app gets a 10-minute PIN by e-mail
   (`POST /v1/convites/pin`, `POST /v1/convites/pin/validar`) instead of using the link.
+- Passenger accessibility needs (`necessidades_acessibilidade`, `observacao_acessibilidade`)
+  on registration and `PUT /v1/alunos/me`, shown to the gestor and to the driver of the trip.
+- Passenger photo: `PUT /v1/alunos/me/foto` (multipart, JPEG/PNG/WEBP, EXIF/GPS and text
+  metadata removed) and `GET /v1/alunos/<id>/foto` for the passenger, the organization's
+  gestor, and the driver of a scheduled or in-progress trip the passenger confirmed.
+  New settings `FOTOS_ALUNO_DIR` and `FOTO_ALUNO_MAX_BYTES`; production keeps photos in the
+  `fotos_aluno` volume. Account deletion removes the photo file and the accessibility data.
 
 ### Removed
 - Passenger self-signup (`POST /v1/alunos/signup`), the guardian consent endpoints, the
