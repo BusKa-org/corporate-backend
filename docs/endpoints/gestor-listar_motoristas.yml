@@ -40,7 +40,7 @@ responses:
             type: string
             enum: [ATIVO, EM_ROTA, EM_DESCANSO_OBRIGATORIO]
             example: "EM_DESCANSO_OBRIGATORIO"
-            description: Estado do motorista, definido pelo sistema (não editável pelo gestor).
+            description: Estado do motorista, calculado pelas viagens e por descanso_ate (não editável).
           descanso_ate:
             type: string
             format: date-time

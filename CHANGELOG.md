@@ -24,13 +24,14 @@ All notable changes to this project will be documented in this file.
   A person who types an enabled e-mail straight into the app gets a 10-minute PIN by e-mail
   (`POST /v1/convites/pin`, `POST /v1/convites/pin/validar`) instead of using the link.
 - Driver working hours and state: the gestor sets `horario_inicio`, `horario_fim` and
-  `dias_trabalho` (`PATCH /v1/users/motoristas/<id>`). Each driver has a system-driven
-  `status_motorista` (`ATIVO`, `EM_ROTA`, `EM_DESCANSO_OBRIGATORIO`) and `descanso_ate`, shown in the user
-  responses. Starting a trip needs `ATIVO`, working hours and no pending rest (403; 409 if
-  already `EM_ROTA`) and sets `EM_ROTA`. Finishing or cancelling a started trip sets
-  `EM_DESCANSO_OBRIGATORIO` when the max continuous driving time was reached, otherwise `ATIVO`.
-  Trip start locks the trip and driver rows, so two simultaneous starts can't both pass.
-  A driver left `EM_ROTA` with no trip in progress is recomputed on start and on read.
+  `dias_trabalho` (`PATCH /v1/users/motoristas/<id>`). User responses show the driver's
+  `status_motorista` (`ATIVO`, `EM_ROTA`, `EM_DESCANSO_OBRIGATORIO`) and `descanso_ate`. The
+  state is computed, not stored: `EM_ROTA` while a trip is `EM_ANDAMENTO`, otherwise
+  `EM_DESCANSO_OBRIGATORIO` while `descanso_ate` is in the future, otherwise `ATIVO`.
+  Finishing or cancelling a started trip stores `descanso_ate` when the max continuous
+  driving time was reached. Starting a trip returns 409 if the driver is `EM_ROTA` and 403
+  during rest or outside working hours. It locks the trip and driver rows, so two
+  simultaneous starts can't both pass.
   New settings `MOTORISTA_HORAS_MAX_DIRECAO`, `MOTORISTA_DESCANSO_MINUTOS` and `TIMEZONE`.
 
 ### Removed

@@ -6,8 +6,8 @@ description: |
   Marca uma viagem como **iniciada**.  
   Disponível apenas para usuários com o papel **motorista**.  
   Requer um **JWT token** válido no cabeçalho `Authorization`.
-  O motorista precisa estar `ATIVO` (ou com o descanso já vencido), no dia e no
-  horário de trabalho, e sem descanso obrigatório pendente. Ao iniciar, ele passa a `EM_ROTA`.
+  O motorista não pode ter outra viagem em andamento nem descanso obrigatório pendente,
+  e precisa estar no dia e no horário de trabalho. Com a viagem em andamento, ele aparece como `EM_ROTA`.
 operationId: iniciarViagem
 security:
   - BearerAuth: []
