@@ -3,6 +3,8 @@ import os
 import re
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from limits import parse_many
+
 logger = logging.getLogger(__name__)
 
 
@@ -124,6 +126,25 @@ class Settings:
             "SYNC_TOLERANCIA_SEGUNDOS", default=120, min_val=0, max_val=3600
         )
 
+        # Rate limit (Flask-Limiter). Formato do limite: "10 per minute", "2000 per hour".
+        self.RATELIMIT_ENABLED = os.getenv("RATELIMIT_ENABLED", "true").lower() == "true"
+        # memory:// conta separado em cada worker do gunicorn; produção usa Redis.
+        self.RATELIMIT_STORAGE_URI = os.getenv("RATELIMIT_STORAGE_URI", "memory://")
+        self.RATELIMIT_DEFAULT = self._get_rate_limit("RATELIMIT_DEFAULT", "2000 per hour")
+        self.RATELIMIT_AUTH = self._get_rate_limit("RATELIMIT_AUTH", "10 per minute")
+        self.RATELIMIT_SENSITIVE = self._get_rate_limit("RATELIMIT_SENSITIVE", "5 per minute")
+        # GPS, telemetria e embarque mandam muitas requisições seguidas do mesmo usuário.
+        self.RATELIMIT_REALTIME = self._get_rate_limit("RATELIMIT_REALTIME", "120 per minute")
+        if (
+            not self.DEBUG
+            and self.RATELIMIT_ENABLED
+            and self.RATELIMIT_STORAGE_URI.startswith("memory://")
+        ):
+            self._errors.append(
+                "RATELIMIT_STORAGE_URI cannot be memory:// in production "
+                "(each gunicorn worker would count separately); use redis://"
+            )
+
         # CORS settings
         self.CORS_ORIGINS = self._parse_cors_origins()
 
@@ -170,6 +191,16 @@ class Settings:
             self._errors.append(f"{key} must be <= {max_val}, got {value}")
             return fallback
 
+        return value
+
+    def _get_rate_limit(self, key: str, default: str) -> str:
+        """Get a rate limit string such as "10 per minute"."""
+        value = os.getenv(key, default)
+        try:
+            parse_many(value)
+        except ValueError:
+            self._errors.append(f"{key} is not a valid rate limit, got '{value}'")
+            return default
         return value
 
     def _get_secret(self, key: str, default: str, min_length: int = 16) -> str:

@@ -89,6 +89,16 @@ All notable changes to this project will be documented in this file.
   blocks later boardings with the same QR, and event times are bounded (`EVENTO_NO_FUTURO`,
   `EVENTO_ANTES_DA_CREDENCIAL`, setting `SYNC_TOLERANCIA_SEGUNDOS`).
   **Breaking for both apps:** see `docs/api_contracts.md`.
+- Rate limiting with Flask-Limiter: `429` in the standard error body (`RATE_LIMITED`)
+  with `Retry-After`. Settings `RATELIMIT_ENABLED`, `RATELIMIT_STORAGE_URI`,
+  `RATELIMIT_DEFAULT` (2000/hour), `RATELIMIT_AUTH` (10/min: login, password and
+  invitation routes), `RATELIMIT_SENSITIVE` (5/min: PIN check, password reset and
+  change) and `RATELIMIT_REALTIME` (120/min: GPS, telemetry, boarding). Counters live
+  in Redis, shared by all gunicorn workers: new `redis` service in both compose files
+  and `make db-up`; production refuses `memory://`. `/health` and `/ready` are exempt.
+  Public auth routes count per e-mail (or per invitation/reset token), not per IP;
+  counters are per route and per method; CORS preflight is not counted and CORS
+  exposes `Retry-After` and `X-RateLimit-*`. See `docs/api_contracts.md`.
 
 ### Removed
 - dev's first on-demand implementation, replaced by the one above before any release:

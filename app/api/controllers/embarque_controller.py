@@ -12,6 +12,7 @@ from flask_jwt_extended import get_jwt_identity, jwt_required
 from flask_restx import Namespace, Resource
 
 from app.api.contracts import embarque_contract
+from app.extensions import limite_tempo_real
 from app.schemas.embarque_schema import (
     AvancarPontoRequestSchema,
     CheckinResponseSchema,
@@ -73,6 +74,7 @@ class AvancarPontoResource(Resource):
     @api.expect(models["avancar_request"])
     @api.response(200, "Success", models["roteiro_response"])
     @jwt_required()
+    @limite_tempo_real
     def post(self, viagem_id: str) -> tuple[dict[str, Any], int]:
         """Conclui a parada corrente e segue para a próxima (RF-16)"""
         payload = avancar_request_schema.load(_body())
@@ -100,6 +102,7 @@ class CheckinResource(Resource):
     @api.response(404, "CREDENCIAL_DESCONHECIDA")
     @api.response(409, CODIGOS_RECUSA)
     @jwt_required()
+    @limite_tempo_real
     def post(self, viagem_id: str) -> tuple[dict[str, Any], int]:
         """Confere o QR lido e devolve o passageiro com a foto, sem embarcar (RF-17)"""
         payload = qr_request_schema.load(_body())
@@ -117,6 +120,7 @@ class ConfirmacaoResource(Resource):
     @api.response(404, "CREDENCIAL_DESCONHECIDA")
     @api.response(409, f"{CODIGOS_RECUSA} ou SEM_FOTO_EXIGE_MANUAL")
     @jwt_required()
+    @limite_tempo_real
     def post(self, viagem_id: str) -> tuple[dict[str, Any], int]:
         """A foto confere: registra o embarque e consome a credencial (RF-17)"""
         payload = qr_request_schema.load(_body())
@@ -134,6 +138,7 @@ class RecusaResource(Resource):
     @api.response(404, "CREDENCIAL_DESCONHECIDA")
     @api.response(409, CODIGOS_RECUSA)
     @jwt_required()
+    @limite_tempo_real
     def post(self, viagem_id: str) -> tuple[dict[str, Any], int]:
         """A foto não confere: não embarca, recusa o QR e abre ocorrência (RF-17)"""
         payload = recusar_request_schema.load(_body())
@@ -153,6 +158,7 @@ class EmbarqueManualResource(Resource):
     @api.expect(models["manual_request"])
     @api.response(200, "Embarque registrado", models["embarque_response"])
     @jwt_required()
+    @limite_tempo_real
     def post(self, viagem_id: str) -> tuple[dict[str, Any], int]:
         """Fallback manual: motorista acha o aluno na lista do ponto (RF-17)"""
         payload = manual_request_schema.load(_body())
@@ -168,6 +174,7 @@ class SincronizacaoResource(Resource):
     @api.expect(models["sincronizacao_request"])
     @api.response(200, "Lote processado", models["sincronizacao_response"])
     @jwt_required()
+    @limite_tempo_real
     def post(self, viagem_id: str) -> tuple[dict[str, Any], int]:
         """Aplica em lote a fila de eventos registrados sem conexão (RF-18)"""
         payload = sincronizacao_request_schema.load(_body())
