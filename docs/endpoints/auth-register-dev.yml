@@ -36,7 +36,7 @@ parameters:
           description: Password for the account.
         municipio:
           type: string
-          example: Campina Grande
+          example: Cidade Exemplo
           description: Municipality name where the user is registered.
         role:
           type: string
@@ -49,7 +49,7 @@ parameters:
           nome: "Fubica Brasileiro"
           email: "fbrasileiro@buska.app"
           password: "senha123"
-          municipio: "Campina Grande"
+          municipio: "Cidade Exemplo"
           role: "gestor"
       Register Aluno:
         summary: Example — Register an Aluno user
@@ -57,7 +57,7 @@ parameters:
           nome: "John Foo"
           email: "jfoo@buska.app"
           password: "senha123"
-          municipio: "Campina Grande"
+          municipio: "Cidade Exemplo"
 
 responses:
   201:
@@ -91,7 +91,7 @@ responses:
                   example: 1
                 nome:
                   type: string
-                  example: Campina Grande
+                  example: Cidade Exemplo
                 uf:
                   type: string
                   example: PB
@@ -110,4 +110,4 @@ responses:
       properties:
         error:
           type: string
-          example: "Municipio with Name 'Campina Pequena' not found"
+          example: "Municipio with Name 'Cidade Inexistente' not found"

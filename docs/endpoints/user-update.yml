@@ -38,7 +38,7 @@ parameters:
           description: New password for the account.
         municipio:
           type: string
-          example: "Campina Grande"
+          example: "Cidade Exemplo"
           description: Municipality name to associate the user with.
     examples:
       Update Basic Info:
@@ -86,4 +86,4 @@ responses:
       properties:
         error:
           type: string
-          example: "Municipio with Name 'Campina Pequena' not found"
+          example: "Municipio with Name 'Cidade Inexistente' not found"

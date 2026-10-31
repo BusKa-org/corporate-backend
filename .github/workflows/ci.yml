@@ -543,6 +543,7 @@ jobs:
           echo "API_IMAGE=$API_IMAGE" >> $GITHUB_ENV
 
       - name: "Create .env.prod"
+        shell: bash
         env:
           DB_USER: ${{ secrets.DB_USER }}
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
@@ -556,6 +557,11 @@ jobs:
           FRONTEND_URL: ${{ secrets.FRONTEND_URL }}
           CORS_ORIGINS: ${{ secrets.CORS_ORIGINS }}
           FIREBASE_CREDENTIALS: ${{ secrets.FIREBASE_CREDENTIALS }}
+          TIMEZONE: ${{ vars.TIMEZONE }}
+          ROTA_BUFFER_MINUTOS_PADRAO: ${{ vars.ROTA_BUFFER_MINUTOS_PADRAO }}
+          ROTA_BUFFER_MINUTOS_MAX: ${{ vars.ROTA_BUFFER_MINUTOS_MAX }}
+          ROTA_PRAZO_INICIO_MINUTOS_PADRAO: ${{ vars.ROTA_PRAZO_INICIO_MINUTOS_PADRAO }}
+          ROTA_PRAZO_INICIO_MINUTOS_MAX: ${{ vars.ROTA_PRAZO_INICIO_MINUTOS_MAX }}
         run: |
           cat > .env.prod <<EOF
           DB_USER=${DB_USER}
@@ -574,6 +580,12 @@ jobs:
           CORS_ORIGINS=${CORS_ORIGINS}
           FIREBASE_CREDENTIALS=${FIREBASE_CREDENTIALS}
           EOF
+          # Optional repository variables: an empty line would override the Settings default
+          for name in TIMEZONE ROTA_BUFFER_MINUTOS_PADRAO ROTA_BUFFER_MINUTOS_MAX ROTA_PRAZO_INICIO_MINUTOS_PADRAO ROTA_PRAZO_INICIO_MINUTOS_MAX; do
+            if [ -n "${!name}" ]; then
+              echo "${name}=${!name}" >> .env.prod
+            fi
+          done
           chmod 600 .env.prod
 
       - name: Start database first

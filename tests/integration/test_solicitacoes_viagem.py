@@ -43,7 +43,7 @@ def _notificacoes(usuario_id):
 
 
 def _local(hora, minuto=0):
-    # Segunda 2026-11-02 em Fortaleza (UTC-3).
+    # Segunda 2026-11-02 no fuso padrão (UTC-3).
     return datetime(2026, 11, 2, hora + 3, minuto, tzinfo=UTC)
 
 
