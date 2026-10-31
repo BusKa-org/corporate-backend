@@ -711,6 +711,9 @@ def _aplicar_evento(
             evento.get("qr_token") or "", viagem, momento, conferir_codigo=False
         )
         registro = _travar_registro(viagem.id, credencial.aluno_id)
+        # De novo depois do lock: a mesma fila reenviada em paralelo pode ter gravado a recusa.
+        if db.session.get(Ocorrencia, ocorrencia_id):
+            return "ja_aplicado"
         if registro is None:
             raise EmbarqueRecusado(
                 "Passageiro não consta na lista de embarque desta viagem",
@@ -762,6 +765,12 @@ def _aplicar_posicao(viagem: Viagem, evento: dict[str, Any], momento: datetime) 
     latitude, longitude = evento.get("latitude"), evento.get("longitude")
     if latitude is None or longitude is None:
         raise ValidationError("Evento de posição sem coordenadas")
+
+    # Trava a viagem: a mesma fila reenviada em paralelo não grava o rastro duas vezes
+    # nem troca a posição corrente por uma mais antiga.
+    db.session.query(Viagem).filter(Viagem.id == viagem.id).with_for_update(
+        key_share=True
+    ).populate_existing().one()
 
     rastro_id = uuid.uuid5(uuid.NAMESPACE_OID, str(evento.get("evento_id")))
     if db.session.get(TelemetriaViagem, rastro_id):
