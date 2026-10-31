@@ -84,7 +84,7 @@ jobs:
     env:
       RESOLVED_REF: ${{ needs.meta.outputs.resolved_ref }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ env.RESOLVED_REF }}
           fetch-depth: 0
@@ -102,7 +102,7 @@ jobs:
           du -h -d1 . 2>/dev/null | sort -hr | head -20 || true
 
       - name: "Install uv"
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           enable-cache: true
@@ -154,7 +154,7 @@ jobs:
 
       - name: Upload Security Reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: security-reports
           path: |
@@ -204,7 +204,7 @@ jobs:
           --health-retries 10
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ env.RESOLVED_REF }}
           fetch-depth: 0
@@ -222,7 +222,7 @@ jobs:
           du -h -d1 . 2>/dev/null | sort -hr | head -20 || true
 
       - name: "Install uv"
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           enable-cache: true
@@ -264,7 +264,7 @@ jobs:
 
       - name: "Upload Coverage Reports (DB)"
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-reports-db
           path: |
@@ -274,7 +274,7 @@ jobs:
 
       - name: "Comment CI Summary on PR"
         if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const lineCov = "${{ steps.coverage.outputs.COVERAGE_PERCENT }}";
@@ -398,7 +398,7 @@ jobs:
       RESOLVED_REF: ${{ needs.meta.outputs.resolved_ref }}
       SHOULD_TAG_LATEST: ${{ needs.meta.outputs.should_tag_latest }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ env.RESOLVED_REF }}
           fetch-depth: 0
@@ -476,7 +476,7 @@ jobs:
 
       - name: "Upload Docker Image Artifact (main only)"
         if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: docker-image
           path: |
@@ -512,7 +512,7 @@ jobs:
     environment:
       name: production
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Show disk space before deploy
         shell: bash
@@ -527,7 +527,7 @@ jobs:
           docker ps -a || true
 
       - name: "Download Docker Image"
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: docker-image
 
@@ -607,7 +607,7 @@ jobs:
           docker exec buska_db_prod psql -U "$DB_USER" -d "$DB_NAME" -c 'CREATE EXTENSION IF NOT EXISTS "uuid-ossp";' || true
 
       - name: "Install uv"
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           enable-cache: true

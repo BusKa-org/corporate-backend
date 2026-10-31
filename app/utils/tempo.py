@@ -13,5 +13,5 @@ def agora_utc() -> datetime:
 
 def agora_local() -> datetime:
     """Hora na organização, usada para casar com as janelas de disponibilidade."""
-    fuso = ZoneInfo(current_app.config.get("FUSO_HORARIO", "America/Fortaleza"))
+    fuso = ZoneInfo(current_app.config.get("TIMEZONE", "America/Fortaleza"))
     return agora_utc().astimezone(fuso)

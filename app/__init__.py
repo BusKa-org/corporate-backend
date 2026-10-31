@@ -107,7 +107,6 @@ def create_app(
     app.config["MAIL_USE_TLS"] = settings.MAIL_USE_TLS
     app.config["FRONTEND_URL"] = settings.FRONTEND_URL
     app.config["APP_DOWNLOAD_URL"] = settings.APP_DOWNLOAD_URL
-    app.config["FUSO_HORARIO"] = settings.FUSO_HORARIO
     app.config["JOB_BUFFER_INTERVALO_SEGUNDOS"] = settings.JOB_BUFFER_INTERVALO_SEGUNDOS
     app.config["JOB_PRAZO_INICIO_INTERVALO_SEGUNDOS"] = settings.JOB_PRAZO_INICIO_INTERVALO_SEGUNDOS
     app.config["MOTORISTA_HORAS_MAX_DIRECAO"] = settings.MOTORISTA_HORAS_MAX_DIRECAO
