@@ -105,10 +105,7 @@ class Aluno(User):
     nome_responsavel = db.Column(db.String(100))
     cpf_responsavel = db.Column(db.String(14))
 
-    # Minor / guardian consent flow
     data_nascimento = db.Column(db.Date)
-    email_responsavel = db.Column(db.String(120))
-    guardian_consented_at = db.Column(db.DateTime(timezone=True))
 
     instituicao_id = db.Column(UUID(as_uuid=True), db.ForeignKey("instituicao.id"))
     ponto_casa_id = db.Column(UUID(as_uuid=True), db.ForeignKey("ponto.id"))

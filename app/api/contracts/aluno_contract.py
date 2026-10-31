@@ -57,12 +57,8 @@ def register_models(api):
             "signup_completed_at": fields.DateTime(description="Data de conclusão do cadastro"),
             "data_nascimento": fields.String(description="Data de nascimento"),
             "is_minor": fields.Boolean(description="Menor de idade"),
-            "email_responsavel": fields.String(description="E-mail do responsável"),
             "nome_responsavel": fields.String(description="Nome do responsável"),
             "cpf_responsavel": fields.String(description="CPF do responsável"),
-            "guardian_consented_at": fields.DateTime(
-                description="Data/hora do consentimento do responsável"
-            ),
             "foto_url": fields.String(description="Caminho da foto (GET autenticado)"),
             "necessidades_acessibilidade": fields.List(fields.String),
             "observacao_acessibilidade": fields.String(),
