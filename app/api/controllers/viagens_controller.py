@@ -4,13 +4,19 @@ from flask import request
 from flask_jwt_extended import get_jwt_identity, jwt_required
 from flask_restx import Namespace, Resource
 
-from app.api.contracts import credencial_embarque_contract, ponto_contract, viagem_contract
+from app.api.contracts import (
+    credencial_embarque_contract,
+    ponto_contract,
+    solicitacao_contract,
+    viagem_contract,
+)
 from app.api.contracts.viagem_parsers import parsers
 from app.core.exceptions import ValidationError
 from app.schemas.credencial_embarque_schema import CredencialEmbarqueResponseSchema
 from app.schemas.ponto_schema import (
     PontoFlatListResponseSchema,
 )
+from app.schemas.solicitacao_schema import SolicitacaoResponseSchema
 from app.schemas.viagem_schema import (
     MessageResponseSchema,
     ViagemAcaoRequestSchema,
@@ -22,13 +28,19 @@ from app.schemas.viagem_schema import (
     ViagemListResponseSchema,
     ViagemResponseSchema,
 )
-from app.services import credencial_embarque_service, viagens_service
+from app.services import (
+    buffer_service,
+    credencial_embarque_service,
+    solicitacoes_service,
+    viagens_service,
+)
 from app.services.consentimento_service import exige_consentimento
 
 api = Namespace("viagens", description="Execução de Viagens")
 
 ponto_models = ponto_contract.register_models(api)
 credencial_embarque_models = credencial_embarque_contract.register_models(api)
+solicitacao_models = solicitacao_contract.register_models(api)
 
 # API contracts (Swagger documentation)
 models = viagem_contract.register_models(api)
@@ -50,6 +62,7 @@ viagem_agenda_aluno_list_response_schema = ViagemAgendaAlunoListResponseSchema()
 
 ponto_flat_list_response_schema = PontoFlatListResponseSchema()
 credencial_embarque_response_schema = CredencialEmbarqueResponseSchema()
+solicitacao_response_schema = SolicitacaoResponseSchema()
 
 
 @api.route("/aluno/agenda")
@@ -244,15 +257,6 @@ class ViagemLocalizacaoAluno(Resource):
         return resultado, 200
 
 
-# RF-19: cancelamento da solicitação de viagem sob demanda
-from app.api.contracts import solicitacao_contract  # noqa: E402
-from app.schemas.solicitacao_schema import SolicitacaoResponseSchema  # noqa: E402
-from app.services import solicitacoes_service  # noqa: E402
-
-solicitacao_models = solicitacao_contract.register_models(api)
-solicitacao_response_schema = SolicitacaoResponseSchema()
-
-
 @api.route("/<string:id>/solicitacao")
 class ViagemSolicitacaoResource(Resource):
     @api.doc("cancelar_solicitacao")
@@ -263,3 +267,15 @@ class ViagemSolicitacaoResource(Resource):
         user_id = get_jwt_identity()
         solicitacao = solicitacoes_service.cancelar_solicitacao(user_id, id)
         return solicitacao_response_schema.dump(solicitacao), 200
+
+
+@api.route("/<string:id>/iniciar-percurso")
+class ViagemIniciarPercursoResource(Resource):
+    @api.doc("iniciar_percurso")
+    @api.response(200, "Success", models["viagem_response"])
+    @jwt_required()
+    def post(self, id: str) -> tuple[dict[str, Any], int]:
+        """(Motorista) Inicia o percurso sob demanda e abre a janela de buffer (RF-11)"""
+        user_id = get_jwt_identity()
+        viagem = buffer_service.iniciar_percurso(user_id, id)
+        return viagem_response_schema.dump(viagem), 200
