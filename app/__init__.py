@@ -172,6 +172,13 @@ def create_app(
         allow_headers=["Content-Type", "Authorization"],
         methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         max_age=86400,  # Cache preflight for 24 hours
+        # Sem isso o navegador esconde do front quanto falta para o 429 passar.
+        expose_headers=[
+            "Retry-After",
+            "X-RateLimit-Limit",
+            "X-RateLimit-Remaining",
+            "X-RateLimit-Reset",
+        ],
     )
 
     db.init_app(app)

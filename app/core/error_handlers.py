@@ -45,7 +45,10 @@ def _handle_rate_limited(err: RateLimitExceeded) -> tuple[dict[str, Any], int]:
         message="Muitas requisições. Tente novamente em instantes.",
         details={"limit": err.description},
     )
-    return payload, 429
+    # O flask-restx usa err.data como corpo quando existe e põe um "message" no topo
+    # do dict devolvido; a cópia deixa err.data intacto e o 429 num formato só.
+    err.data = payload  # type: ignore[attr-defined, unused-ignore]
+    return dict(payload), 429
 
 
 def register_api_error_handlers(api: Api) -> None:
