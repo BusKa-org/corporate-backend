@@ -1,3 +1,5 @@
+from datetime import UTC, datetime
+
 from marshmallow import fields
 
 from app.models.enum import DiaDaSemana
@@ -101,6 +103,19 @@ class UserResponseSchema(BaseSchema):
     horario_inicio = fields.Time(dump_default=None)
     horario_fim = fields.Time(dump_default=None)
     dias_trabalho = fields.List(fields.String(), dump_default=None)
+    status_motorista = fields.Method("get_status_motorista")
+    descanso_ate = fields.Method("get_descanso_ate")
+
+    def get_status_motorista(self, obj):
+        if not hasattr(obj, "status_atual"):
+            return None
+        return obj.status_atual(datetime.now(UTC)).value
+
+    def get_descanso_ate(self, obj):
+        # Só mostra enquanto o descanso vale, para nunca exibir um descanso vencido
+        if self.get_status_motorista(obj) != "EM_DESCANSO":
+            return None
+        return obj.descanso_ate.isoformat()
 
     def get_role(self, obj):
         return str(obj.role.value) if hasattr(obj.role, "value") else str(obj.role)
