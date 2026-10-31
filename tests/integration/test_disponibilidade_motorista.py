@@ -13,7 +13,7 @@ def test_ativo_sem_historico_pode_trabalhar(_db, motorista):
     assert disponibilidade_motorista(motorista.user, agora) == (True, None, None)
 
 
-def test_em_rota_nao_pode_trabalhar(_db, motorista):
+def test_em_rota_nao_pode_trabalhar(_db, motorista, viagem_futura_iniciada_com_motorista):
     motorista.user.status_motorista = StatusMotorista.EM_ROTA
     pode, motivo, livre = disponibilidade_motorista(motorista.user, datetime.now(UTC))
     assert pode is False
@@ -83,3 +83,10 @@ def test_turno_que_atravessa_meia_noite(app, _db, motorista):
     fora = disponibilidade_motorista(motorista.user, datetime(2026, 1, 5, 6, 0, tzinfo=fuso))
     assert fora[0] is False
     assert "Fora do horário" in fora[1]
+
+
+def test_em_rota_sem_viagem_em_andamento_e_corrigido(_db, motorista):
+    motorista.user.status_motorista = StatusMotorista.EM_ROTA
+
+    assert disponibilidade_motorista(motorista.user, datetime.now(UTC)) == (True, None, None)
+    assert motorista.user.status_motorista == StatusMotorista.ATIVO

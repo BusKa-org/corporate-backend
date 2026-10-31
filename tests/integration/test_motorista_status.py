@@ -1,8 +1,10 @@
+import threading
 from datetime import UTC, date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from app.models.enum import StatusMotorista, StatusViagem
 from app.models.user import Motorista
+from app.services import viagens_service
 from tests.factories.viagem_factory import ViagemFactory
 
 
@@ -103,7 +105,10 @@ def test_iniciar_em_descanso_antes_do_fim_e_bloqueado_com_horario(
     assert r.status_code == 403
     horario = descanso_ate.astimezone(ZoneInfo(app.config["TIMEZONE"])).strftime("%H:%M")
     assert f"Poderá dirigir novamente às {horario}" in r.get_json()["error"]["message"]
-    assert _recarregar(_db, motorista.user.id).status_motorista == StatusMotorista.EM_DESCANSO_OBRIGATORIO
+    assert (
+        _recarregar(_db, motorista.user.id).status_motorista
+        == StatusMotorista.EM_DESCANSO_OBRIGATORIO
+    )
 
 
 def test_iniciar_apos_fim_do_descanso_e_permitido(
@@ -225,3 +230,133 @@ def test_gestor_nao_altera_status_por_patch(_db, gestor, motorista):
     assert m.nome == "Novo Nome"
     assert m.status_motorista == StatusMotorista.ATIVO
     assert m.descanso_ate is None
+
+
+def test_iniciar_mesma_viagem_duas_vezes_e_recusado(
+    _db, motorista, viagem_futura_agendada_com_motorista
+):
+    assert _acao(motorista, viagem_futura_agendada_com_motorista, "INICIAR").status_code == 200
+
+    r = _acao(motorista, viagem_futura_agendada_com_motorista, "INICIAR")
+
+    assert r.status_code == 400
+    assert _recarregar(_db, motorista.user.id).status_motorista == StatusMotorista.EM_ROTA
+
+
+def test_dois_inicios_simultaneos_so_um_passa(
+    app, _db, motorista, horario_rota, viagem_futura_agendada_com_motorista
+):
+    outra = _nova_viagem(_db, horario_rota, motorista.user.id)
+    viagens = [viagem_futura_agendada_com_motorista.id, outra.id]
+    barreira = threading.Barrier(2)
+    status_codes: list[int] = []
+
+    def iniciar(viagem_id):
+        # Cada thread tem seu cliente, contexto e sessão (conexão) próprios
+        cliente = app.test_client()
+        barreira.wait()
+        r = cliente.put(
+            f"/v1/viagens/{viagem_id}/acao", json={"acao": "INICIAR"}, headers=motorista.headers
+        )
+        status_codes.append(r.status_code)
+
+    threads = []
+    for viagem_id in viagens:
+        t = threading.Thread(target=iniciar, args=(viagem_id,))
+        threads.append(t)
+        t.start()
+    for t in threads:
+        t.join(timeout=30)
+
+    assert sorted(status_codes) == [200, 409]
+    _db.session.expire_all()
+    em_andamento = 0
+    for viagem_id in viagens:
+        if _db.session.get(type(outra), viagem_id).status == StatusViagem.EM_ANDAMENTO:
+            em_andamento += 1
+    assert em_andamento == 1
+
+
+def test_em_rota_sem_viagem_em_andamento_pode_iniciar(
+    _db, motorista, viagem_futura_agendada_com_motorista
+):
+    motorista.user.status_motorista = StatusMotorista.EM_ROTA
+    _db.session.commit()
+
+    r = _acao(motorista, viagem_futura_agendada_com_motorista, "INICIAR")
+
+    assert r.status_code == 200, r.get_json()
+    assert _recarregar(_db, motorista.user.id).status_motorista == StatusMotorista.EM_ROTA
+
+
+def test_em_rota_sem_viagem_e_corrigido_na_leitura(_db, gestor, motorista):
+    motorista.user.status_motorista = StatusMotorista.EM_ROTA
+    _db.session.commit()
+
+    assert _dados_motorista(gestor, motorista.user.id)["status_motorista"] == "ATIVO"
+    assert _recarregar(_db, motorista.user.id).status_motorista == StatusMotorista.ATIVO
+
+
+def test_em_rota_sem_viagem_mas_com_direcao_longa_vira_descanso_na_leitura(
+    _db, gestor, motorista, horario_rota
+):
+    fim = datetime.now(UTC) - timedelta(minutes=5)
+    _nova_viagem(
+        _db,
+        horario_rota,
+        motorista.user.id,
+        status=StatusViagem.FINALIZADA,
+        inicio_real=fim - timedelta(hours=4),
+        fim_real=fim,
+    )
+    motorista.user.status_motorista = StatusMotorista.EM_ROTA
+    _db.session.commit()
+
+    r = gestor.client.get("/v1/users/motoristas")
+
+    assert r.get_json()["items"][0]["status_motorista"] == "EM_DESCANSO_OBRIGATORIO"
+    m = _recarregar(_db, motorista.user.id)
+    assert m.status_motorista == StatusMotorista.EM_DESCANSO_OBRIGATORIO
+    assert m.descanso_ate == fim + timedelta(minutes=30)
+
+
+def test_em_rota_com_viagem_em_andamento_continua_em_rota(
+    _db, gestor, motorista, viagem_futura_iniciada_com_motorista
+):
+    motorista.user.status_motorista = StatusMotorista.EM_ROTA
+    _db.session.commit()
+
+    assert _dados_motorista(gestor, motorista.user.id)["status_motorista"] == "EM_ROTA"
+
+
+def test_iniciar_um_segundo_antes_do_fim_do_descanso_e_bloqueado(
+    monkeypatch, _db, motorista, viagem_futura_agendada_com_motorista
+):
+    descanso_ate = datetime(2026, 1, 5, 15, 0, tzinfo=UTC)
+    motorista.user.status_motorista = StatusMotorista.EM_DESCANSO_OBRIGATORIO
+    motorista.user.descanso_ate = descanso_ate
+    _db.session.commit()
+    monkeypatch.setattr(viagens_service, "_agora", lambda: descanso_ate - timedelta(seconds=1))
+
+    r = _acao(motorista, viagem_futura_agendada_com_motorista, "INICIAR")
+
+    assert r.status_code == 403
+    assert "Poderá dirigir novamente" in r.get_json()["error"]["message"]
+
+
+def test_iniciar_exatamente_no_fim_do_descanso_e_permitido(
+    monkeypatch, _db, motorista, viagem_futura_agendada_com_motorista
+):
+    descanso_ate = datetime(2026, 1, 5, 15, 0, tzinfo=UTC)
+    motorista.user.status_motorista = StatusMotorista.EM_DESCANSO_OBRIGATORIO
+    motorista.user.descanso_ate = descanso_ate
+    _db.session.commit()
+    monkeypatch.setattr(viagens_service, "_agora", lambda: descanso_ate)
+
+    r = _acao(motorista, viagem_futura_agendada_com_motorista, "INICIAR")
+
+    assert r.status_code == 200, r.get_json()
+    m = _recarregar(_db, motorista.user.id)
+    assert m.status_motorista == StatusMotorista.EM_ROTA
+    _db.session.refresh(viagem_futura_agendada_com_motorista)
+    assert viagem_futura_agendada_com_motorista.inicio_real == descanso_ate
