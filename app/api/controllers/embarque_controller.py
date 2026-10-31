@@ -1,6 +1,6 @@
 """RF-15 a RF-18 — credencial de embarque, roteiro do motorista e sincronização.
 
-O embarque por QR tem dois passos (RF-17): `conferencia` confere a credencial e
+O embarque por QR tem dois passos (RF-17): `checkin` confere a credencial e
 devolve o passageiro com a foto; o motorista então `confirmacao` ou `recusa`.
 `validacao`, o passo único antigo, responde 410 para o app desatualizado.
 """
@@ -14,7 +14,7 @@ from flask_restx import Namespace, Resource
 from app.api.contracts import embarque_contract
 from app.schemas.embarque_schema import (
     AvancarPontoRequestSchema,
-    ConferenciaResponseSchema,
+    CheckinResponseSchema,
     EmbarqueManualRequestSchema,
     EmbarqueResponseSchema,
     QrRequestSchema,
@@ -39,7 +39,7 @@ avancar_request_schema = AvancarPontoRequestSchema()
 sincronizacao_request_schema = SincronizacaoRequestSchema()
 roteiro_response_schema = RoteiroResponseSchema()
 embarque_response_schema = EmbarqueResponseSchema()
-conferencia_response_schema = ConferenciaResponseSchema()
+checkin_response_schema = CheckinResponseSchema()
 recusa_response_schema = RecusaResponseSchema()
 sincronizacao_response_schema = SincronizacaoResponseSchema()
 
@@ -85,28 +85,28 @@ class AvancarPontoResource(Resource):
 @api.route("/viagens/<string:viagem_id>/validacao")
 class ValidacaoDescontinuadaResource(Resource):
     @api.doc("validar_embarque_descontinuado")
-    @api.response(410, "ENDPOINT_DESCONTINUADO: use /conferencia e depois /confirmacao")
+    @api.response(410, "ENDPOINT_DESCONTINUADO: use /checkin e depois /confirmacao")
     def post(self, viagem_id: str) -> tuple[dict[str, Any], int]:
         """Descontinuado: embarcava na leitura, sem conferir a foto (RF-17)"""
         embarque_service.endpoint_descontinuado()
         return {}, 410
 
 
-@api.route("/viagens/<string:viagem_id>/conferencia")
-class ConferenciaResource(Resource):
-    @api.doc("conferir_embarque")
+@api.route("/viagens/<string:viagem_id>/checkin")
+class CheckinResource(Resource):
+    @api.doc("checkin_embarque")
     @api.expect(models["qr_request"])
-    @api.response(200, "Credencial válida, passageiro a conferir", models["conferencia_response"])
+    @api.response(200, "Credencial válida, passageiro a conferir", models["checkin_response"])
     @api.response(404, "CREDENCIAL_DESCONHECIDA")
     @api.response(409, CODIGOS_RECUSA)
     @jwt_required()
     def post(self, viagem_id: str) -> tuple[dict[str, Any], int]:
         """Confere o QR lido e devolve o passageiro com a foto, sem embarcar (RF-17)"""
         payload = qr_request_schema.load(_body())
-        resultado = embarque_service.conferir_embarque(
+        resultado = embarque_service.checkin_embarque(
             get_jwt_identity(), viagem_id, payload["qr_token"]
         )
-        return conferencia_response_schema.dump(resultado), 200
+        return checkin_response_schema.dump(resultado), 200
 
 
 @api.route("/viagens/<string:viagem_id>/confirmacao")

@@ -252,10 +252,8 @@ def test_avancar_alem_do_ultimo_ponto_e_recusado(rodada, motorista, pontos_circu
 # ==========================================
 
 
-def _conferir(motorista, viagem, qr):
-    return motorista.client.post(
-        f"/v1/embarque/viagens/{viagem.id}/conferencia", json={"qr_token": qr}
-    )
+def _checkin(motorista, viagem, qr):
+    return motorista.client.post(f"/v1/embarque/viagens/{viagem.id}/checkin", json={"qr_token": qr})
 
 
 def _confirmar(motorista, viagem, qr, **extra):
@@ -299,7 +297,7 @@ def test_leitura_devolve_passageiro_e_foto_sem_embarcar(
 ):
     foto_url = _com_foto(_db, aluno)
 
-    r = _conferir(motorista, rodada, _qr(_db, rodada, aluno))
+    r = _checkin(motorista, rodada, _qr(_db, rodada, aluno))
 
     assert r.status_code == 200, r.get_data(as_text=True)
     corpo = r.get_json()
@@ -320,7 +318,7 @@ def test_leitura_devolve_passageiro_e_foto_sem_embarcar(
 def test_confirmacao_registra_o_embarque_e_consome_a_credencial(_db, rodada, motorista, aluno):
     _com_foto(_db, aluno)
     token = _qr(_db, rodada, aluno)
-    assert _conferir(motorista, rodada, token).status_code == 200
+    assert _checkin(motorista, rodada, token).status_code == 200
 
     r = _confirmar(motorista, rodada, token)
 
@@ -362,7 +360,7 @@ def test_recusa_abre_ocorrencia_e_deixa_a_credencial_para_o_manual(_db, rodada, 
 
     # O mesmo QR, mesmo com código novo, não embarca mais ninguém (RF-17 fluxo secundário 1).
     for r in (
-        _conferir(motorista, rodada, _qr(_db, rodada, aluno)),
+        _checkin(motorista, rodada, _qr(_db, rodada, aluno)),
         _confirmar(motorista, rodada, _qr(_db, rodada, aluno)),
         _recusar(motorista, rodada, _qr(_db, rodada, aluno)),
     ):
@@ -386,7 +384,7 @@ def test_recusa_com_motivo_desconhecido_e_invalida(_db, rodada, motorista, aluno
 def test_aluno_sem_foto_nao_embarca_pelo_qr_so_pelo_manual(_db, rodada, motorista, aluno):
     qr = _qr(_db, rodada, aluno)
 
-    leitura = _conferir(motorista, rodada, qr).get_json()
+    leitura = _checkin(motorista, rodada, qr).get_json()
     assert leitura["sem_foto"] is True
     assert leitura["foto_url"] is None
 
@@ -428,7 +426,7 @@ def test_validacao_antiga_responde_410(rodada, motorista, aluno, _db):
 
 
 @pytest.mark.integration
-@pytest.mark.parametrize("passo", ["conferencia", "confirmacao", "recusa"])
+@pytest.mark.parametrize("passo", ["checkin", "confirmacao", "recusa"])
 @pytest.mark.parametrize(
     "qr",
     [
@@ -452,7 +450,7 @@ def test_codigo_de_dois_passos_atras_e_recusado(_db, rodada, motorista, aluno):
     credencial = _credencial(_db, rodada, aluno)
     antigo = f"{credencial.id}.{_codigo(credencial, datetime.now(UTC) - timedelta(seconds=60))}"
 
-    for r in (_conferir(motorista, rodada, antigo), _confirmar(motorista, rodada, antigo)):
+    for r in (_checkin(motorista, rodada, antigo), _confirmar(motorista, rodada, antigo)):
         assert r.status_code == 409
         assert _codigo_erro(r) == "CODIGO_EXPIRADO"
     assert _registro(_db, rodada, aluno).embarcou is False
@@ -464,7 +462,7 @@ def test_codigo_atual_e_aceito_mesmo_um_passo_atras(_db, rodada, motorista, alun
     credencial = _credencial(_db, rodada, aluno)
     um_passo_atras = datetime.now(UTC) - timedelta(seconds=30)
 
-    assert _conferir(motorista, rodada, _qr(_db, rodada, aluno)).status_code == 200
+    assert _checkin(motorista, rodada, _qr(_db, rodada, aluno)).status_code == 200
     qr = f"{credencial.id}.{_codigo(credencial, um_passo_atras)}"
     assert _confirmar(motorista, rodada, qr).status_code == 200
 
@@ -509,18 +507,18 @@ def test_credencial_de_ponto_antigo_e_recusada(_db, rodada, motorista, aluno, po
     registro.ponto_embarque_id = pontos_circuito[1].id
     _db.session.commit()
 
-    r = _conferir(motorista, rodada, qr_antigo)
+    r = _checkin(motorista, rodada, qr_antigo)
     assert r.status_code == 409
     assert _codigo_erro(r) == "CREDENCIAL_DESATUALIZADA"
 
     # Reemitida para o ponto novo, a antiga fica revogada e a nova é a que vale.
     credencial_embarque_service.criar_credencial(rodada.id, aluno.user.id, pontos_circuito[1].id)
     _db.session.commit()
-    r = _conferir(motorista, rodada, qr_antigo)
+    r = _checkin(motorista, rodada, qr_antigo)
     assert r.status_code == 409
     assert _codigo_erro(r) == "CREDENCIAL_DESATUALIZADA"
     # O veículo ainda está em P1; a nova credencial é de P2.
-    r = _conferir(motorista, rodada, _qr(_db, rodada, aluno))
+    r = _checkin(motorista, rodada, _qr(_db, rodada, aluno))
     assert _codigo_erro(r) == "CREDENCIAL_DE_OUTRO_PONTO"
 
 
@@ -578,7 +576,7 @@ def test_credencial_de_outra_viagem(
     token_da_outra = _qr(_db, outra, aluno2)
 
     for r in (
-        _conferir(motorista, rodada, token_da_outra),
+        _checkin(motorista, rodada, token_da_outra),
         _confirmar(motorista, rodada, token_da_outra),
         _recusar(motorista, rodada, token_da_outra),
     ):
@@ -592,7 +590,7 @@ def test_credencial_de_outro_ponto(_db, rodada, motorista, aluno2):
     token = _qr(_db, rodada, aluno2)
 
     for r in (
-        _conferir(motorista, rodada, token),
+        _checkin(motorista, rodada, token),
         _confirmar(motorista, rodada, token),
         _recusar(motorista, rodada, token),
     ):
@@ -610,7 +608,7 @@ def test_credencial_expirada(_db, rodada, motorista, aluno):
     qr = _qr(_db, rodada, aluno)
 
     for r in (
-        _conferir(motorista, rodada, qr),
+        _checkin(motorista, rodada, qr),
         _confirmar(motorista, rodada, qr),
         _recusar(motorista, rodada, qr),
     ):
@@ -624,7 +622,7 @@ def test_credencial_ja_utilizada(_db, rodada, motorista, aluno):
     token = _qr(_db, rodada, aluno)
     assert _confirmar(motorista, rodada, token).status_code == 200
 
-    for r in (_conferir(motorista, rodada, token), _recusar(motorista, rodada, token)):
+    for r in (_checkin(motorista, rodada, token), _recusar(motorista, rodada, token)):
         assert r.status_code == 409
         assert r.get_json()["error"]["code"] == "CREDENCIAL_JA_UTILIZADA"
 
@@ -634,7 +632,7 @@ def test_outro_motorista_nao_le_confirma_nem_recusa(_db, rodada, other_motorista
     token = _qr(_db, rodada, aluno)
 
     for r in (
-        _conferir(other_motorista, rodada, token),
+        _checkin(other_motorista, rodada, token),
         _confirmar(other_motorista, rodada, token),
         _recusar(other_motorista, rodada, token),
     ):
@@ -1011,7 +1009,7 @@ def test_evento_offline_com_o_codigo_do_seu_horario_e_aceito(
     momento = datetime.now(UTC) - timedelta(minutes=3)
     evento = _embarque_offline(_db, rodada, aluno, pontos_circuito[0], momento)
 
-    assert _codigo_erro(_conferir(motorista, rodada, evento["qr_token"])) == "CODIGO_EXPIRADO"
+    assert _codigo_erro(_checkin(motorista, rodada, evento["qr_token"])) == "CODIGO_EXPIRADO"
     corpo = _sincronizar(motorista, rodada, [evento]).get_json()
 
     assert corpo["aplicados"] == 1, corpo

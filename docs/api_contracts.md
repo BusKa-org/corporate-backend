@@ -204,7 +204,7 @@ aluno e viagem (reemitida para outro ponto, a antiga é revogada).
 
 Todas as rotas abaixo são do motorista da viagem, com a viagem `EM_ANDAMENTO`
 (outro motorista ou papel: 403). Online vale sempre o relógio do servidor: `ocorrido_em`
-saiu dos corpos de `conferencia`, `confirmacao`, `recusa` e `manual` e é ignorado se vier.
+saiu dos corpos de `checkin`, `confirmacao`, `recusa` e `manual` e é ignorado se vier.
 `qr_token` é o conteúdo lido do QR, `<credencial_id>.<codigo>`. Recusas usam o corpo de erro
 padrão com um `code`:
 
@@ -223,7 +223,7 @@ padrão com um `code`:
 
 O embarque por QR tem dois passos:
 
-1. `POST /v1/embarque/viagens/<id>/conferencia` `{qr_token}`: confere a credencial e o código e
+1. `POST /v1/embarque/viagens/<id>/checkin` `{qr_token}`: confere a credencial e o código e
    devolve `{viagem_id, aluno_id, nome, foto_url, sem_foto, ponto_embarque_id, ponto_destino_id}`.
    **Não embarca e não consome a credencial.** Credencial inválida: erro, sem foto.
 2. O motorista compara a foto com a pessoa e chama um dos dois:
@@ -238,11 +238,11 @@ O embarque por QR tem dois passos:
      **recusa a credencial** e abre uma ocorrência (`OUTRO`, `ABERTA`) para o gestor. Resposta:
      `{viagem_id, aluno_id, motivo, ocorrencia_id}`. A recusa não confere o código (ele pode
      ter girado enquanto o motorista olhava a foto). Daí em diante o mesmo QR recebe
-     `CREDENCIAL_RECUSADA` em `conferencia`, `confirmacao` e na fila offline: a vaga fica
+     `CREDENCIAL_RECUSADA` em `checkin`, `confirmacao` e na fila offline: a vaga fica
      indisponível para aquela credencial. O passageiro real embarca pelo fallback manual,
      conferido pela foto da lista do ponto. Não há rota para desfazer a recusa.
 
-Aluno sem foto: `conferencia` devolve `sem_foto: true`, `foto_url: null`, e `confirmacao`
+Aluno sem foto: `checkin` devolve `sem_foto: true`, `foto_url: null`, e `confirmacao`
 recusa com `SEM_FOTO_EXIGE_MANUAL`. O motorista usa o fallback manual (que gera ocorrência) ou
 recusa com `SEM_FOTO`.
 
@@ -291,7 +291,7 @@ App do aluno:
 App do motorista:
 
 - **`POST .../validacao` responde 410** `ENDPOINT_DESCONTINUADO`: o app antigo falha alto e
-  pede atualização. A leitura passa a ser `POST .../conferencia`, que não embarca; depois o app
+  pede atualização. A leitura passa a ser `POST .../checkin`, que não embarca; depois o app
   chama `.../confirmacao` ou `.../recusa`.
 - `qr_token` é o conteúdo do QR (`<credencial_id>.<codigo>`). `ocorrido_em` saiu das rotas
   online.

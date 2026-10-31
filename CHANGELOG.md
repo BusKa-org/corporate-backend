@@ -68,7 +68,7 @@ All notable changes to this project will be documented in this file.
   Photos over `FOTO_ALUNO_MAX_PIXELS` (default 25 MP) are rejected with a 400.
   New settings `FOTOS_ALUNO_DIR`, `FOTO_ALUNO_MAX_BYTES` and `FOTO_ALUNO_MAX_PIXELS`; production keeps photos in the
   `fotos_aluno` volume. Account deletion removes the photo file and the accessibility data.
-- Photo check on QR boarding (RF-15/RF-17/RF-18). `POST /v1/embarque/viagens/<id>/conferencia`
+- Photo check on QR boarding (RF-15/RF-17/RF-18). `POST /v1/embarque/viagens/<id>/checkin`
   checks the credential and returns the passenger with `foto_url`/`sem_foto`, without boarding.
   The driver then calls `POST .../confirmacao` (boards and uses the credential, with row locks so
   two simultaneous confirmations board once) or `POST .../recusa` (`FOTO_NAO_CONFERE`/`SEM_FOTO`:

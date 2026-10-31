@@ -68,8 +68,8 @@ def register_models(api):
         },
     )
 
-    conferencia_response = api.model(
-        "ConferenciaResponse",
+    checkin_response = api.model(
+        "CheckinResponse",
         {
             "viagem_id": fields.String(description="UUID da viagem"),
             "aluno_id": fields.String(description="UUID do aluno"),
@@ -172,7 +172,7 @@ def register_models(api):
         "qr_request": qr_request,
         "manual_request": manual_request,
         "recusar_request": recusar_request,
-        "conferencia_response": conferencia_response,
+        "checkin_response": checkin_response,
         "recusa_response": recusa_response,
         "avancar_request": avancar_request,
         "embarque_response": embarque_response,
