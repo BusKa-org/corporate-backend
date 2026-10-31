@@ -65,3 +65,6 @@ docs/openapi3.json!.env.example
 
 # Fotos dos alunos e outros dados locais do Flask
 instance/
+
+# claude
+.claude/
