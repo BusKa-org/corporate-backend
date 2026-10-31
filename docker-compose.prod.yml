@@ -24,7 +24,7 @@ x-app-env: &app_env
   # Um contador só para os 4 workers do gunicorn; memory:// contaria em cada um.
   RATELIMIT_STORAGE_URI: ${RATELIMIT_STORAGE_URI:-redis://redis:6379/0}
   RATELIMIT_ENABLED: ${RATELIMIT_ENABLED:-true}
-  RATELIMIT_DEFAULT: ${RATELIMIT_DEFAULT:-200 per hour}
+  RATELIMIT_DEFAULT: ${RATELIMIT_DEFAULT:-2000 per hour}
   RATELIMIT_AUTH: ${RATELIMIT_AUTH:-10 per minute}
   RATELIMIT_SENSITIVE: ${RATELIMIT_SENSITIVE:-5 per minute}
   RATELIMIT_REALTIME: ${RATELIMIT_REALTIME:-120 per minute}
@@ -56,6 +56,11 @@ services:
     image: redis:8.6-alpine
     container_name: buska_redis
     restart: unless-stopped
+    # Contadores são efêmeros: sem RDB/AOF, e /data em tmpfs para a imagem não
+    # criar um volume anônimo novo a cada recriação do container.
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    tmpfs:
+      - /data
     networks:
       - buska_network
     healthcheck:
