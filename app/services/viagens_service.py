@@ -393,7 +393,7 @@ def controlar_viagem(user_id: str, viagem_id: str, data: dict[str, Any]) -> Viag
                 raise ValidationError("A viagem precisa estar em andamento para ser finalizada")
             viagem.status = StatusViagem.FINALIZADA
             viagem.fim_real = datetime.now(UTC)
-            # shortcut: once PR #16 merges, run calcular_fim_descanso after fim_real (EM_DESCANSO_OBRIGATORIO + descanso_ate, or ATIVO); same for on-demand trips
+            # shortcut: once PR #16 merges, set descanso_ate from calcular_fim_descanso after fim_real; same for on-demand trips
 
             rastros = (
                 TelemetriaViagem.query.filter_by(viagem_id=viagem.id)
@@ -469,7 +469,7 @@ def cancelar_viagem(user_id: str, viagem_id: str) -> dict[str, Any]:
         # A started trip counts toward the driver's driving time, so it needs an end too.
         if viagem.inicio_real and not viagem.fim_real:
             viagem.fim_real = tempo.agora_utc()
-        # shortcut: once PR #16 merges, a driver set EM_ROTA by the start goes through calcular_fim_descanso here
+        # shortcut: once PR #16 merges, set descanso_ate from calcular_fim_descanso here (None if no rest owed)
 
         confirmados = AlunosConfirmados.query.filter_by(viagem_id=viagem.id, confirmacao=True).all()
         data_formatada = viagem.data.strftime("%d/%m/%Y")
