@@ -38,6 +38,13 @@ x-app-env: &app_env
   QR_DIGITOS: ${QR_DIGITOS:-6}
   QR_JANELA_PASSOS: ${QR_JANELA_PASSOS:-1}
   SYNC_TOLERANCIA_SEGUNDOS: ${SYNC_TOLERANCIA_SEGUNDOS:-120}
+  # Um contador só para os 4 workers do gunicorn; memory:// contaria em cada um.
+  RATELIMIT_STORAGE_URI: ${RATELIMIT_STORAGE_URI:-redis://redis:6379/0}
+  RATELIMIT_ENABLED: ${RATELIMIT_ENABLED:-true}
+  RATELIMIT_DEFAULT: ${RATELIMIT_DEFAULT:-2000 per hour}
+  RATELIMIT_AUTH: ${RATELIMIT_AUTH:-10 per minute}
+  RATELIMIT_SENSITIVE: ${RATELIMIT_SENSITIVE:-5 per minute}
+  RATELIMIT_REALTIME: ${RATELIMIT_REALTIME:-120 per minute}
 
 services:
   db:
@@ -61,6 +68,24 @@ services:
       timeout: 5s
       retries: 5
 
+  # Sem porta no host: só a API fala com ele, pela rede interna.
+  redis:
+    image: redis:8.6-alpine
+    container_name: buska_redis
+    restart: unless-stopped
+    # Contadores são efêmeros: sem RDB/AOF, e /data em tmpfs para a imagem não
+    # criar um volume anônimo novo a cada recriação do container.
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    tmpfs:
+      - /data
+    networks:
+      - buska_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
   api:
     image: ${API_IMAGE}
     pull_policy: never
@@ -78,6 +103,8 @@ services:
       - fotos_aluno:/app/instance/fotos_aluno
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     networks:
       - buska_network

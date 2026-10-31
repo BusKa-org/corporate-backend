@@ -22,6 +22,7 @@ dependencies = [
     "flask-apscheduler>=1.13.1",
     "firebase-admin>=7.2.0",
     "requests>=2.33.0",
+    "flask-limiter[redis]>=4.1.1",
 ]
 
 # ==========================================

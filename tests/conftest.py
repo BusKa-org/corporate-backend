@@ -144,6 +144,8 @@ def app():
             "JWT_SECRET_KEY": "change_this_secret_key_use_long_random_string",
             "SQLALCHEMY_DATABASE_URI": _TEST_DB_URI,
             "SQLALCHEMY_TRACK_MODIFICATIONS": False,
+            # Suíte faz muitos logins seguidos; o limite tem testes próprios.
+            "RATELIMIT_ENABLED": False,
         }
     )
     return app
