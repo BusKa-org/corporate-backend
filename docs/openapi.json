@@ -1163,6 +1163,21 @@
           "type": "string"
         }
       ],
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/OnibusResponse"
+            }
+          }
+        },
+        "summary": "Detalhes de um ônibus",
+        "operationId": "get_onibus",
+        "tags": [
+          "onibus"
+        ]
+      },
       "patch": {
         "responses": {
           "200": {
@@ -1184,21 +1199,6 @@
             }
           }
         ],
-        "tags": [
-          "onibus"
-        ]
-      },
-      "get": {
-        "responses": {
-          "200": {
-            "description": "Success",
-            "schema": {
-              "$ref": "#/definitions/OnibusResponse"
-            }
-          }
-        },
-        "summary": "Detalhes de um ônibus",
-        "operationId": "get_onibus",
         "tags": [
           "onibus"
         ]
@@ -1922,6 +1922,24 @@
       }
     },
     "/v1/users/me": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/UserResponse"
+            }
+          },
+          "404": {
+            "description": "User not found"
+          }
+        },
+        "summary": "Perfil do usuário logado",
+        "operationId": "get_my_profile",
+        "tags": [
+          "users"
+        ]
+      },
       "patch": {
         "responses": {
           "200": {
@@ -1949,24 +1967,6 @@
             }
           }
         ],
-        "tags": [
-          "users"
-        ]
-      },
-      "get": {
-        "responses": {
-          "200": {
-            "description": "Success",
-            "schema": {
-              "$ref": "#/definitions/UserResponse"
-            }
-          },
-          "404": {
-            "description": "User not found"
-          }
-        },
-        "summary": "Perfil do usuário logado",
-        "operationId": "get_my_profile",
         "tags": [
           "users"
         ]
@@ -3208,11 +3208,11 @@
         },
         "buffer_minutos": {
           "type": "integer",
-          "description": "SOB_DEMANDA: duração do buffer (1-30 min), padrão 5"
+          "description": "SOB_DEMANDA: duração do buffer em minutos (1 até ROTA_BUFFER_MINUTOS_MAX), padrão ROTA_BUFFER_MINUTOS_PADRAO"
         },
         "prazo_inicio_minutos": {
           "type": "integer",
-          "description": "SOB_DEMANDA: prazo do motorista para iniciar (1-120 min), padrão 10"
+          "description": "SOB_DEMANDA: prazo do motorista para iniciar, em minutos (1 até ROTA_PRAZO_INICIO_MINUTOS_MAX), padrão ROTA_PRAZO_INICIO_MINUTOS_PADRAO"
         },
         "motorista_padrao_id": {
           "type": "string",
@@ -3316,11 +3316,11 @@
         },
         "buffer_minutos": {
           "type": "integer",
-          "description": "SOB_DEMANDA: duração do buffer (1-30 min)"
+          "description": "SOB_DEMANDA: duração do buffer em minutos (1 até ROTA_BUFFER_MINUTOS_MAX)"
         },
         "prazo_inicio_minutos": {
           "type": "integer",
-          "description": "SOB_DEMANDA: prazo do motorista para iniciar (1-120 min)"
+          "description": "SOB_DEMANDA: prazo do motorista para iniciar, em minutos (1 até ROTA_PRAZO_INICIO_MINUTOS_MAX)"
         },
         "motorista_id": {
           "type": "string",
@@ -3456,11 +3456,11 @@
         },
         "buffer_minutos": {
           "type": "integer",
-          "description": "SOB_DEMANDA: duração do buffer (1-30 min)"
+          "description": "SOB_DEMANDA: duração do buffer em minutos (1 até ROTA_BUFFER_MINUTOS_MAX)"
         },
         "prazo_inicio_minutos": {
           "type": "integer",
-          "description": "SOB_DEMANDA: prazo do motorista para iniciar (1-120 min)"
+          "description": "SOB_DEMANDA: prazo do motorista para iniciar, em minutos (1 até ROTA_PRAZO_INICIO_MINUTOS_MAX)"
         },
         "motorista_padrao_id": {
           "type": "string",
@@ -3507,11 +3507,11 @@
         },
         "buffer_minutos": {
           "type": "integer",
-          "description": "SOB_DEMANDA: duração do buffer (1-30 min)"
+          "description": "SOB_DEMANDA: duração do buffer em minutos (1 até ROTA_BUFFER_MINUTOS_MAX)"
         },
         "prazo_inicio_minutos": {
           "type": "integer",
-          "description": "SOB_DEMANDA: prazo do motorista para iniciar (1-120 min)"
+          "description": "SOB_DEMANDA: prazo do motorista para iniciar, em minutos (1 até ROTA_PRAZO_INICIO_MINUTOS_MAX)"
         },
         "motorista_id": {
           "type": "string",
