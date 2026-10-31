@@ -3,8 +3,8 @@ tags:
   - Gestor
 summary: Listar Motoristas do Município
 description: |
-  Retorna todos os motoristas cadastrados no município do gestor autenticado.  
-  Apenas usuários com o papel **gestor** podem acessar este endpoint.  
+  Retorna todos os motoristas cadastrados no município do gestor autenticado.
+  Apenas usuários com o papel **gestor** podem acessar este endpoint.
   Requer um **JWT token** válido no cabeçalho `Authorization`.
 operationId: listarMotoristasGestor
 security:

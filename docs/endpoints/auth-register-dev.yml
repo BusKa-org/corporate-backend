@@ -3,8 +3,8 @@ tags:
   - Authentication
 summary: User Registration
 description: |
-  Registers a new user in the system.  
-  The user must provide a name, email, password, and municipality.  
+  Registers a new user in the system.
+  The user must provide a name, email, password, and municipality.
   The role defaults to **aluno**, but can be specified as **motorista** or **gestor** if allowed by business rules.
 operationId: authRegister
 parameters:
@@ -22,7 +22,7 @@ parameters:
       properties:
         nome:
           type: string
-          example: John Foo 
+          example: John Foo
           description: Full name of the user.
         email:
           type: string
@@ -111,4 +111,3 @@ responses:
         error:
           type: string
           example: "Municipio with Name 'Campina Pequena' not found"
-
