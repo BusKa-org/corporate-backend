@@ -27,7 +27,12 @@ class CredencialEmbarque(db.Model):
         ),
     )
 
-    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = db.Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        server_default=db.text("uuid_generate_v4()"),
+    )
 
     viagem_id = db.Column(
         UUID(as_uuid=True), db.ForeignKey("viagem.id", ondelete="CASCADE"), nullable=False
@@ -40,7 +45,7 @@ class CredencialEmbarque(db.Model):
     # 32 bytes em hexadecimal. Nunca vai para log.
     segredo = db.Column(db.String(64), nullable=False)
     expires_at = db.Column(db.DateTime(timezone=True), nullable=False)
-    usado = db.Column(db.Boolean, default=False, nullable=False)
+    usado = db.Column(db.Boolean, default=False, nullable=False, server_default=db.false())
 
     # RF-17 fluxo secundário 1: a foto não conferiu e o QR não embarca mais ninguém.
     recusada_em = db.Column(db.DateTime(timezone=True), nullable=True)

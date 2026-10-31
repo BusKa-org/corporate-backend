@@ -1,9 +1,12 @@
-"""drop dead guardian consent columns
+"""drop dead guardian consent columns, widen instituicao.nome
 
 The guardian consent endpoints were removed and invitations replace them, so
 nothing writes `aluno.guardian_token`, `aluno.email_responsavel` or
 `aluno.guardian_consented_at` anymore. The upgrade drops them for good: their
 data is lost, the downgrade only brings back empty columns.
+
+`instituicao.nome` was VARCHAR(150) in the database but String(200) in the
+model. `alembic check` with `compare_type=True` caught it; widening is safe.
 
 Revision ID: e4f5a6b7c8d9
 Revises: c1d2e3f4a5b6
@@ -28,10 +31,25 @@ def upgrade() -> None:
     op.drop_column("aluno", "guardian_token")
     op.drop_column("aluno", "email_responsavel")
     op.drop_column("aluno", "guardian_consented_at")
+    op.alter_column(
+        "instituicao",
+        "nome",
+        existing_type=sa.String(150),
+        type_=sa.String(200),
+        existing_nullable=False,
+    )
 
 
 def downgrade() -> None:
     """Downgrade database schema."""
+    # Fails if a name longer than 150 characters was saved after the upgrade.
+    op.alter_column(
+        "instituicao",
+        "nome",
+        existing_type=sa.String(200),
+        type_=sa.String(150),
+        existing_nullable=False,
+    )
     op.add_column(
         "aluno", sa.Column("guardian_consented_at", sa.DateTime(timezone=True), nullable=True)
     )

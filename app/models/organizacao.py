@@ -14,7 +14,12 @@ class Organizacao(db.Model):
 
     __tablename__ = "organizacao"
 
-    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = db.Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        server_default=db.text("uuid_generate_v4()"),
+    )
     nome = db.Column(db.String(150), nullable=False)
     sigla = db.Column(db.String(20), nullable=False, unique=True, index=True)
     estado = db.Column(db.String(2), nullable=True)

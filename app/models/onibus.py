@@ -10,7 +10,12 @@ from .enum import DiaDaSemana
 class Onibus(db.Model):
     __tablename__ = "onibus"
 
-    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = db.Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        server_default=db.text("uuid_generate_v4()"),
+    )
 
     organizacao_id = db.Column(
         UUID(as_uuid=True), db.ForeignKey("organizacao.id", ondelete="CASCADE"), nullable=False
