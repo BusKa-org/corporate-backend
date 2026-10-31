@@ -8,15 +8,18 @@ O relógio é a única coisa manipulada (fixture `relogio`): esperar o buffer
 expirar de verdade tornaria a suíte lenta sem provar nada a mais.
 """
 
+import io
+
 import pytest
 from flask_jwt_extended import create_access_token
 
 from app.models.enum import StatusSolicitacao, StatusViagem
 from app.models.notificacao import Notificacao
 from app.models.viagem import AlunosConfirmados, SolicitacaoViagem, Viagem
-from app.services import buffer_service
+from app.services import buffer_service, credencial_embarque_service
 from tests.conftest import AuthenticatedClient
 from tests.factories.user_factory import AlunoFactory
+from tests.helpers import imagens
 
 pytestmark = pytest.mark.e2e
 
@@ -68,6 +71,15 @@ def _trajeto(origem, destino):
     return {"ponto_origem_id": str(origem.id), "ponto_destino_id": str(destino.id)}
 
 
+def _qr_do_app(credencial, relogio):
+    """O que o app do aluno faz sem rede: o código TOTP do passo corrente."""
+    contador = int(relogio.agora.timestamp()) // credencial["passo_segundos"]
+    codigo = credencial_embarque_service.gerar_codigo(
+        bytes.fromhex(credencial["segredo"]), contador, credencial["digitos"]
+    )
+    return f"{credencial['credencial_id']}.{codigo}"
+
+
 def _expirar_buffer(relogio):
     """Passa o relógio do fim do buffer (5 min na rota) e roda o job."""
     relogio.avancar(minutes=6)
@@ -76,7 +88,17 @@ def _expirar_buffer(relogio):
 
 @pytest.mark.e2e
 def test_rodada_completa_da_solicitacao_ao_embarque(
-    _db, operacao, pontos_circuito, van, passageiros, condutor, motorista, relogio
+    app,
+    _db,
+    operacao,
+    pontos_circuito,
+    van,
+    passageiros,
+    condutor,
+    motorista,
+    relogio,
+    tmp_path,
+    monkeypatch,
 ):
     """RF-10 -> RF-17: chamar o veículo, abrir o buffer, declarar, embarcar."""
     p1, p2, p3, p4 = pontos_circuito
@@ -118,10 +140,19 @@ def test_rodada_completa_da_solicitacao_ao_embarque(
     assert viagem.status == StatusViagem.EM_ANDAMENTO
 
     # Cada passageiro recebe a sua credencial, e ninguém vê a do outro.
-    token_ana = ana.get(f"/v1/viagens/{viagem_id}/credencial-embarque").get_json()["token"]
-    assert token_ana
-    token_bruno = bruno.get(f"/v1/viagens/{viagem_id}/credencial-embarque").get_json()["token"]
-    assert token_bruno != token_ana
+    credencial_ana = ana.get(f"/v1/viagens/{viagem_id}/credencial-embarque").get_json()
+    assert credencial_ana["segredo"]
+    credencial_bruno = bruno.get(f"/v1/viagens/{viagem_id}/credencial-embarque").get_json()
+    assert credencial_bruno["segredo"] != credencial_ana["segredo"]
+
+    # A Ana tem foto cadastrada: sem ela, o QR sozinho não a embarcaria.
+    monkeypatch.setitem(app.config, "FOTOS_ALUNO_DIR", str(tmp_path))
+    r = ana.put(
+        "/v1/alunos/me/foto",
+        data={"foto": (io.BytesIO(imagens.png()), "foto.png")},
+        content_type="multipart/form-data",
+    )
+    assert r.status_code == 200, r.get_data(as_text=True)
 
     # RF-16 — o roteiro do motorista sai na ordem do circuito.
     roteiro = condutor.get(f"/v1/embarque/viagens/{viagem_id}/roteiro").get_json()
@@ -131,13 +162,16 @@ def test_rodada_completa_da_solicitacao_ao_embarque(
     assert paradas[3]["embarcam"] == 1 and paradas[3]["desembarcam"] == 1  # Carla sobe, Ana desce
     assert paradas[4]["desembarcam"] == 2  # Bruno e Carla
 
-    # RF-17 — a leitura no ponto correto mostra a Ana para conferir, sem embarcá-la.
-    r = condutor.post(f"/v1/embarque/viagens/{viagem_id}/validacao", json={"qr_token": token_ana})
+    # RF-17 — a leitura no ponto correto mostra a Ana com a foto, sem embarcá-la.
+    qr_ana = _qr_do_app(credencial_ana, relogio)
+    r = condutor.post(f"/v1/embarque/viagens/{viagem_id}/conferencia", json={"qr_token": qr_ana})
     assert r.status_code == 200, r.get_data(as_text=True)
     assert r.get_json()["ponto_embarque_id"] == str(p1.id)
+    assert r.get_json()["sem_foto"] is False
 
     # A foto confere e o motorista confirma: só agora o embarque é registrado.
-    r = condutor.post(f"/v1/embarque/viagens/{viagem_id}/confirmacao", json={"qr_token": token_ana})
+    relogio.avancar(seconds=10)
+    r = condutor.post(f"/v1/embarque/viagens/{viagem_id}/confirmacao", json={"qr_token": qr_ana})
     assert r.status_code == 200, r.get_data(as_text=True)
 
     _db.session.expire_all()
@@ -147,8 +181,18 @@ def test_rodada_completa_da_solicitacao_ao_embarque(
     assert embarcados == 1
 
     # A mesma credencial não embarca duas vezes.
-    r = condutor.post(f"/v1/embarque/viagens/{viagem_id}/confirmacao", json={"qr_token": token_ana})
+    r = condutor.post(
+        f"/v1/embarque/viagens/{viagem_id}/confirmacao",
+        json={"qr_token": _qr_do_app(credencial_ana, relogio)},
+    )
     assert r.status_code == 409
+    assert r.get_json()["error"]["code"] == "CREDENCIAL_JA_UTILIZADA"
+
+    # Um print do QR da Ana guardado por alguém para de valer em um minuto.
+    relogio.avancar(seconds=90)
+    r = condutor.post(f"/v1/embarque/viagens/{viagem_id}/confirmacao", json={"qr_token": qr_ana})
+    assert r.status_code == 409
+    assert r.get_json()["error"]["code"] == "CODIGO_EXPIRADO"
 
 
 @pytest.mark.e2e

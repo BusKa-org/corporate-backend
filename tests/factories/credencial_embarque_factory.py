@@ -15,6 +15,7 @@ class CredencialEmbarqueFactory(factory.Factory):
     viagem_id = None
     aluno_id = None
     ponto_embarque_id = None
-    token = factory.LazyFunction(lambda: secrets.token_urlsafe(32))
+    segredo = factory.LazyFunction(lambda: secrets.token_hex(32))
+    created_at = factory.LazyFunction(lambda: datetime.now(UTC))
     expires_at = factory.LazyFunction(lambda: datetime.now(UTC) + timedelta(hours=4))
     usado = False

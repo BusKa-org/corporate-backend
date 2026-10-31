@@ -22,6 +22,13 @@ def test_carimbo_ausente_vira_agora():
 
 
 @pytest.mark.unit
+def test_endpoint_antigo_responde_410():
+    with pytest.raises(embarque_service.EmbarqueRecusado) as erro:
+        embarque_service.endpoint_descontinuado()
+    assert (erro.value.code, erro.value.status_code) == ("ENDPOINT_DESCONTINUADO", 410)
+
+
+@pytest.mark.unit
 def test_carimbo_com_fuso_e_preservado():
     momento = datetime(2026, 8, 3, 12, 0, 0, tzinfo=UTC)
     assert embarque_service._aware(momento) == momento
@@ -44,8 +51,10 @@ def test_sincronizacao_aceita_a_viagem_ja_encerrada():
 
 @pytest.mark.unit
 def test_tipos_de_evento_cobrem_a_fila_do_app():
+    # EMBARQUE segue no esquema só para ser recusado com EVENTO_DESCONTINUADO.
     assert set(embarque_service.TIPOS_EVENTO) == {
         "EMBARQUE",
+        "EMBARQUE_CONFIRMADO",
         "EMBARQUE_MANUAL",
         "RECUSA",
         "CHEGADA_PONTO",

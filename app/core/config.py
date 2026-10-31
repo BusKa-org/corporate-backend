@@ -94,6 +94,18 @@ class Settings:
             "FOTO_ALUNO_MAX_PIXELS", default=25_000_000, min_val=1
         )
 
+        # QR dinâmico de embarque (RF-15): código TOTP (RFC 6238) que muda a cada passo.
+        # A janela aceita até N passos antes ou depois do relógio do servidor.
+        self.QR_PASSO_SEGUNDOS = self._get_int(
+            "QR_PASSO_SEGUNDOS", default=30, min_val=5, max_val=300
+        )
+        self.QR_DIGITOS = self._get_int("QR_DIGITOS", default=6, min_val=6, max_val=8)
+        self.QR_JANELA_PASSOS = self._get_int("QR_JANELA_PASSOS", default=1, min_val=0, max_val=10)
+        # Fila offline (RF-18): quanto o relógio do app do motorista pode estar adiantado.
+        self.SYNC_TOLERANCIA_SEGUNDOS = self._get_int(
+            "SYNC_TOLERANCIA_SEGUNDOS", default=120, min_val=0, max_val=3600
+        )
+
         # CORS settings
         self.CORS_ORIGINS = self._parse_cors_origins()
 

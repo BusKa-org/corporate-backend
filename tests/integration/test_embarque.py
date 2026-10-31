@@ -7,6 +7,7 @@ embarque e desembarque do roteiro sejam diferentes em cada ponto.
 """
 
 import io
+import threading
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -16,7 +17,7 @@ from app.models.credencial_embarque import CredencialEmbarque
 from app.models.enum import StatusOcorrencia, StatusViagem, TipoOcorrencia
 from app.models.ocorrencia import Ocorrencia
 from app.models.viagem import AlunosConfirmados, TelemetriaViagem, Viagem, ViagemPonto
-from app.services import buffer_service, consentimento_service
+from app.services import buffer_service, consentimento_service, credencial_embarque_service
 from tests.conftest import Actor, AuthenticatedClient, reservar_trajeto
 from tests.factories.user_factory import AlunoFactory, MotoristaFactory
 from tests.factories.viagem_factory import SolicitacaoViagemFactory, ViagemFactory
@@ -66,7 +67,7 @@ def _consolidar(_db, viagem, reservas):
 @pytest.fixture()
 def rodada(_db, viagem_buffer_aberto, pontos_circuito, aluno, aluno2, aluno3):
     p1, p2, p3, p4 = pontos_circuito
-    return _consolidar(
+    viagem = _consolidar(
         _db,
         viagem_buffer_aberto,
         [
@@ -75,20 +76,40 @@ def rodada(_db, viagem_buffer_aberto, pontos_circuito, aluno, aluno2, aluno3):
             (aluno3.user.id, p3, p4),
         ],
     )
+    # Emitidas há uma hora, para os eventos offline dos testes caberem depois da emissão.
+    for credencial in _db.session.query(CredencialEmbarque).filter_by(viagem_id=viagem.id):
+        credencial.created_at = datetime.now(UTC) - timedelta(hours=1)
+    _db.session.commit()
+    return viagem
 
 
 def _registro(_db, viagem, actor) -> AlunosConfirmados:
     return _db.session.get(AlunosConfirmados, (viagem.id, actor.user.id))
 
 
-def _token(_db, viagem, actor) -> str | None:
-    """Token da credencial de embarque do aluno na viagem, ou None."""
-    credencial = (
+def _credencial(_db, viagem, actor) -> CredencialEmbarque | None:
+    """A credencial ativa do aluno na viagem, ou None."""
+    _db.session.expire_all()
+    return (
         _db.session.query(CredencialEmbarque)
-        .filter_by(viagem_id=viagem.id, aluno_id=actor.user.id)
-        .first()
+        .filter_by(viagem_id=viagem.id, aluno_id=actor.user.id, revogada_em=None)
+        .one_or_none()
     )
-    return credencial.token if credencial else None
+
+
+def _codigo(credencial: CredencialEmbarque, momento: datetime | None = None) -> str:
+    """O código que o app do aluno mostraria no passo de `momento` (agora, por padrão)."""
+    momento = momento or datetime.now(UTC)
+    return credencial_embarque_service.gerar_codigo(
+        bytes.fromhex(credencial.segredo), int(momento.timestamp()) // 30, 6
+    )
+
+
+def _qr(_db, viagem, actor, momento: datetime | None = None) -> str:
+    """O conteúdo do QR do aluno: `<credencial_id>.<codigo>`."""
+    credencial = _credencial(_db, viagem, actor)
+    assert credencial is not None
+    return f"{credencial.id}.{_codigo(credencial, momento)}"
 
 
 # ==========================================
@@ -98,10 +119,9 @@ def _token(_db, viagem, actor) -> str | None:
 
 @pytest.mark.integration
 def test_consolidacao_emite_uma_credencial_por_confirmado(_db, rodada, aluno, aluno2, aluno3):
-    tokens = [_token(_db, rodada, a) for a in (aluno, aluno2, aluno3)]
+    segredos = [_credencial(_db, rodada, a).segredo for a in (aluno, aluno2, aluno3)]
 
-    assert all(tokens)
-    assert len(set(tokens)) == 3
+    assert len(set(segredos)) == 3
 
 
 @pytest.mark.integration
@@ -128,8 +148,8 @@ def test_interessado_que_nao_declarou_trajeto_nao_recebe_credencial(
 
     _consolidar(_db, viagem_buffer_aberto, [(aluno.user.id, p1, p3)])
 
-    assert _token(_db, viagem_buffer_aberto, aluno)
-    assert _token(_db, viagem_buffer_aberto, aluno2) is None
+    assert _credencial(_db, viagem_buffer_aberto, aluno)
+    assert _credencial(_db, viagem_buffer_aberto, aluno2) is None
 
 
 @pytest.mark.integration
@@ -138,7 +158,9 @@ def test_aluno_busca_a_propria_credencial(_db, rodada, aluno, pontos_circuito):
 
     assert r.status_code == 200, r.get_data(as_text=True)
     corpo = r.get_json()
-    assert corpo["token"] == _token(_db, rodada, aluno)
+    credencial = _credencial(_db, rodada, aluno)
+    assert corpo["credencial_id"] == str(credencial.id)
+    assert corpo["segredo"] == credencial.segredo
     assert corpo["ponto_embarque_id"] == str(pontos_circuito[0].id)
 
 
@@ -181,7 +203,9 @@ def test_roteiro_traz_a_matriz_de_permissoes_do_ponto(_db, rodada, motorista, al
 
     passageiros = corpo["pontos"][0]["passageiros"]
     assert [p["aluno_id"] for p in passageiros] == [str(aluno.user.id)]
-    assert passageiros[0]["qr_token"] == _token(_db, rodada, aluno)
+    credencial = _credencial(_db, rodada, aluno)
+    assert passageiros[0]["credencial_id"] == str(credencial.id)
+    assert passageiros[0]["qr_segredo"] == credencial.segredo
 
 
 @pytest.mark.integration
@@ -228,16 +252,26 @@ def test_avancar_alem_do_ultimo_ponto_e_recusado(rodada, motorista, pontos_circu
 # ==========================================
 
 
-def _validar(motorista, viagem, token):
+def _conferir(motorista, viagem, qr):
     return motorista.client.post(
-        f"/v1/embarque/viagens/{viagem.id}/validacao", json={"qr_token": token}
+        f"/v1/embarque/viagens/{viagem.id}/conferencia", json={"qr_token": qr}
     )
 
 
-def _confirmar(motorista, viagem, token):
+def _confirmar(motorista, viagem, qr, **extra):
     return motorista.client.post(
-        f"/v1/embarque/viagens/{viagem.id}/confirmacao", json={"qr_token": token}
+        f"/v1/embarque/viagens/{viagem.id}/confirmacao", json={"qr_token": qr, **extra}
     )
+
+
+def _manual(motorista, viagem, actor):
+    return motorista.client.post(
+        f"/v1/embarque/viagens/{viagem.id}/manual", json={"aluno_id": str(actor.user.id)}
+    )
+
+
+def _codigo_erro(r) -> str:
+    return r.get_json()["error"]["code"]
 
 
 def _recusar(motorista, viagem, token, motivo="FOTO_NAO_CONFERE", observacao=None):
@@ -254,14 +288,6 @@ def _com_foto(_db, actor) -> str:
     return foto_url
 
 
-def _credencial(_db, viagem, actor) -> CredencialEmbarque:
-    return (
-        _db.session.query(CredencialEmbarque)
-        .filter_by(viagem_id=viagem.id, aluno_id=actor.user.id)
-        .one()
-    )
-
-
 def _ocorrencias(_db, viagem) -> list[Ocorrencia]:
     _db.session.expire_all()
     return _db.session.query(Ocorrencia).filter_by(viagem_id=viagem.id).all()
@@ -273,7 +299,7 @@ def test_leitura_devolve_passageiro_e_foto_sem_embarcar(
 ):
     foto_url = _com_foto(_db, aluno)
 
-    r = _validar(motorista, rodada, _token(_db, rodada, aluno))
+    r = _conferir(motorista, rodada, _qr(_db, rodada, aluno))
 
     assert r.status_code == 200, r.get_data(as_text=True)
     corpo = r.get_json()
@@ -293,8 +319,8 @@ def test_leitura_devolve_passageiro_e_foto_sem_embarcar(
 @pytest.mark.integration
 def test_confirmacao_registra_o_embarque_e_consome_a_credencial(_db, rodada, motorista, aluno):
     _com_foto(_db, aluno)
-    token = _token(_db, rodada, aluno)
-    assert _validar(motorista, rodada, token).status_code == 200
+    token = _qr(_db, rodada, aluno)
+    assert _conferir(motorista, rodada, token).status_code == 200
 
     r = _confirmar(motorista, rodada, token)
 
@@ -316,7 +342,7 @@ def test_confirmacao_registra_o_embarque_e_consome_a_credencial(_db, rodada, mot
 @pytest.mark.integration
 def test_recusa_abre_ocorrencia_e_deixa_a_credencial_para_o_manual(_db, rodada, motorista, aluno):
     _com_foto(_db, aluno)
-    token = _token(_db, rodada, aluno)
+    token = _qr(_db, rodada, aluno)
 
     r = _recusar(motorista, rodada, token, observacao="pessoa diferente da foto")
 
@@ -329,51 +355,207 @@ def test_recusa_abre_ocorrencia_e_deixa_a_credencial_para_o_manual(_db, rodada, 
     assert "FOTO_NAO_CONFERE" in ocorrencias[0].descricao
     assert "pessoa diferente da foto" in ocorrencias[0].descricao
     assert _registro(_db, rodada, aluno).embarcou is False
-    assert _credencial(_db, rodada, aluno).usado is False
+    credencial = _credencial(_db, rodada, aluno)
+    assert credencial.usado is False
+    assert credencial.recusada_em is not None
+    assert credencial.motivo_recusa == "FOTO_NAO_CONFERE"
+
+    # O mesmo QR, mesmo com código novo, não embarca mais ninguém (RF-17 fluxo secundário 1).
+    for r in (
+        _conferir(motorista, rodada, _qr(_db, rodada, aluno)),
+        _confirmar(motorista, rodada, _qr(_db, rodada, aluno)),
+        _recusar(motorista, rodada, _qr(_db, rodada, aluno)),
+    ):
+        assert r.status_code == 409
+        assert _codigo_erro(r) == "CREDENCIAL_RECUSADA"
+    assert _registro(_db, rodada, aluno).embarcou is False
 
     # O passageiro real aparece e embarca pelo fallback manual.
-    manual = motorista.client.post(
-        f"/v1/embarque/viagens/{rodada.id}/manual", json={"aluno_id": str(aluno.user.id)}
-    )
+    manual = _manual(motorista, rodada, aluno)
     assert manual.status_code == 200, manual.get_data(as_text=True)
     assert _registro(_db, rodada, aluno).embarcou is True
 
 
 @pytest.mark.integration
 def test_recusa_com_motivo_desconhecido_e_invalida(_db, rodada, motorista, aluno):
-    r = _recusar(motorista, rodada, _token(_db, rodada, aluno), motivo="CARA_FEIA")
+    r = _recusar(motorista, rodada, _qr(_db, rodada, aluno), motivo="CARA_FEIA")
     assert r.status_code == 400
 
 
 @pytest.mark.integration
-def test_aluno_sem_foto_embarca_com_aviso_e_ocorrencia(_db, rodada, motorista, aluno):
-    token = _token(_db, rodada, aluno)
+def test_aluno_sem_foto_nao_embarca_pelo_qr_so_pelo_manual(_db, rodada, motorista, aluno):
+    qr = _qr(_db, rodada, aluno)
 
-    leitura = _validar(motorista, rodada, token).get_json()
+    leitura = _conferir(motorista, rodada, qr).get_json()
     assert leitura["sem_foto"] is True
     assert leitura["foto_url"] is None
 
-    r = _confirmar(motorista, rodada, token)
+    r = _confirmar(motorista, rodada, qr)
 
-    assert r.status_code == 200, r.get_data(as_text=True)
-    assert r.get_json()["sem_foto"] is True
+    assert r.status_code == 409
+    assert _codigo_erro(r) == "SEM_FOTO_EXIGE_MANUAL"
+    assert _registro(_db, rodada, aluno).embarcou is False
+    assert _credencial(_db, rodada, aluno).usado is False
+    assert _ocorrencias(_db, rodada) == []
+
+    manual = _manual(motorista, rodada, aluno)
+    assert manual.status_code == 200, manual.get_data(as_text=True)
+    assert manual.get_json()["sem_foto"] is True
     assert _registro(_db, rodada, aluno).embarcou is True
     ocorrencias = _ocorrencias(_db, rodada)
     assert len(ocorrencias) == 1
-    assert ocorrencias[0].status == StatusOcorrencia.ABERTA
-    assert "sem foto" in ocorrencias[0].descricao
+    assert "sem foto cadastrada" in ocorrencias[0].descricao
 
 
 @pytest.mark.integration
-@pytest.mark.parametrize("passo", ["validacao", "confirmacao", "recusa"])
-def test_credencial_desconhecida(rodada, motorista, passo):
+def test_aluno_sem_foto_pode_ser_recusado_com_sem_foto(_db, rodada, motorista, aluno):
+    r = _recusar(motorista, rodada, _qr(_db, rodada, aluno), motivo="SEM_FOTO")
+
+    assert r.status_code == 200, r.get_data(as_text=True)
+    assert _credencial(_db, rodada, aluno).motivo_recusa == "SEM_FOTO"
+
+
+@pytest.mark.integration
+def test_validacao_antiga_responde_410(rodada, motorista, aluno, _db):
+    r = motorista.client.post(
+        f"/v1/embarque/viagens/{rodada.id}/validacao", json={"qr_token": _qr(_db, rodada, aluno)}
+    )
+
+    assert r.status_code == 410
+    assert _codigo_erro(r) == "ENDPOINT_DESCONTINUADO"
+    assert "Atualize o app" in r.get_json()["error"]["message"]
+    assert _registro(_db, rodada, aluno).embarcou is False
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("passo", ["conferencia", "confirmacao", "recusa"])
+@pytest.mark.parametrize(
+    "qr",
+    [
+        "token-estatico-antigo",
+        "00000000-0000-0000-0000-000000000000.123456",
+    ],
+)
+def test_credencial_desconhecida(rodada, motorista, passo, qr):
     r = motorista.client.post(
         f"/v1/embarque/viagens/{rodada.id}/{passo}",
-        json={"qr_token": "token-que-nunca-foi-emitido", "motivo": "FOTO_NAO_CONFERE"},
+        json={"qr_token": qr, "motivo": "FOTO_NAO_CONFERE"},
     )
 
     assert r.status_code == 404
-    assert r.get_json()["error"]["code"] == "CREDENCIAL_DESCONHECIDA"
+    assert _codigo_erro(r) == "CREDENCIAL_DESCONHECIDA"
+
+
+@pytest.mark.integration
+def test_codigo_de_dois_passos_atras_e_recusado(_db, rodada, motorista, aluno):
+    _com_foto(_db, aluno)
+    credencial = _credencial(_db, rodada, aluno)
+    antigo = f"{credencial.id}.{_codigo(credencial, datetime.now(UTC) - timedelta(seconds=60))}"
+
+    for r in (_conferir(motorista, rodada, antigo), _confirmar(motorista, rodada, antigo)):
+        assert r.status_code == 409
+        assert _codigo_erro(r) == "CODIGO_EXPIRADO"
+    assert _registro(_db, rodada, aluno).embarcou is False
+
+
+@pytest.mark.integration
+def test_codigo_atual_e_aceito_mesmo_um_passo_atras(_db, rodada, motorista, aluno):
+    _com_foto(_db, aluno)
+    credencial = _credencial(_db, rodada, aluno)
+    um_passo_atras = datetime.now(UTC) - timedelta(seconds=30)
+
+    assert _conferir(motorista, rodada, _qr(_db, rodada, aluno)).status_code == 200
+    qr = f"{credencial.id}.{_codigo(credencial, um_passo_atras)}"
+    assert _confirmar(motorista, rodada, qr).status_code == 200
+
+
+@pytest.mark.integration
+def test_codigo_de_outra_credencial_e_recusado(_db, rodada, motorista, aluno, aluno2):
+    _com_foto(_db, aluno)
+    minha = _credencial(_db, rodada, aluno)
+    alheia = _credencial(_db, rodada, aluno2)
+    misturado = f"{minha.id}.{_codigo(alheia)}"
+
+    r = _confirmar(motorista, rodada, misturado)
+
+    assert r.status_code == 409
+    assert _codigo_erro(r) == "CODIGO_EXPIRADO"
+    assert _registro(_db, rodada, aluno).embarcou is False
+
+
+@pytest.mark.integration
+def test_horario_do_cliente_e_ignorado_online(_db, rodada, motorista, aluno):
+    """Um `ocorrido_em` antigo não ressuscita a credencial vencida."""
+    _com_foto(_db, aluno)
+    credencial = _credencial(_db, rodada, aluno)
+    credencial.expires_at = datetime.now(UTC) - timedelta(minutes=1)
+    _db.session.commit()
+    no_passado = datetime.now(UTC) - timedelta(hours=2)
+    qr = f"{credencial.id}.{_codigo(credencial, no_passado)}"
+
+    r = _confirmar(motorista, rodada, qr, ocorrido_em=no_passado.isoformat())
+
+    assert r.status_code == 409
+    assert _codigo_erro(r) == "CREDENCIAL_EXPIRADA"
+    assert _registro(_db, rodada, aluno).embarcou is False
+
+
+@pytest.mark.integration
+def test_credencial_de_ponto_antigo_e_recusada(_db, rodada, motorista, aluno, pontos_circuito):
+    """O ponto do aluno mudou depois da emissão: o QR antigo não vale mais."""
+    _com_foto(_db, aluno)
+    qr_antigo = _qr(_db, rodada, aluno)
+    registro = _registro(_db, rodada, aluno)
+    registro.ponto_embarque_id = pontos_circuito[1].id
+    _db.session.commit()
+
+    r = _conferir(motorista, rodada, qr_antigo)
+    assert r.status_code == 409
+    assert _codigo_erro(r) == "CREDENCIAL_DESATUALIZADA"
+
+    # Reemitida para o ponto novo, a antiga fica revogada e a nova é a que vale.
+    credencial_embarque_service.criar_credencial(rodada.id, aluno.user.id, pontos_circuito[1].id)
+    _db.session.commit()
+    r = _conferir(motorista, rodada, qr_antigo)
+    assert r.status_code == 409
+    assert _codigo_erro(r) == "CREDENCIAL_DESATUALIZADA"
+    # O veículo ainda está em P1; a nova credencial é de P2.
+    r = _conferir(motorista, rodada, _qr(_db, rodada, aluno))
+    assert _codigo_erro(r) == "CREDENCIAL_DE_OUTRO_PONTO"
+
+
+@pytest.mark.integration
+def test_duas_confirmacoes_simultaneas_embarcam_uma_vez(app, _db, rodada, motorista, aluno):
+    _com_foto(_db, aluno)
+    qr = _qr(_db, rodada, aluno)
+    barreira = threading.Barrier(2)
+    status_codes: list[int] = []
+    codigos: list[str] = []
+
+    def confirmar():
+        # Cada thread tem seu cliente, contexto e sessão (conexão) próprios
+        cliente = app.test_client()
+        barreira.wait()
+        r = cliente.post(
+            f"/v1/embarque/viagens/{rodada.id}/confirmacao",
+            json={"qr_token": qr},
+            headers=motorista.headers,
+        )
+        status_codes.append(r.status_code)
+        if r.status_code != 200:
+            codigos.append(_codigo_erro(r))
+
+    threads = []
+    for _ in range(2):
+        t = threading.Thread(target=confirmar)
+        threads.append(t)
+        t.start()
+    for t in threads:
+        t.join(timeout=30)
+
+    assert sorted(status_codes) == [200, 409]
+    assert codigos == ["CREDENCIAL_JA_UTILIZADA"]
+    assert _registro(_db, rodada, aluno).embarcou is True
 
 
 @pytest.mark.integration
@@ -393,10 +575,10 @@ def test_credencial_de_outra_viagem(
 
     # aluno2 já está na `rodada`; aqui ele ganha uma credencial da outra viagem.
     _consolidar(_db, outra, [(aluno2.user.id, p2, p4)])
-    token_da_outra = _token(_db, outra, aluno2)
+    token_da_outra = _qr(_db, outra, aluno2)
 
     for r in (
-        _validar(motorista, rodada, token_da_outra),
+        _conferir(motorista, rodada, token_da_outra),
         _confirmar(motorista, rodada, token_da_outra),
         _recusar(motorista, rodada, token_da_outra),
     ):
@@ -407,10 +589,10 @@ def test_credencial_de_outra_viagem(
 @pytest.mark.integration
 def test_credencial_de_outro_ponto(_db, rodada, motorista, aluno2):
     """O veículo está em P1 e a credencial do aluno 2 é de P2."""
-    token = _token(_db, rodada, aluno2)
+    token = _qr(_db, rodada, aluno2)
 
     for r in (
-        _validar(motorista, rodada, token),
+        _conferir(motorista, rodada, token),
         _confirmar(motorista, rodada, token),
         _recusar(motorista, rodada, token),
     ):
@@ -425,11 +607,12 @@ def test_credencial_expirada(_db, rodada, motorista, aluno):
     credencial = _credencial(_db, rodada, aluno)
     credencial.expires_at = datetime.now(UTC) - timedelta(minutes=1)
     _db.session.commit()
+    qr = _qr(_db, rodada, aluno)
 
     for r in (
-        _validar(motorista, rodada, credencial.token),
-        _confirmar(motorista, rodada, credencial.token),
-        _recusar(motorista, rodada, credencial.token),
+        _conferir(motorista, rodada, qr),
+        _confirmar(motorista, rodada, qr),
+        _recusar(motorista, rodada, qr),
     ):
         assert r.status_code == 409
         assert r.get_json()["error"]["code"] == "CREDENCIAL_EXPIRADA"
@@ -437,20 +620,21 @@ def test_credencial_expirada(_db, rodada, motorista, aluno):
 
 @pytest.mark.integration
 def test_credencial_ja_utilizada(_db, rodada, motorista, aluno):
-    token = _token(_db, rodada, aluno)
+    _com_foto(_db, aluno)
+    token = _qr(_db, rodada, aluno)
     assert _confirmar(motorista, rodada, token).status_code == 200
 
-    for r in (_validar(motorista, rodada, token), _recusar(motorista, rodada, token)):
+    for r in (_conferir(motorista, rodada, token), _recusar(motorista, rodada, token)):
         assert r.status_code == 409
         assert r.get_json()["error"]["code"] == "CREDENCIAL_JA_UTILIZADA"
 
 
 @pytest.mark.integration
 def test_outro_motorista_nao_le_confirma_nem_recusa(_db, rodada, other_motorista, aluno):
-    token = _token(_db, rodada, aluno)
+    token = _qr(_db, rodada, aluno)
 
     for r in (
-        _validar(other_motorista, rodada, token),
+        _conferir(other_motorista, rodada, token),
         _confirmar(other_motorista, rodada, token),
         _recusar(other_motorista, rodada, token),
     ):
@@ -462,9 +646,7 @@ def test_outro_motorista_nao_le_confirma_nem_recusa(_db, rodada, other_motorista
 @pytest.mark.integration
 def test_fallback_manual_registra_embarque_e_deixa_rastro(_db, rodada, motorista, aluno):
     _com_foto(_db, aluno)
-    r = motorista.client.post(
-        f"/v1/embarque/viagens/{rodada.id}/manual", json={"aluno_id": str(aluno.user.id)}
-    )
+    r = _manual(motorista, rodada, aluno)
 
     assert r.status_code == 200, r.get_data(as_text=True)
     assert r.get_json()["manual"] is True
@@ -479,9 +661,7 @@ def test_fallback_manual_registra_embarque_e_deixa_rastro(_db, rodada, motorista
 
 @pytest.mark.integration
 def test_fallback_manual_recusa_aluno_de_outro_ponto(_db, rodada, motorista, aluno2):
-    r = motorista.client.post(
-        f"/v1/embarque/viagens/{rodada.id}/manual", json={"aluno_id": str(aluno2.user.id)}
-    )
+    r = _manual(motorista, rodada, aluno2)
 
     assert r.status_code == 409
     assert r.get_json()["error"]["code"] == "CREDENCIAL_DE_OUTRO_PONTO"
@@ -535,14 +715,16 @@ def test_motorista_ve_a_foto_do_passageiro_do_roteiro_e_o_de_outra_viagem_nao(
 
 
 def _lote(_db, rodada, aluno, aluno2, pontos_circuito):
+    _com_foto(_db, aluno)
     p1, p2 = pontos_circuito[0], pontos_circuito[1]
     base = datetime.now(UTC) - timedelta(minutes=10)
     return [
         {
             "evento_id": "ev-embarque-1",
-            "tipo": "EMBARQUE",
+            "tipo": "EMBARQUE_CONFIRMADO",
             "ocorrido_em": base.isoformat(),
-            "qr_token": _token(_db, rodada, aluno),
+            # O código do passo em que o motorista leu, não o de agora.
+            "qr_token": _qr(_db, rodada, aluno, base),
             "ponto_id": str(p1.id),
         },
         {
@@ -609,8 +791,8 @@ def test_lote_reenviado_nao_muda_nada(_db, rodada, motorista, aluno, aluno2, pon
     assert _registro(_db, rodada, aluno).embarcado_em == embarcado_em
     assert _db.session.get(ViagemPonto, (rodada.id, pontos_circuito[0].id)).chegada_real == chegada
     assert _db.session.query(TelemetriaViagem).filter_by(viagem_id=rodada.id).count() == 1
-    # Reenviados, o embarque sem foto e o fallback manual não duplicam a auditoria.
-    assert _db.session.query(Ocorrencia).filter_by(viagem_id=rodada.id).count() == 2
+    # Reenviado, o fallback manual não duplica a auditoria.
+    assert _db.session.query(Ocorrencia).filter_by(viagem_id=rodada.id).count() == 1
 
 
 @pytest.mark.integration
@@ -622,7 +804,7 @@ def test_evento_invalido_nao_derruba_o_resto_do_lote(
         1,
         {
             "evento_id": "ev-invalido",
-            "tipo": "EMBARQUE",
+            "tipo": "EMBARQUE_CONFIRMADO",
             "ocorrido_em": datetime.now(UTC).isoformat(),
             "qr_token": "credencial-inexistente",
         },
@@ -670,6 +852,7 @@ def test_posicao_atrasada_nao_sobrescreve_a_mais_recente(_db, rodada, motorista)
 @pytest.mark.integration
 def test_sincronizacao_aceita_viagem_ja_finalizada(_db, rodada, motorista, aluno, pontos_circuito):
     """A fila pode chegar depois que o motorista encerrou o percurso."""
+    _com_foto(_db, aluno)
     rodada.status = StatusViagem.FINALIZADA
     _db.session.commit()
 
@@ -679,9 +862,9 @@ def test_sincronizacao_aceita_viagem_ja_finalizada(_db, rodada, motorista, aluno
         [
             {
                 "evento_id": "ev-tardio",
-                "tipo": "EMBARQUE",
+                "tipo": "EMBARQUE_CONFIRMADO",
                 "ocorrido_em": datetime.now(UTC).isoformat(),
-                "qr_token": _token(_db, rodada, aluno),
+                "qr_token": _qr(_db, rodada, aluno),
                 "ponto_id": str(pontos_circuito[0].id),
             }
         ],
@@ -692,11 +875,12 @@ def test_sincronizacao_aceita_viagem_ja_finalizada(_db, rodada, motorista, aluno
 
 
 def _recusa_offline(_db, rodada, aluno, pontos_circuito, evento_id="ev-recusa-1"):
+    momento = datetime.now(UTC) - timedelta(minutes=5)
     return {
         "evento_id": evento_id,
         "tipo": "RECUSA",
-        "ocorrido_em": (datetime.now(UTC) - timedelta(minutes=5)).isoformat(),
-        "qr_token": _token(_db, rodada, aluno),
+        "ocorrido_em": momento.isoformat(),
+        "qr_token": _qr(_db, rodada, aluno, momento),
         "ponto_id": str(pontos_circuito[0].id),
         "motivo": "FOTO_NAO_CONFERE",
         "observacao": "outra pessoa",
@@ -717,7 +901,9 @@ def test_recusa_offline_abre_ocorrencia_uma_vez_so(_db, rodada, motorista, aluno
     assert ocorrencias[0].status == StatusOcorrencia.ABERTA
     assert "outra pessoa" in ocorrencias[0].descricao
     assert _registro(_db, rodada, aluno).embarcou is False
-    assert _credencial(_db, rodada, aluno).usado is False
+    credencial = _credencial(_db, rodada, aluno)
+    assert credencial.usado is False
+    assert credencial.recusada_em is not None
 
 
 @pytest.mark.integration
@@ -738,7 +924,7 @@ def test_recusa_e_embarque_manual_offline_no_mesmo_lote(
     corpo = _sincronizar(motorista, rodada, [manual, recusa]).get_json()
     reenvio = _sincronizar(motorista, rodada, [manual, recusa]).get_json()
 
-    # Fora de ordem: a recusa chega depois do embarque e ainda assim é registrada.
+    # Fora de ordem na fila, a recusa é aplicada primeiro pelo carimbo; o manual passa.
     assert corpo["aplicados"] == 2, corpo
     assert reenvio["ja_aplicados"] == 2
     assert _registro(_db, rodada, aluno).embarcou is True
@@ -754,3 +940,114 @@ def test_recusa_offline_sem_motivo_e_recusada(_db, rodada, motorista, aluno, pon
 
     assert corpo["recusados"] == 1
     assert _ocorrencias(_db, rodada) == []
+
+
+def _embarque_offline(_db, rodada, aluno, ponto, momento, evento_id="ev-embarque"):
+    return {
+        "evento_id": evento_id,
+        "tipo": "EMBARQUE_CONFIRMADO",
+        "ocorrido_em": momento.isoformat(),
+        "qr_token": _qr(_db, rodada, aluno, momento),
+        "ponto_id": str(ponto.id),
+    }
+
+
+@pytest.mark.integration
+def test_recusa_offline_bloqueia_o_embarque_posterior_do_mesmo_qr(
+    _db, rodada, motorista, aluno, pontos_circuito
+):
+    _com_foto(_db, aluno)
+    recusa = _recusa_offline(_db, rodada, aluno, pontos_circuito)
+    depois = datetime.now(UTC) - timedelta(minutes=4)
+    embarque = _embarque_offline(_db, rodada, aluno, pontos_circuito[0], depois)
+
+    # A fila chega com o embarque na frente, mas a recusa aconteceu antes.
+    corpo = _sincronizar(motorista, rodada, [embarque, recusa]).get_json()
+
+    assert [x["evento_id"] for x in corpo["resultados"]] == ["ev-recusa-1", "ev-embarque"]
+    assert corpo["resultados"][0]["situacao"] == "aplicado"
+    assert corpo["resultados"][1]["codigo"] == "CREDENCIAL_RECUSADA"
+    assert _registro(_db, rodada, aluno).embarcou is False
+
+    # Num lote seguinte também, e online também.
+    outro = _embarque_offline(
+        _db, rodada, aluno, pontos_circuito[0], datetime.now(UTC), evento_id="ev-embarque-2"
+    )
+    corpo = _sincronizar(motorista, rodada, [outro]).get_json()
+    assert corpo["resultados"][0]["codigo"] == "CREDENCIAL_RECUSADA"
+    r = _confirmar(motorista, rodada, _qr(_db, rodada, aluno))
+    assert _codigo_erro(r) == "CREDENCIAL_RECUSADA"
+
+
+@pytest.mark.integration
+def test_evento_embarque_antigo_e_recusado_e_o_resto_do_lote_passa(
+    _db, rodada, motorista, aluno, pontos_circuito
+):
+    _com_foto(_db, aluno)
+    agora = datetime.now(UTC)
+    antigo = _embarque_offline(_db, rodada, aluno, pontos_circuito[0], agora, evento_id="ev-velho")
+    antigo["tipo"] = "EMBARQUE"
+    chegada = {
+        "evento_id": "ev-chegada",
+        "tipo": "CHEGADA_PONTO",
+        "ocorrido_em": agora.isoformat(),
+        "ponto_id": str(pontos_circuito[0].id),
+    }
+
+    corpo = _sincronizar(motorista, rodada, [antigo, chegada]).get_json()
+
+    por_id = {x["evento_id"]: x for x in corpo["resultados"]}
+    assert por_id["ev-velho"]["codigo"] == "EVENTO_DESCONTINUADO"
+    assert por_id["ev-chegada"]["situacao"] == "aplicado"
+    assert _registro(_db, rodada, aluno).embarcou is False
+
+
+@pytest.mark.integration
+def test_evento_offline_com_o_codigo_do_seu_horario_e_aceito(
+    _db, rodada, motorista, aluno, pontos_circuito
+):
+    """O código de 3 minutos atrás não passa online, mas vale para o evento daquele horário."""
+    _com_foto(_db, aluno)
+    momento = datetime.now(UTC) - timedelta(minutes=3)
+    evento = _embarque_offline(_db, rodada, aluno, pontos_circuito[0], momento)
+
+    assert _codigo_erro(_conferir(motorista, rodada, evento["qr_token"])) == "CODIGO_EXPIRADO"
+    corpo = _sincronizar(motorista, rodada, [evento]).get_json()
+
+    assert corpo["aplicados"] == 1, corpo
+    assert _registro(_db, rodada, aluno).embarcado_em == momento
+
+
+@pytest.mark.integration
+def test_evento_offline_no_futuro_e_recusado(_db, rodada, motorista, aluno, pontos_circuito):
+    _com_foto(_db, aluno)
+    futuro = datetime.now(UTC) + timedelta(minutes=10)
+    evento = _embarque_offline(_db, rodada, aluno, pontos_circuito[0], futuro)
+
+    corpo = _sincronizar(motorista, rodada, [evento]).get_json()
+
+    assert corpo["resultados"][0]["codigo"] == "EVENTO_NO_FUTURO"
+    assert _registro(_db, rodada, aluno).embarcou is False
+
+
+@pytest.mark.integration
+def test_evento_offline_antes_da_emissao_e_recusado(_db, rodada, motorista, aluno, pontos_circuito):
+    """Carimbo recuado para caber na validade: a credencial nem existia ainda."""
+    _com_foto(_db, aluno)
+    antes = datetime.now(UTC) - timedelta(hours=2)
+    evento = _embarque_offline(_db, rodada, aluno, pontos_circuito[0], antes)
+
+    corpo = _sincronizar(motorista, rodada, [evento]).get_json()
+
+    assert corpo["resultados"][0]["codigo"] == "EVENTO_ANTES_DA_CREDENCIAL"
+    assert _registro(_db, rodada, aluno).embarcou is False
+
+
+@pytest.mark.integration
+def test_aluno_sem_foto_nao_embarca_pelo_qr_offline(_db, rodada, motorista, aluno, pontos_circuito):
+    evento = _embarque_offline(_db, rodada, aluno, pontos_circuito[0], datetime.now(UTC))
+
+    corpo = _sincronizar(motorista, rodada, [evento]).get_json()
+
+    assert corpo["resultados"][0]["codigo"] == "SEM_FOTO_EXIGE_MANUAL"
+    assert _registro(_db, rodada, aluno).embarcou is False
