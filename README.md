@@ -138,6 +138,22 @@ JWT_SECRET_KEY=a_long_random_jwt_secret
 JWT_EXPIRES_HOURS=2
 ```
 
+### Deploy (GitHub Actions)
+
+The deploy job writes `.env.prod` from repository **secrets** (`DB_USER`, `DB_PASSWORD`,
+`DB_NAME`, `JWT_SECRET`, `MAIL_*`, `FRONTEND_URL`, `CORS_ORIGINS`, `FIREBASE_CREDENTIALS`)
+and these optional repository **variables** (Settings > Secrets and variables > Actions >
+Variables). An unset variable is left out, so the default applies:
+
+| Variable | Default |
+|----------|---------|
+| `TIMEZONE` | `America/Sao_Paulo` |
+| `ROTA_BUFFER_MINUTOS_PADRAO` / `ROTA_BUFFER_MINUTOS_MAX` | `5` / `30` |
+| `ROTA_PRAZO_INICIO_MINUTOS_PADRAO` / `ROTA_PRAZO_INICIO_MINUTOS_MAX` | `10` / `120` |
+
+Lowering a `MAX` below its `PADRAO` requires setting the `PADRAO` too, or the API
+refuses to start.
+
 ## 📚 Documentation
 
 ### API Documentation
