@@ -99,6 +99,9 @@ All notable changes to this project will be documented in this file.
   Invitations replace all of them: nobody signs up on their own.
 
 ### Fixed
+- A ride request and `POST /v1/viagens/<id>/iniciar-percurso` at the same time deadlocked
+  and one of them returned 500. The serialization locks on vehicle, student and trip are now
+  `FOR NO KEY UPDATE`, which does not block the foreign key checks of the other request.
 - `POST /v1/rotas/<id>/solicitacoes`: a student requesting two routes served by different
   vehicles at the same time ended up with two active requests. The student row is now locked.
 - `PUT /v1/rotas/<id>` with a different `tipo` returns 400 instead of 200 doing nothing; the

@@ -20,10 +20,11 @@ logger = logging.getLogger(__name__)
 def iniciar_percurso(user_id: str, viagem_id: str) -> Viagem:
     """RF-11: o motorista da viagem abre a janela de buffer."""
     # Trava a linha: dois toques no botão não podem abrir o buffer duas vezes.
+    # NO KEY: a solicitação que entra na rodada só precisa da chave da viagem (FK).
     viagem = (
         db.session.query(Viagem)
         .filter(Viagem.id == validate_uuid(viagem_id, "ID da viagem"))
-        .with_for_update()
+        .with_for_update(key_share=True)
         .first()
     )
     if not viagem:

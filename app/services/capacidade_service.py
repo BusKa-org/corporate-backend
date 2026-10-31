@@ -123,7 +123,7 @@ def validar_e_reservar(
         viagem = db.session.execute(
             select(Viagem)
             .where(Viagem.id == validate_uuid(str(viagem_id), "ID da viagem"))
-            .with_for_update()
+            .with_for_update(key_share=True)
         ).scalar_one_or_none()
         if not viagem:
             raise NotFoundError("Viagem não encontrada")
