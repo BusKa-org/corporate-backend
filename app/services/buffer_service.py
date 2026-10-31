@@ -32,7 +32,9 @@ def iniciar_percurso(user_id: str, viagem_id: str) -> Viagem:
         db.session.rollback()
         raise ConflictError(f"A viagem não pode iniciar o percurso no status {viagem.status.value}")
 
-    # shortcut: driver availability check (PR #16 jornada/descanso) plugs in here, before the transition, once PR #16 merges.
+    # shortcut: once PR #16 merges, call _validar_jornada_motorista(motorista, agora) here (403 on
+    # rest/hours), 409 when motorista.status_atual(agora) is EM_ROTA, then set
+    # status_motorista = EM_ROTA and descanso_ate = None: the driver is committed from this point.
     viagem.status = StatusViagem.BUFFER_ABERTO
     viagem.buffer_fim = tempo.agora_utc() + timedelta(minutes=viagem.rota.buffer_minutos)
     db.session.commit()
@@ -69,7 +71,8 @@ def notificar_abertura_buffer(viagem: Viagem) -> None:
     db.session.commit()
 
 
-# shortcut: driver availability check (PR #16 jornada/descanso) + setting the driver to EM_ROTA hook in here once PR #16 merges.
+# shortcut: PR #16 needs nothing new here: the driver was validated and set EM_ROTA in
+# iniciar_percurso; inicio_real below is what its rest calculation reads.
 def colocar_em_rota(viagem: Viagem, momento: datetime) -> None:
     """Única transição sob demanda para EM_ANDAMENTO; inicio_real conta o tempo de direção."""
     viagem.status = StatusViagem.EM_ANDAMENTO

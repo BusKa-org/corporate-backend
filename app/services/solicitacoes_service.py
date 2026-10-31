@@ -22,7 +22,8 @@ def _buscar_aluno(user_id: str) -> Aluno:
     return aluno
 
 
-# shortcut: PR #16 driver availability check (work hours / mandatory rest) plugs in here, so a request never goes to a resting driver; wire it once PR #16 merges.
+# shortcut: once PR #16 merges, check disponibilidade_motorista(motorista, agora) here and refuse
+# (with livre_a_partir_de in the message) so a request never goes to a resting or off-hours driver.
 def _escolher_motorista(janela):
     return janela.motorista_id
 
@@ -193,7 +194,6 @@ def cancelar_solicitacao(user_id: str, viagem_id: str) -> SolicitacaoViagem:
                 .count()
             )
             if restantes == 0:
-                # shortcut: PR #16 driver state reset (back to ATIVO) hooks in here; wire it once PR #16 merges.
                 viagem.status = StatusViagem.CANCELADA
                 if viagem.motorista_id:
                     NotificacaoService._criar_notificacao_interna(

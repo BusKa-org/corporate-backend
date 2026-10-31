@@ -1,6 +1,6 @@
 """Código existente com viagens sob demanda (rota_id, sem horario_rota)."""
 
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 from app.models.enum import StatusSolicitacao, StatusViagem
 from app.models.notificacao import Notificacao
@@ -162,3 +162,22 @@ def test_gestor_de_outra_organizacao_nao_cancela_viagem(other_gestor, viagem_sol
     assert r.status_code == 403, r.get_data(as_text=True)
     _db.session.refresh(viagem_solicitada)
     assert viagem_solicitada.status == StatusViagem.SOLICITADA
+
+
+def test_cancelar_viagem_iniciada_grava_fim_real(gestor, viagem_solicitada, _db):
+    viagem_solicitada.status = StatusViagem.EM_ANDAMENTO
+    viagem_solicitada.inicio_real = datetime(2026, 11, 2, 13, 5, tzinfo=UTC)
+    _db.session.commit()
+
+    r = gestor.client.put(f"/v1/viagens/{viagem_solicitada.id}/cancelar")
+    assert r.status_code == 200, r.get_data(as_text=True)
+    _db.session.refresh(viagem_solicitada)
+    assert viagem_solicitada.status == StatusViagem.CANCELADA
+    assert viagem_solicitada.fim_real is not None
+
+
+def test_cancelar_viagem_nao_iniciada_nao_grava_fim_real(gestor, viagem_solicitada, _db):
+    r = gestor.client.put(f"/v1/viagens/{viagem_solicitada.id}/cancelar")
+    assert r.status_code == 200, r.get_data(as_text=True)
+    _db.session.refresh(viagem_solicitada)
+    assert viagem_solicitada.fim_real is None
