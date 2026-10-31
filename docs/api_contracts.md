@@ -186,6 +186,58 @@ Trip statuses `OCIOSA` and `EM_ROTA` are gone: "ociosa" is no active trip and "e
 is `EM_ANDAMENTO`. The buffer end is `buffer_fim` (was `buffer_expira_em`), and the buffer
 length is set per route (`buffer_minutos`), not per window.
 
+## Embarque por QR com conferência da foto (RF-15 a RF-18)
+
+Todas as rotas abaixo são do motorista da viagem, com a viagem `EM_ANDAMENTO`
+(outro motorista ou papel: 403). Recusas usam o corpo de erro padrão com um `code`:
+`CREDENCIAL_DESCONHECIDA` (404), `CREDENCIAL_DE_OUTRA_VIAGEM`, `CREDENCIAL_DE_OUTRO_PONTO`,
+`CREDENCIAL_JA_UTILIZADA`, `CREDENCIAL_EXPIRADA`, `PASSAGEIRO_NAO_PREVISTO` (409).
+
+O embarque por QR tem dois passos:
+
+1. `POST /v1/embarque/viagens/<id>/validacao` `{qr_token, ocorrido_em?}`: confere a credencial
+   (desta viagem, do ponto corrente, sem uso, não expirada) e devolve
+   `{viagem_id, aluno_id, nome, foto_url, sem_foto, ponto_embarque_id, ponto_destino_id}`.
+   **Não embarca e não consome a credencial.** Credencial inválida: erro, sem foto.
+2. O motorista compara a foto com a pessoa e chama um dos dois:
+   - `POST /v1/embarque/viagens/<id>/confirmacao` `{qr_token, ocorrido_em?}`: refaz as
+     conferências, registra o embarque (`embarcado_em`) e marca a credencial como usada.
+     Resposta: `{viagem_id, aluno_id, nome, ponto_embarque_id, embarcado_em, manual: false,
+     foto_url, sem_foto}`. A segunda confirmação do mesmo token: 409 `CREDENCIAL_JA_UTILIZADA`.
+   - `POST /v1/embarque/viagens/<id>/recusa` `{qr_token, motivo, observacao?, ocorrido_em?}`,
+     `motivo` = `FOTO_NAO_CONFERE` ou `SEM_FOTO`, `observacao` até 500 caracteres: não embarca,
+     a credencial continua sem uso e abre uma ocorrência (`OUTRO`, `ABERTA`) para o gestor.
+     Resposta: `{viagem_id, aluno_id, motivo, ocorrencia_id}`. O passageiro real ainda pode
+     embarcar pelo fallback manual.
+
+Aluno sem foto (`sem_foto: true`, `foto_url: null`): a confirmação embarca mesmo assim e
+abre uma ocorrência (`OUTRO`, `ABERTA`) avisando que ninguém conferiu o rosto. O motorista
+também pode recusar com `SEM_FOTO`.
+
+`POST /v1/embarque/viagens/<id>/manual` `{aluno_id}` (falha de leitura do QR): o motorista
+confere o rosto pela foto da lista do ponto. Continua gerando uma ocorrência (`RESOLVIDA`) por uso.
+A resposta ganha `foto_url` e `sem_foto`.
+
+`GET /v1/embarque/viagens/<id>/roteiro` (e `.../roteiro/avancar`): cada passageiro de
+`pontos[].passageiros` ganha `foto_url` e `sem_foto`. É a lista do ponto para o fallback
+manual e o que o app baixa antes de perder a rede: as fotos são lidas em
+`GET /v1/alunos/<aluno_id>/foto`, liberado ao motorista enquanto a viagem está em rota.
+
+`POST /v1/embarque/viagens/<id>/sincronizacao` (RF-18): o evento `EMBARQUE` é o QR já
+confirmado pelo motorista. Novo tipo `RECUSA` com `qr_token`, `motivo`, `observacao?`: abre a
+ocorrência uma vez só por `evento_id` (reenvio: `ja_aplicado`). A recusa offline não exige o
+ponto corrente nem a credencial sem uso, porque pode chegar depois do embarque manual.
+
+### Mudanças para os apps
+
+- **`POST .../validacao` não embarca mais.** O app precisa chamar `.../confirmacao` depois
+  que o motorista confirmar a foto. A resposta de `validacao` mudou (sai `embarcado_em` e
+  `manual`, entram `foto_url`, `sem_foto`, `ponto_destino_id`).
+- Novas rotas `POST .../confirmacao` e `POST .../recusa`.
+- Novos campos `foto_url` e `sem_foto` no roteiro e nas respostas de embarque.
+- Novo tipo de evento offline `RECUSA` (campos `motivo`, `observacao`). O app só enfileira
+  `EMBARQUE` depois da confirmação do motorista.
+
 ## Foto do aluno
 
 ### `PUT /v1/alunos/me/foto`
@@ -211,7 +263,8 @@ Aluno envia a própria foto, usada pelo motorista na conferência do embarque (R
 Devolve a imagem (`image/jpeg`, `image/png` ou `image/webp`).
 
 - Podem ver: o próprio aluno; o gestor da organização do aluno; o motorista de uma viagem
-  `AGENDADA` ou `EM_ANDAMENTO` em que o aluno confirmou presença. Os demais: 403.
+  `AGENDADA` ou `EM_ANDAMENTO` em que o aluno confirmou presença, ou de uma rodada
+  `BUFFER_ABERTO` em que o aluno já declarou trajeto. Os demais: 403.
 - `aluno_id` que não é UUID: 400. Aluno inexistente ou sem foto: 404.
 
 ## Acessibilidade do aluno

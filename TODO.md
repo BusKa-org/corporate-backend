@@ -35,13 +35,6 @@ repository.
    `NOT NULL UNIQUE`. Dropping it is a small migration, but whether to collect
    the identifier at all is a data-minimisation question under the LGPD, not a
    technical one.
-5. **Boarding is bearer-only.** The passenger photograph in RF-15/RF-17 was
-   descoped by the sponsor, so the visual check that RF-17 describes as the
-   anti-fraud mechanism does not exist. A forwarded or screenshotted token is
-   indistinguishable from the real passenger, and the manual fallback has no
-   identity check whatsoever. Every manual boarding writes an `Ocorrencia` so a
-   manager can audit after the fact — that is mitigation, not the control the
-   requirement specifies. Worth re-confirming with the sponsor in writing.
 
 ---
 

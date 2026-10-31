@@ -68,6 +68,14 @@ All notable changes to this project will be documented in this file.
   Photos over `FOTO_ALUNO_MAX_PIXELS` (default 25 MP) are rejected with a 400.
   New settings `FOTOS_ALUNO_DIR`, `FOTO_ALUNO_MAX_BYTES` and `FOTO_ALUNO_MAX_PIXELS`; production keeps photos in the
   `fotos_aluno` volume. Account deletion removes the photo file and the accessibility data.
+- Photo check on QR boarding (RF-15/RF-17/RF-18). `POST /v1/embarque/viagens/<id>/validacao`
+  now only checks the credential and returns the passenger with `foto_url`/`sem_foto`, without
+  boarding. The driver then calls `POST .../confirmacao` (boards and uses the credential) or
+  `POST .../recusa` (`FOTO_NAO_CONFERE`/`SEM_FOTO`: no boarding, credential stays unused, an
+  open ocorrência for the gestor). Boarding a student with no photo is allowed and opens an
+  ocorrência. The itinerary passenger list and boarding responses carry `foto_url` and
+  `sem_foto`; offline sync accepts a `RECUSA` event, idempotent by `evento_id`.
+  **Breaking for the driver app:** `validacao` no longer boards; see `docs/api_contracts.md`.
 
 ### Removed
 - dev's first on-demand implementation, replaced by the one above before any release:
