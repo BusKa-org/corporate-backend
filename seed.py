@@ -162,12 +162,10 @@ def _alunos(org: Organizacao, insts: dict[str, Instituicao], senha: str) -> list
         criados.append(aluno)
     db.session.flush()
 
-    # Consentimento vigente para quem já está ativo — sem ele o RF-10 barra a
+    # Consentimento vigente para todos — sem ele o RF-10 barra a
     # solicitação e o ambiente de desenvolvimento não sai do lugar.
     for aluno in criados:
-        db.session.add(
-            Consentimento(usuario_id=aluno.id, versao=VERSAO_TERMO_VIGENTE, acao=ACEITE)
-        )
+        db.session.add(Consentimento(usuario_id=aluno.id, versao=VERSAO_TERMO_VIGENTE, acao=ACEITE))
     db.session.flush()
     return criados
 
