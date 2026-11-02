@@ -75,10 +75,10 @@ def test_plugin_can_register_a_namespace():
 
 
 def test_user_factory_cria_com_senha_conhecida():
-    """`create_with_password` estava quebrada e ninguém percebeu.
+    """`create_with_password` was broken and nobody noticed.
 
-    Ela passava `_raw_password` direto ao construtor do modelo, o que levanta
-    TypeError. Como não havia chamador, nada falhava. Este teste é o chamador.
+    It passed `_raw_password` straight to the model constructor, which raises
+    TypeError. With no caller, nothing failed. This test is the caller.
     """
     from werkzeug.security import check_password_hash
 
@@ -88,5 +88,5 @@ def test_user_factory_cria_com_senha_conhecida():
         usuario = fabrica.create_with_password("SenhaConhecida123!")
         assert check_password_hash(usuario.senha_hash, "SenhaConhecida123!"), fabrica.__name__
 
-    # O padrão continua valendo para quem não pede senha específica.
+    # The default still applies to those who do not ask for a specific password.
     assert check_password_hash(AlunoFactory().senha_hash, "StrongPass123!")

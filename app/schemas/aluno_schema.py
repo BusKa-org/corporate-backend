@@ -11,7 +11,7 @@ from app.schemas.validators import (
 
 
 class AcessibilidadeInputSchema(BaseSchema):
-    """Campos de acessibilidade, aceitos no cadastro (convite) e na edição do perfil."""
+    """Accessibility fields, accepted at sign-up (invite) and when editing the profile."""
 
     necessidades_acessibilidade = fields.List(
         fields.String(validate=validate.OneOf([n.name for n in NecessidadeAcessibilidade]))
@@ -22,11 +22,11 @@ class AcessibilidadeInputSchema(BaseSchema):
 class AlunoMeUpdateRequestSchema(AcessibilidadeInputSchema):
     """Aluno updates their profile (partial update).
 
-    Campo omitido não é tocado. Não há `load_default`: um default None faria o serviço
-    gravar None em todo campo que o cliente não enviou.
+    An omitted field is left untouched. There is no `load_default`: a None default
+    would make the service write None to every field the client did not send.
     """
 
-    # Nome e endereço não podem ser apagados. Os demais aceitam null para limpar o campo.
+    # Name and address cannot be cleared. The others accept null to clear the field.
     nome = fields.String(validate=validate_optional_string)
     telefone = fields.String(allow_none=True, validate=validate_optional_phone)
 

@@ -32,10 +32,10 @@ class Onibus(db.Model):
 
 
 class JanelaDisponibilidade(db.Model):
-    """Horário em que o veículo opera sob demanda, com o motorista designado (RF-05).
+    """Time when the vehicle operates on demand, with the assigned driver (RF-05).
 
-    hora_inicio/hora_fim são hora local da organização (Settings.TIMEZONE).
-    O intervalo é [hora_inicio, hora_fim): janelas encostadas não se sobrepõem.
+    hora_inicio/hora_fim are the organization's local time (Settings.TIMEZONE).
+    The interval is [hora_inicio, hora_fim): adjacent windows do not overlap.
     """
 
     __tablename__ = "janela_disponibilidade"

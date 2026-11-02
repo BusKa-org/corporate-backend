@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 
 def sem_repetidas(necessidades: list[str]) -> list[str]:
-    """Remove necessidades repetidas, mantendo a ordem em que apareceram."""
+    """Remove repeated needs, keeping the order in which they appeared."""
     resultado: list[str] = []
     for necessidade in necessidades:
         if necessidade not in resultado:
@@ -36,12 +36,7 @@ def sem_repetidas(necessidades: list[str]) -> list[str]:
 
 
 def update_me(user_id: str, data: dict[str, Any]) -> Aluno:
-    """
-    Atualiza perfil do aluno.
-
-    Returns: Aluno object
-    Raises: NotFoundError, AppError
-    """
+    """Update the student's profile. Raises NotFoundError, AppError."""
     aluno = db.session.get(Aluno, user_id)
     if not aluno:
         raise NotFoundError("Aluno não encontrado")
@@ -120,11 +115,7 @@ def update_me(user_id: str, data: dict[str, Any]) -> Aluno:
 
 
 def get_aluno_by_id(gestor_id: str, aluno_id: str) -> Aluno:
-    """
-    Gestor retrieves full details for a single aluno.
-
-    Raises: ForbiddenError, NotFoundError
-    """
+    """Manager gets the full details of one student. Raises ForbiddenError, NotFoundError."""
     gestor = _get_gestor_or_403(gestor_id, "Apenas gestores podem consultar alunos")
     aluno = db.session.get(Aluno, aluno_id)
 
@@ -137,13 +128,7 @@ def get_aluno_by_id(gestor_id: str, aluno_id: str) -> Aluno:
 
 
 def list_alunos_gestor(gestor_id: str, status: str | None = None) -> list[Aluno]:
-    """
-    Lista alunos da organização (apenas para gestores).
-    Optionally filter by status (e.g. 'PENDING_APPROVAL').
-
-    Returns: List of Aluno objects
-    Raises: ForbiddenError
-    """
+    """List the organization's students (managers only), optionally filtered by status."""
     gestor = _get_gestor_or_403(gestor_id, "Apenas gestores podem listar alunos")
     q = db.session.query(Aluno).filter_by(organizacao_id=gestor.organizacao_id)
     if status:
@@ -154,8 +139,8 @@ def list_alunos_gestor(gestor_id: str, status: str | None = None) -> list[Aluno]
     return q.all()
 
 
-# Extensão do arquivo por tipo. O tipo vem dos primeiros bytes, não do nome nem do
-# Content-Type enviado pelo cliente.
+# File extension by type. The type comes from the first bytes, not from the
+# file name or the Content-Type sent by the client.
 EXTENSOES_FOTO = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
 
 
@@ -174,7 +159,7 @@ def _caminho_foto(aluno_id: str, extensao: str) -> str:
 
 
 def apagar_foto(aluno_id: str) -> None:
-    """Remove o arquivo da foto do aluno, qualquer que seja a extensão."""
+    """Delete the student's photo file, whatever its extension."""
     for extensao in EXTENSOES_FOTO.values():
         caminho = _caminho_foto(aluno_id, extensao)
         if os.path.exists(caminho):
@@ -182,13 +167,9 @@ def apagar_foto(aluno_id: str) -> None:
 
 
 def salvar_foto(user_id: str, arquivo: IO[bytes]) -> Aluno:
-    """
-    Aluno envia a própria foto (usada na conferência do embarque, RF-17).
-
-    Raises: NotFoundError, ValidationError
-    """
-    # Trava o aluno até o commit: dois envios simultâneos (PNG e JPEG) apagariam
-    # o arquivo um do outro e a foto sumiria.
+    """Student uploads their own photo (used to check boarding, RF-17)."""
+    # Lock the student until commit: two simultaneous uploads (PNG and JPEG) would
+    # delete each other's file and the photo would vanish.
     db.session.execute(select(User.id).where(User.id == user_id).with_for_update(key_share=True))
     aluno = db.session.get(Aluno, user_id)
     if not aluno:
@@ -213,8 +194,8 @@ def salvar_foto(user_id: str, arquivo: IO[bytes]) -> Aluno:
 
     conteudo = remover_metadados(conteudo, tipo)
 
-    # Grava num arquivo temporário e só então troca pelo definitivo: se a gravação
-    # falhar no meio, a foto antiga continua lá.
+    # Write to a temp file and only then swap it in: if the write fails midway, the
+    # old photo is still there.
     pasta = current_app.config["FOTOS_ALUNO_DIR"]
     os.makedirs(pasta, exist_ok=True)
     extensao = EXTENSOES_FOTO[tipo]
@@ -229,7 +210,7 @@ def salvar_foto(user_id: str, arquivo: IO[bytes]) -> Aluno:
         logger.exception("Falha ao gravar a foto do aluno %s", aluno.id)
         raise AppError("Erro ao salvar a foto", 500)
 
-    # Trocou de PNG para JPEG, por exemplo: a foto com a outra extensão sai.
+    # E.g. switched from PNG to JPEG: the photo with the other extension is removed.
     for outra_extensao in EXTENSOES_FOTO.values():
         if outra_extensao == extensao:
             continue
@@ -257,7 +238,7 @@ def _e_passageiro_do_motorista(aluno_id, motorista_id) -> bool:
     if passageiro is not None:
         return True
 
-    # Sob demanda, durante o buffer, o passageiro é quem já teve o trajeto aceito.
+    # On demand, during the buffer, the passenger is whoever already had their route accepted.
     trajeto_aceito = (
         db.session.query(SolicitacaoViagem)
         .join(Viagem, Viagem.id == SolicitacaoViagem.viagem_id)
@@ -274,12 +255,11 @@ def _e_passageiro_do_motorista(aluno_id, motorista_id) -> bool:
 
 
 def buscar_foto(user_id: str, aluno_id: str) -> tuple[str, str]:
-    """
-    Caminho e tipo do arquivo da foto. Podem ver: o próprio aluno, o gestor da
-    organização e o motorista de uma viagem ainda não encerrada em que o aluno
-    confirmou presença (é quem confere o embarque).
+    """Path and type of the photo file.
 
-    Raises: NotFoundError, ForbiddenError
+    Allowed: the student, the organization's manager, and the driver of a trip not
+    yet finished where the student confirmed presence (the one who checks boarding).
+    Raises NotFoundError, ForbiddenError.
     """
     quem_pede: User = _get_user_or_404(user_id)
     aluno = db.session.get(Aluno, validate_uuid(aluno_id, "Aluno ID"))

@@ -15,7 +15,7 @@ class NotificacaoListResource(Resource):
     @api.doc("listar_minhas_notificacoes")
     @jwt_required()
     def get(self):
-        """Lista as notificações do usuário logado"""
+        """Lists the logged-in user's notifications"""
         user_id = get_jwt_identity()
         notificacoes = NotificacaoService.listar_notificacoes(user_id)
         return [
@@ -33,7 +33,7 @@ class NotificacaoListResource(Resource):
     @api.expect(notificacao_input_model, validate=True)
     @jwt_required()
     def post(self):
-        """(Gestor) Envia um aviso para Rota ou Viagem"""
+        """(Manager) Sends a notice to a Route or Trip"""
         user_id = get_jwt_identity()
         data = request.get_json()
         return NotificacaoService.notificar_por_gestor(user_id, data), 201
@@ -44,6 +44,6 @@ class NotificacaoLidaResource(Resource):
     @api.doc("marcar_notificacao_lida")
     @jwt_required()
     def patch(self, id):
-        """Marca uma notificação como lida"""
+        """Marks a notification as read"""
         user_id = get_jwt_identity()
         return NotificacaoService.marcar_lida(user_id, id), 200

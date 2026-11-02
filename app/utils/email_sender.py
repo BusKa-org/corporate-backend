@@ -45,7 +45,7 @@ def send_email(
             server.login(mail_username, mail_password)
             server.sendmail(mail_username, to, msg.as_string())
 
-        # O destinatário fica fora do log: e-mail é dado pessoal (LGPD).
+        # The recipient stays out of the log: e-mail is personal data (LGPD).
         logger.info("Email sent: %s", subject)
 
     except Exception:

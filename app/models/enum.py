@@ -2,12 +2,11 @@ import enum
 
 
 class TipoInstituicao(enum.Enum):
-    """Tipo da instituição atendida.
+    """Type of institution served.
 
-    Os seis primeiros vêm do catálogo escolar herdado (EMEC/INEP). Os dois
-    últimos existem porque uma implantação corporativa atende parques
-    tecnológicos e centros de inovação, que não são escolas — enquadrá-los
-    como universidade seria gravar dado errado só para caber no enum.
+    The first six come from the inherited school catalog (EMEC/INEP). The last two
+    exist because a corporate deployment serves tech parks and innovation centers,
+    which are not schools; filing them as universities would store wrong data.
     """
 
     INSTITUTO_FEDERAL = "Instituto Federal"
@@ -43,24 +42,24 @@ class TipoViagem(enum.Enum):
 
 class StatusViagem(enum.Enum):
     AGENDADA = "AGENDADA"
-    # Só rotas sob demanda: o aluno pediu e o motorista ainda não iniciou (RF-10).
+    # On-demand routes only: the student requested and the driver has not started yet (RF-10).
     SOLICITADA = "SOLICITADA"
-    # Só rotas sob demanda: motorista iniciou, alunos ainda podem entrar (RF-11).
+    # On-demand routes only: the driver started, students can still join (RF-11).
     BUFFER_ABERTO = "BUFFER_ABERTO"
-    # Também é o "Em rota" das viagens sob demanda.
+    # Also the "En route" state of on-demand trips.
     EM_ANDAMENTO = "EM_ANDAMENTO"
     FINALIZADA = "FINALIZADA"
     CANCELADA = "CANCELADA"
 
 
 class StatusSolicitacao(enum.Enum):
-    """ATIVA sem pontos = interessado; ATIVA com pontos = lugar garantido (RF-13/14)."""
+    """ATIVA without stops = interested; ATIVA with stops = seat guaranteed (RF-13/14)."""
 
     ATIVA = "ATIVA"
     CANCELADA = "CANCELADA"
-    # Cancelou depois do início do percurso: no-show previsto (RF-19).
+    # Cancelled after the route started: expected no-show (RF-19).
     DESISTENCIA = "DESISTENCIA"
-    # Trajeto recusado por lotação (RF-14). Conta nas negações por ponto (RF-21).
+    # Route rejected because the vehicle is full (RF-14). Counts in the per-stop denials (RF-21).
     NEGADA = "NEGADA"
 
 

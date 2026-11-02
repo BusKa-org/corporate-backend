@@ -14,9 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 def realizar_auto_checkin(viagem_id: str, aluno_id: str, tentativa: int) -> None:
-    """
-    Verifica o embarque do aluno comparando GPS.
-    """
+    """Check the student's boarding by comparing GPS."""
     if tentativa > 3:
         logger.warning(
             f"Auto-checkin abortado: Limite de tentativas excedido para o aluno {aluno_id}"

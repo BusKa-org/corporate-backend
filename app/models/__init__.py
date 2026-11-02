@@ -1,6 +1,5 @@
-# app/models/__init__.py
-# Importados por efeito colateral: registram as tabelas no metadata do
-# SQLAlchemy mesmo quando nenhum módulo os importa diretamente.
+# Imported for their side effect: they register the tables in the SQLAlchemy
+# metadata even when no module imports them directly.
 from .consentimento import Consentimento  # noqa: F401
 from .ocorrencia import Ocorrencia  # noqa: F401
 from .telemetria import TelemetriaVeiculo  # noqa: F401

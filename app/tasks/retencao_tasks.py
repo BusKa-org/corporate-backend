@@ -7,13 +7,13 @@ logger = logging.getLogger(__name__)
 
 
 def job_anonimizar_retencoes():
-    """Job trimestral: anonimiza e-mail e CPF retidos cujo prazo de retenção acabou.
+    """Quarterly job: anonymizes retained e-mail and CPF whose retention period is over.
 
-    Nada vence antes de 10 anos, então uma vez a cada 3 meses basta. Um dado vencido espera
-    no máximo 3 meses pela anonimização.
+    Nothing expires before 10 years, so once every 3 months is enough. Expired data
+    waits at most 3 months for anonymization.
     """
-    # Sem `args=[app]`: o jobstore compartilhado serializa o job com pickle, e o objeto
-    # Flask não serializa. O app vem do próprio agendador.
+    # No `args=[app]`: the shared jobstore pickles the job, and the Flask object is
+    # not picklable. The app comes from the scheduler itself.
     app = scheduler.app
     if not app:
         logger.error("Erro fatal: Instância do Flask (app) não encontrada no Scheduler.")

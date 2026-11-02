@@ -43,9 +43,9 @@ def test_login_success_returns_token(client, gestor):
 
 @pytest.mark.integration
 def test_login_minor_pending_signup_is_not_blocked(client, _db, organizacao):
-    # Antes, menor em PENDING_SIGNUP com e-mail do responsável e sem consentimento
-    # ficava travado no login para sempre: nenhum fluxo grava mais esse consentimento.
-    # As colunas saíram (migration e4f5a6b7c8d9); aqui fica o mesmo cenário sem elas.
+    # Before, a minor in PENDING_SIGNUP with a guardian e-mail and no consent was
+    # stuck at login forever: no flow records that consent anymore. The columns
+    # were dropped (migration e4f5a6b7c8d9); this is the same scenario without them.
     aluno = AlunoFactory(
         organizacao_id=organizacao.id,
         status=UserStatus.PENDING_SIGNUP,

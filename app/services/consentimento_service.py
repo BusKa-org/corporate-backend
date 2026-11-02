@@ -1,4 +1,4 @@
-"""Consentimento LGPD: aceite, revogação, estado e bloqueio."""
+"""LGPD consent: acceptance, revocation, state and blocking."""
 
 from functools import wraps
 from typing import Any
@@ -11,12 +11,12 @@ from app.models.base import db
 from app.models.consentimento import ACEITE, REVOGACAO, Consentimento
 from app.utils import audit_logger
 
-# O texto do termo mora no app. O back só conhece o identificador da versão.
+# The terms text lives in the app. The backend only knows the version identifier.
 VERSAO_TERMO_VIGENTE = "1.0"
 
 
 def consentimento_pendente(user_id: str) -> bool:
-    """True quando o último evento do usuário não é um aceite da versão vigente."""
+    """True when the user's latest event is not an acceptance of the current version."""
     ultimo = (
         db.session.query(Consentimento)
         .filter(Consentimento.usuario_id == user_id)
@@ -70,7 +70,7 @@ def revogar(user_id: str) -> dict[str, Any]:
 
 
 def exige_consentimento(func):
-    """Decorator para endpoints de passageiro. Vai abaixo de @jwt_required()."""
+    """Decorator for passenger endpoints. Goes below @jwt_required()."""
 
     @wraps(func)
     def wrapper(*args, **kwargs):

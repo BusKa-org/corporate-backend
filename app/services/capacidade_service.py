@@ -1,14 +1,13 @@
-"""Validação de capacidade por segmento do circuito (RF-13, RF-14, RF-19).
+"""Capacity check per circuit segment (RF-13, RF-14, RF-19).
 
-O circuito tem n pontos ordenados, logo n-1 segmentos. Um trajeto Pi -> Pj
-ocupa os segmentos i-1 .. j-2 (índices do vetor, base 0). A solicitação é
-aceita se `PicoTrecho = max(C[i-1:j-1])` for menor que a capacidade do veículo;
-assentos se liberam sozinhos depois do desembarque, então trajetos disjuntos
-reusam o mesmo lugar.
+The circuit has n ordered stops, so n-1 segments. A route Pi -> Pj takes
+segments i-1 .. j-2 (0-based vector indexes). The request is accepted if
+`PicoTrecho = max(C[i-1:j-1])` is below the vehicle capacity; seats free up
+after drop-off, so disjoint routes reuse the same seat.
 
-O vetor é derivado das solicitações ATIVA com trajeto declarado. Cancelar
-(CANCELADA) já devolve os segmentos; a desistência depois da partida não reabre
-o lugar porque o buffer já fechou e ninguém mais declara.
+The vector is derived from ATIVA requests with a declared route. Cancelling
+(CANCELADA) gives the segments back; dropping out after departure does not
+reopen the seat because the buffer is already closed and no one declares anymore.
 """
 
 import logging
@@ -46,7 +45,7 @@ def _rota_da_viagem(viagem: Viagem) -> Rota:
 
 
 def _pontos_ordenados(rota: Rota) -> list[uuid.UUID]:
-    # `pontos_padrao` já vem ordenado por RotaPonto.ordem.
+    # `pontos_padrao` is already ordered by RotaPonto.ordem.
     return [rp.ponto_id for rp in rota.pontos_padrao]
 
 
@@ -62,7 +61,7 @@ def _carga(
     pontos: list[uuid.UUID],
     excluir_solicitacao_id: uuid.UUID | None = None,
 ) -> list[int]:
-    """Reconstrói o vetor a partir das solicitações ATIVA com trajeto declarado."""
+    """Rebuild the vector from the ATIVA requests with a declared route."""
     posicao = {ponto_id: k for k, ponto_id in enumerate(pontos)}
     vetor = [0] * max(len(pontos) - 1, 0)
 
@@ -96,20 +95,21 @@ def _posicao(posicoes: dict[uuid.UUID, int], ponto_id: IdLike, rotulo: str) -> i
 
 
 def vetor_carga(viagem_id: IdLike) -> list[int]:
-    """Ocupação por segmento. Índice k = trecho entre a parada k+1 e k+2."""
+    """Occupancy per segment. Index k = leg between stop k+1 and k+2."""
     viagem = _get_viagem(viagem_id)
     return _carga(viagem.id, _pontos_ordenados(_rota_da_viagem(viagem)))
 
 
 def capacidade_viagem(viagem_id: IdLike) -> int:
-    """Limite de assentos: a capacidade do veículo da viagem."""
+    """Seat limit: the capacity of the trip's vehicle."""
     viagem = _get_viagem(viagem_id)
     return _capacidade(viagem, _rota_da_viagem(viagem))
 
 
 def exigir_conta_ativa(aluno_id: IdLike) -> None:
-    """Chame depois dos locks: uma exclusão de conta que os segurava já pode ter
-    anonimizado o aluno, então relê do banco."""
+    """Call after the locks: an account deletion holding them may already have
+    anonymized the student, so re-read from the database.
+    """
     aluno = db.session.get(Aluno, aluno_id, populate_existing=True)
     if aluno is None or aluno.status != UserStatus.ACTIVE:
         raise ForbiddenError("Conta inativa")
@@ -121,9 +121,10 @@ def validar_e_reservar(
     ponto_origem_id: IdLike,
     ponto_destino_id: IdLike,
 ) -> SolicitacaoViagem:
-    """RF-13/RF-14. Grava o trajeto na solicitação ATIVA do aluno, ou levanta
-    ConflictError se PicoTrecho já está no limite. A solicitação negada fica como
-    NEGADA antes do erro, porque o RF-21 conta negações por ponto."""
+    """RF-13/RF-14. Saves the route on the student's ATIVA request, or raises
+    ConflictError if PicoTrecho is already at the limit. The denied request is set
+    to NEGADA before the error, because RF-21 counts denials per stop.
+    """
     negada = False
 
     with transactional():
@@ -133,7 +134,7 @@ def validar_e_reservar(
             select(Viagem)
             .where(Viagem.id == validate_uuid(str(viagem_id), "ID da viagem"))
             .with_for_update(key_share=True)
-            # Quem esperou o lock precisa ver o status gravado por quem o segurava.
+            # Whoever waited for the lock must see the status saved by the lock holder.
             .execution_options(populate_existing=True)
         ).scalar_one_or_none()
         if not viagem:
@@ -167,13 +168,13 @@ def validar_e_reservar(
         if i >= j:
             raise ValidationError("A origem precisa vir antes do destino na ordem do circuito")
 
-        # Redeclarar não pode fazer o aluno concorrer com a própria reserva.
+        # Redeclaring must not make the student compete with their own reservation.
         vetor = _carga(viagem.id, pontos, excluir_solicitacao_id=solicitacao.id)
         negada = max(vetor[i:j]) >= _capacidade(viagem, rota)
 
         if negada and solicitacao.ponto_embarque_id is not None:
-            # Trocar de trajeto não pode custar o lugar já garantido, então essa
-            # tentativa não vira NEGADA.
+            # Changing route must not cost the seat already guaranteed, so this attempt
+            # does not become NEGADA.
             raise ConflictError(
                 "Sem lugar disponível no trecho solicitado; sua reserva anterior foi mantida"
             )

@@ -89,7 +89,6 @@ class UserResponseSchema(BaseSchema):
     role = fields.Method("get_role")
     status = fields.String(attribute="status.value")
     signup_completed_at = fields.DateTime(attribute="signup_completed_at")
-    # Municipality info
     municipio_nome = fields.Method("get_municipio_nome")
     municipio_uf = fields.Method("get_municipio_uf")
 
@@ -105,14 +104,14 @@ class UserResponseSchema(BaseSchema):
     descanso_ate = fields.Method("get_descanso_ate")
 
     def get_status_motorista(self, obj):
-        # Preenchido pelo service (user_service._preencher_status_motoristas)
+        # Filled in by the service (user_service._preencher_status_motoristas)
         status = getattr(obj, "status_motorista", None)
         if status is None:
             return None
         return status.value
 
     def get_descanso_ate(self, obj):
-        # Só mostra enquanto o descanso vale, para nunca exibir um descanso vencido
+        # Only shown while the rest is still in effect, so an expired rest is never displayed
         if self.get_status_motorista(obj) != "EM_DESCANSO_OBRIGATORIO":
             return None
         return obj.descanso_ate.isoformat()

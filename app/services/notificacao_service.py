@@ -86,9 +86,9 @@ class NotificacaoService:
         usuarios_notificados = set()
 
         if rota_id:
-            # Fluxo programado herdado: o público de uma *rota* é a lista de
-            # inscritos. A rodada sob demanda não tem inscrição permanente —
-            # nela o público é o da rodada, endereçado por viagem_id abaixo.
+            # Inherited scheduled flow: a *route*'s audience is its subscriber list. The
+            # on-demand round has no permanent subscription; its audience is the round's,
+            # addressed by viagem_id below.
             inscricoes = RotaAluno.query.filter_by(rota_id=rota_id).all()
             for insc in inscricoes:
                 usuarios_notificados.add(insc.aluno_id)
@@ -98,7 +98,7 @@ class NotificacaoService:
             ).all()
             for conf in confirmados:
                 usuarios_notificados.add(conf.aluno_id)
-            # Sob demanda, antes do fim do buffer o público são as solicitações ativas.
+            # On demand, before the buffer ends, the audience is the active requests.
             solicitacoes = SolicitacaoViagem.query.filter_by(
                 viagem_id=viagem_id, status=StatusSolicitacao.ATIVA
             ).all()
@@ -130,7 +130,7 @@ class NotificacaoService:
 
     @staticmethod
     def listar_notificacoes(user_id: str) -> list[Notificacao]:
-        """Lista avisos do usuário logado"""
+        """List the logged-in user's notices"""
         return (
             Notificacao.query.filter_by(usuario_id=user_id)
             .order_by(Notificacao.created_at.desc())
@@ -153,7 +153,7 @@ class NotificacaoService:
 
     @staticmethod
     def notificar_alunos_viagem_iniciada(viagem_id: str) -> None:
-        """Busca os alunos confirmados na viagem e dispara o aviso de partida."""
+        """Find the students confirmed on the trip and send the departure notice."""
         try:
             confirmados = AlunosConfirmados.query.filter_by(
                 viagem_id=viagem_id, confirmacao=True

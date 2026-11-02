@@ -1,4 +1,4 @@
-"""RF-22 — testes de ingestão e consulta de telemetria da bateria."""
+"""RF-22: battery telemetry ingestion and query tests."""
 
 from datetime import UTC, datetime, timedelta
 
@@ -55,7 +55,7 @@ def test_bateria_fora_da_faixa_retorna_400(app, _db, motorista, onibus):
 
 
 def test_amostra_sem_viagem_e_aceita(app, _db, motorista, onibus):
-    """O veículo fora de operação também reporta — `viagem_id` é opcional."""
+    """A vehicle out of service also reports; `viagem_id` is optional."""
     ts = datetime(2026, 5, 1, 12, 0, tzinfo=UTC)
     resp = motorista.client.post(
         f"{BASE}/ingestao",
@@ -94,7 +94,7 @@ def test_serie_filtra_o_periodo_nos_dois_limites(app, _db, motorista, onibus, ge
     ts = datetime(2026, 5, 1, 12, 0, tzinfo=UTC)
     motorista.client.post(f"{BASE}/ingestao", json=_lote(onibus, ts, 5))
 
-    # Limites inclusivos: pega da amostra 1 até a 3 (minutos 1, 2 e 3).
+    # Inclusive bounds: takes samples 1 to 3 (minutes 1, 2 and 3).
     resp = gestor.client.get(
         f"{BASE}/serie",
         query_string={

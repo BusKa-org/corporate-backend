@@ -1,8 +1,7 @@
-"""Exclusão de conta do passageiro (Art. 18 da LGPD).
+"""Passenger account deletion (LGPD Art. 18).
 
-A linha de usuário é mantida e anonimizada para que o histórico de viagens
-finalizadas continue ligado a um id sem dado pessoal. O que não tem valor
-estatístico é apagado.
+The user row is kept and anonymized so the history of finished trips stays
+linked to an id without personal data. Whatever has no statistical value is deleted.
 """
 
 import hashlib
@@ -60,7 +59,7 @@ def _tem_viagem_em_andamento(aluno_id) -> bool:
 
 
 def _anonimizar(user: User) -> None:
-    """Único lugar que conhece quais campos guardam dado pessoal."""
+    """The only place that knows which fields hold personal data."""
     user.nome = "Usuário removido"
     user.email = f"removido-{user.id}@removido.invalid"
     # ponytail: 40 bits do uuid, colisão vira ConflictError. Coluna cpf é única e obrigatória.
@@ -68,14 +67,14 @@ def _anonimizar(user: User) -> None:
     user.telefone = None
     user.fcm_token = None
     user.receber_notificacoes = False
-    # Valor que nenhum hash válido produz, então o login nunca confere.
+    # A value no valid hash produces, so the login never matches.
     user.senha_hash = "!"
     user.status = UserStatus.DELETED
 
     if isinstance(user, Aluno):
         user.matricula = None
         user.foto_url = None
-        # Dado de saúde (LGPD art. 11), sem valor estatístico depois da exclusão.
+        # Health data (LGPD art. 11), with no statistical value after deletion.
         user.necessidades_acessibilidade = []
         user.observacao_acessibilidade = None
         user.data_nascimento = None
@@ -84,7 +83,7 @@ def _anonimizar(user: User) -> None:
 
 
 def _apagar_ponto_casa(user: User) -> None:
-    """Latitude, longitude e endereço da casa do aluno não têm valor estatístico."""
+    """The student's home latitude, longitude and address have no statistical value."""
     if not isinstance(user, Aluno) or user.ponto_casa_id is None:
         return
     ponto_id = user.ponto_casa_id
@@ -100,7 +99,7 @@ def _apagar_dados_sem_valor_estatistico(aluno_id) -> None:
     PasswordResetToken.query.filter_by(user_id=aluno_id).delete()
     RotaAluno.query.filter_by(aluno_id=aluno_id).delete()
 
-    # Presença em viagem finalizada fica (estatística). O resto sai.
+    # Presence on a finished trip stays (statistics). The rest goes.
     viagens_finalizadas = db.session.query(Viagem.id).filter(
         Viagem.status == StatusViagem.FINALIZADA
     )
@@ -126,13 +125,13 @@ def _solicitacoes_ativas(aluno_id) -> list[SolicitacaoViagem]:
 
 
 def excluir_conta(user_id: str, email: str, senha: str) -> None:
-    # Ordem de locks do resto do sistema: veículo e viagem antes do aluno.
+    # Same lock order as the rest of the system: vehicle and trip before the student.
     viagens_travadas: dict[uuid.UUID, Viagem] = {}
     for solicitacao in _solicitacoes_ativas(user_id):
         viagem = solicitacoes_service.travar_viagem(solicitacao.viagem)
         viagens_travadas[viagem.id] = viagem
 
-    # Trava a conta: um segundo pedido simultâneo espera e já vê a conta anonimizada.
+    # Lock the account: a second simultaneous request waits and already sees it anonymized.
     db.session.execute(select(User.id).where(User.id == user_id).with_for_update(key_share=True))
     user = db.session.get(User, user_id, populate_existing=True)
     if user is None:
@@ -155,13 +154,13 @@ def excluir_conta(user_id: str, email: str, senha: str) -> None:
     if _tem_viagem_em_andamento(user.id):
         raise ConflictError(EM_VIAGEM)
 
-    # Com a conta travada nenhuma solicitação nova aparece; relê as que já existem.
+    # With the account locked no new request appears; re-read the existing ones.
     solicitacoes = _solicitacoes_ativas(user.id)
     for solicitacao in solicitacoes:
         travada = viagens_travadas.get(solicitacao.viagem_id)
         if travada is None:
-            # Entrou numa viagem entre a leitura e o lock: não dá para travá-la agora sem
-            # inverter a ordem dos locks.
+            # Joined a trip between the read and the lock: it cannot be locked now without
+            # inverting the lock order.
             raise ConflictError("Sua solicitação de viagem mudou. Tente novamente.")
         if travada.status == StatusViagem.EM_ANDAMENTO:
             raise ConflictError(EM_VIAGEM)
@@ -170,8 +169,8 @@ def excluir_conta(user_id: str, email: str, senha: str) -> None:
     aluno_id = user.id
 
     with transactional():
-        # Mesmo efeito de DELETE /v1/viagens/<id>/solicitacao: devolve o trecho e cancela a
-        # viagem que fica sem ninguém.
+        # Same effect as DELETE /v1/viagens/<id>/solicitacao: gives the leg back and
+        # cancels the trip left with no one.
         for solicitacao in solicitacoes:
             solicitacoes_service.cancelar_na_viagem_travada(
                 user, viagens_travadas[solicitacao.viagem_id]
@@ -191,13 +190,13 @@ def excluir_conta(user_id: str, email: str, senha: str) -> None:
         )
         _anonimizar(user)
 
-    # Depois do commit: se a transação falhar, a foto continua valendo.
+    # After the commit: if the transaction fails, the photo is still valid.
     try:
         apagar_foto(str(aluno_id))
     except OSError:
         logger.exception("Falha ao apagar a foto do usuário %s", aluno_id)
 
-    # Só o id, nunca o e-mail (o e-mail original não pode virar novo vestígio no log).
+    # Only the id, never the e-mail (the original e-mail must not leave a new trace in the log).
     audit_logger.log_user_action(
         action="delete_account", user_id=str(aluno_id), resource_type="user"
     )
@@ -219,20 +218,20 @@ def excluir_conta(user_id: str, email: str, senha: str) -> None:
 
 
 def _hash_irreversivel(valor: str) -> str:
-    """Hash SHA-256 com sal aleatório que é descartado.
+    """SHA-256 hash with a random salt that is thrown away.
 
-    Hash puro do CPF seria reversível por força bruta (são só cerca de 10^9 CPFs possíveis).
-    Com o sal jogado fora, ninguém recupera o valor e ninguém consegue conferir um palpite.
+    A plain CPF hash could be brute-forced (there are only about 10^9 possible CPFs).
+    With the salt discarded, no one can recover the value or check a guess.
     """
     sal = secrets.token_bytes(16)
     return hashlib.sha256(sal + valor.encode()).hexdigest()
 
 
 def anonimizar_retencoes_vencidas() -> int:
-    """Troca e-mail e CPF retidos por hashes quando o prazo de retenção acabou.
+    """Replace retained e-mail and CPF with hashes once the retention period is over.
 
-    Devolve quantas linhas foram anonimizadas. Roda uma vez a cada 3 meses e pode rodar de
-    novo sem efeito nas linhas que já foram anonimizadas.
+    Returns how many rows were anonymized. Runs every 3 months and is safe to
+    re-run on rows already anonymized.
     """
     agora = datetime.now(UTC)
     vencidas = (

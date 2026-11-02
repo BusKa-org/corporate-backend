@@ -1,4 +1,4 @@
-"""RF-22 — documentação dos endpoints de telemetria da bateria."""
+"""Battery telemetry endpoint documentation models (RF-22)."""
 
 from flask_restx import fields
 

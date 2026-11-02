@@ -59,7 +59,7 @@ def test_historico_de_direcao_bloqueia_mesmo_ativo(_db, motorista):
 
 
 def test_fora_do_dia_de_trabalho(app, _db, motorista):
-    # 2026-01-05 é segunda-feira
+    # 2026-01-05 is a Monday
     agora = datetime(2026, 1, 5, 12, 0, tzinfo=ZoneInfo(app.config["TIMEZONE"]))
     motorista.user.dias_trabalho = ["TER"]
 

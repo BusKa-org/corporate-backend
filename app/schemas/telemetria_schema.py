@@ -1,4 +1,4 @@
-"""RF-22 — schemas de telemetria da bateria do veículo elétrico."""
+"""Electric vehicle battery telemetry schemas (RF-22)."""
 
 from datetime import UTC
 
@@ -12,12 +12,12 @@ from app.schemas.common import BaseSchema
 
 
 class AmostraTelemetriaSchema(BaseSchema):
-    """Uma leitura do veículo.
+    """One vehicle reading.
 
-    O `timestamp` é obrigatório: além de ser o eixo da série temporal, é metade
-    da chave natural usada para deduplicar reenvios (ver `telemetria_service`).
-    As faixas aqui reproduzem o CHECK do banco, para que uma amostra inválida
-    volte como 400 e não como 500 vindo do Postgres.
+    `timestamp` is required: besides being the time series axis, it is half of the
+    natural key used to dedupe resends (see `telemetria_service`). The ranges here
+    mirror the database CHECK, so an invalid sample returns 400 instead of a 500
+    from Postgres.
     """
 
     timestamp = fields.AwareDateTime(required=True, default_timezone=UTC)
@@ -34,8 +34,9 @@ class AmostraTelemetriaSchema(BaseSchema):
 
 
 class IngestaoTelemetriaRequestSchema(BaseSchema):
-    """Lote de amostras de um único veículo — o leitor embarcado acumula e envia
-    várias de uma vez quando recupera conectividade."""
+    """Batch of samples from a single vehicle: the onboard reader accumulates them and
+    sends several at once when it regains connectivity.
+    """
 
     veiculo_id = fields.UUID(required=True)
     amostras = fields.List(
@@ -44,7 +45,7 @@ class IngestaoTelemetriaRequestSchema(BaseSchema):
 
 
 class PeriodoQuerySchema(BaseSchema):
-    """Filtro de período das consultas (ambos os limites inclusivos)."""
+    """Period filter for the queries (both bounds inclusive)."""
 
     veiculo_id = fields.UUID(required=False, load_default=None)
     inicio = fields.AwareDateTime(required=False, load_default=None, default_timezone=UTC)

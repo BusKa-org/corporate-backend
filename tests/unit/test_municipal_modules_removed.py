@@ -16,7 +16,8 @@ def test_agendamento_tasks_module_is_gone():
 
 def test_subscription_management_endpoints_are_gone(client):
     """Join/leave a route is municipal; DRT replaces it with per-trip declaration.
-    The RotaAluno roster itself stays until the lifecycle refactor replaces it."""
+    The RotaAluno roster itself stays until the lifecycle refactor replaces it.
+    """
     import uuid
 
     assert client.post(f"/v1/rotas/{uuid.uuid4()}/inscricao").status_code == 404

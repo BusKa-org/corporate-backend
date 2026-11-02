@@ -1,5 +1,6 @@
-"""Relógio da aplicação. Chame sempre pelo módulo (tempo.agora_utc()) para os testes
-conseguirem fixar a hora com monkeypatch em um único lugar."""
+"""Application clock. Always call it through the module (tempo.agora_utc()) so tests
+can pin the time with monkeypatch in a single place.
+"""
 
 from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
@@ -12,6 +13,6 @@ def agora_utc() -> datetime:
 
 
 def agora_local() -> datetime:
-    """Hora na organização, usada para casar com as janelas de disponibilidade."""
+    """Time at the organization, used to match the availability windows."""
     fuso = ZoneInfo(current_app.config.get("TIMEZONE", "America/Sao_Paulo"))
     return agora_utc().astimezone(fuso)

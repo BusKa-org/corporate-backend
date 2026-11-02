@@ -1,9 +1,9 @@
-"""Apoio aos testes de condição de corrida.
+"""Support for race condition tests.
 
-O fixture `_db` da suíte já grava de verdade (create_all/commit/drop_all, sem
-transação revertida no fim), então uma thread enxerga o que a outra commitou.
-Basta cada thread abrir o próprio contexto da aplicação: com ele vêm uma sessão
-e uma conexão só dela, e a disputa acontece no Postgres, como em produção.
+The suite's `_db` fixture really writes (create_all/commit/drop_all, no
+transaction rolled back at the end), so one thread sees what the other
+committed. Each thread opens its own app context, with its own session and
+connection, and the race happens in Postgres, as in production.
 """
 
 import threading
@@ -20,13 +20,13 @@ from tests.factories.user_factory import AlunoFactory
 
 
 def ao_mesmo_tempo(app, tarefas: list[Callable[[], Any]]) -> list[Any]:
-    """Roda cada tarefa na sua thread, todas soltas juntas por uma barreira.
+    """Run each task in its own thread, all released together by a barrier.
 
-    Devolve o resultado de cada tarefa, na ordem da lista. Uma exceção não
-    tratada vira o próprio resultado, para o teste mostrar o que deu errado.
+    Returns each task's result, in list order. An unhandled exception becomes the
+    result itself, so the test shows what went wrong.
     """
-    # Sem a barreira uma thread terminaria antes da outra começar e o teste
-    # viraria um caso sequencial.
+    # Without the barrier one thread would finish before the other starts and the
+    # test would become a sequential case.
     largada = threading.Barrier(len(tarefas), timeout=10)
     resultados: list[Any] = [None] * len(tarefas)
 
@@ -51,7 +51,7 @@ def ao_mesmo_tempo(app, tarefas: list[Callable[[], Any]]) -> list[Any]:
 
 
 def status_de(respostas: list[Any]) -> list[int]:
-    """Os status HTTP das respostas, em ordem crescente."""
+    """The HTTP statuses of the responses, in ascending order."""
     codigos = []
     for resposta in respostas:
         assert not isinstance(resposta, Exception), f"a thread levantou {resposta!r}"
@@ -61,7 +61,7 @@ def status_de(respostas: list[Any]) -> list[int]:
 
 @pytest.fixture()
 def novo_aluno(client, app, _db, organizacao):
-    """Fábrica de alunos com o termo aceito, para testes que precisam de vários."""
+    """Factory of students with the terms accepted, for tests that need several."""
 
     def criar() -> Actor:
         u = AlunoFactory(organizacao_id=organizacao.id)

@@ -1,4 +1,4 @@
-"""Janelas de disponibilidade do veículo (RF-05)."""
+"""Vehicle availability windows (RF-05)."""
 
 from datetime import datetime, time
 from typing import Any
@@ -17,7 +17,7 @@ from app.utils.validators import validate_uuid
 
 
 def buscar_janela_ativa(onibus_id, momento_local: datetime) -> JanelaDisponibilidade | None:
-    """Janela do veículo que contém o momento. Início inclusivo, fim exclusivo."""
+    """The vehicle's window containing the moment. Start inclusive, end exclusive."""
     dia = _get_dia_semana_enum(momento_local.date())
     hora = momento_local.time().replace(tzinfo=None)
     return (
@@ -41,9 +41,7 @@ def listar_janelas_do_dia(onibus_id, dia: DiaDaSemana) -> list[JanelaDisponibili
     )
 
 
-# ==========================================
-# CRUD das janelas (gestor)
-# ==========================================
+# Window CRUD (manager)
 
 ORDEM_DIAS = list(DiaDaSemana)
 
@@ -55,7 +53,7 @@ def _exigir_gestor(user_id: str) -> None:
 
 
 def listar_janelas(user_id: str, onibus_id: str) -> list[JanelaDisponibilidade]:
-    """Janelas do veículo, por dia da semana (SEG..DOM) e hora de início."""
+    """The vehicle's windows, by weekday (SEG..DOM) and start time."""
     onibus = onibus_service.get_by_id(user_id, onibus_id)
     janelas = (
         db.session.query(JanelaDisponibilidade)
@@ -63,7 +61,7 @@ def listar_janelas(user_id: str, onibus_id: str) -> list[JanelaDisponibilidade]:
         .order_by(JanelaDisponibilidade.hora_inicio)
         .all()
     )
-    # sort estável: mantém a ordem por hora dentro de cada dia
+    # stable sort: keeps the hour order within each day
     janelas.sort(key=lambda janela: ORDEM_DIAS.index(janela.dia))
     return janelas
 
@@ -83,8 +81,7 @@ def _existe_sobreposicao(filtro, dia: DiaDaSemana, hora_inicio: time, hora_fim: 
 
 
 def criar_janela(user_id: str, onibus_id: str, data: dict[str, Any]) -> JanelaDisponibilidade:
-    """
-    Cria uma janela de disponibilidade (gestor only).
+    """Create an availability window (gestor only).
 
     Raises: ForbiddenError, NotFoundError, ValidationError, ConflictError
     """
@@ -106,7 +103,7 @@ def criar_janela(user_id: str, onibus_id: str, data: dict[str, Any]) -> JanelaDi
         raise ValidationError("Motorista sem cadastro ativo")
 
     with transactional():
-        # Trava veículo e motorista para que criações concorrentes não furem a checagem de conflito
+        # Lock vehicle and driver so concurrent creations cannot slip past the conflict check
         db.session.execute(select(Onibus.id).where(Onibus.id == onibus.id).with_for_update())
         db.session.execute(select(User.id).where(User.id == motorista.id).with_for_update())
 
@@ -132,8 +129,7 @@ def criar_janela(user_id: str, onibus_id: str, data: dict[str, Any]) -> JanelaDi
 
 
 def remover_janela(user_id: str, onibus_id: str, janela_id: str) -> None:
-    """
-    Remove uma janela do veículo (gestor only).
+    """Remove a window from the vehicle (gestor only).
 
     Raises: ForbiddenError, NotFoundError
     """

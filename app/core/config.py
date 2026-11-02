@@ -55,11 +55,11 @@ class Settings:
         # Frontend URL (used for links in invitation e-mails)
         self.FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:8081")
 
-        # Link de download do app, incluído no e-mail de convite (opcional)
+        # App download link, included in the invite e-mail (optional)
         self.APP_DOWNLOAD_URL = os.getenv("APP_DOWNLOAD_URL", "")
 
-        # Fuso da organização: hora local das janelas de disponibilidade (RF-05) e da
-        # jornada do motorista.
+        # Organization time zone: local time of the availability windows (RF-05) and of
+        # the driver's working hours.
         self.TIMEZONE = os.getenv("TIMEZONE", "America/Sao_Paulo")
         try:
             ZoneInfo(self.TIMEZONE)
@@ -67,8 +67,8 @@ class Settings:
             self._errors.append(f"TIMEZONE is not a valid IANA timezone: '{self.TIMEZONE}'")
             self.TIMEZONE = "UTC"
 
-        # Intervalos dos jobs de viagem sob demanda: fechar buffer expirado e
-        # avisar o gestor quando o motorista estoura o prazo de início (RF-11)
+        # Intervals of the on-demand trip jobs: close expired buffers and alert the
+        # manager when the driver misses the start deadline (RF-11)
         self.JOB_BUFFER_INTERVALO_SEGUNDOS = self._get_int(
             "JOB_BUFFER_INTERVALO_SEGUNDOS", default=30, min_val=5, max_val=3600
         )
@@ -76,8 +76,8 @@ class Settings:
             "JOB_PRAZO_INICIO_INTERVALO_SEGUNDOS", default=60, min_val=5, max_val=3600
         )
 
-        # Rotas sob demanda (RF-11): duração do buffer e prazo do motorista para iniciar,
-        # em minutos. O padrão vale quando o gestor cria a rota sem informar o valor.
+        # On-demand routes (RF-11): buffer length and driver start deadline, in minutes.
+        # The default applies when the manager creates the route without a value.
         self.ROTA_BUFFER_MINUTOS_MAX = self._get_int(
             "ROTA_BUFFER_MINUTOS_MAX", default=30, min_val=1, max_val=1440
         )
@@ -94,55 +94,54 @@ class Settings:
             max_val=self.ROTA_PRAZO_INICIO_MINUTOS_MAX,
         )
 
-        # Jornada do motorista. Padrão do CTB (Lei 9.503/97) art. 67-C §1º-A, incluído pela
-        # Lei 13.103/2015: no transporte de passageiros, 30 min de descanso a cada 4 h de
-        # direção (fracionamento permitido).
+        # Driver working hours. CTB (Law 9.503/97) art. 67-C §1-A, added by Law
+        # 13.103/2015: in passenger transport, 30 min rest every 4 h of driving (may be split).
         self.MOTORISTA_HORAS_MAX_DIRECAO = self._get_int(
             "MOTORISTA_HORAS_MAX_DIRECAO", default=4, min_val=1, max_val=24
         )
         self.MOTORISTA_DESCANSO_MINUTOS = self._get_int(
             "MOTORISTA_DESCANSO_MINUTOS", default=30, min_val=1, max_val=1440
         )
-        # Fotos dos alunos (RF-15/RF-17). Vazio = <instance_path>/fotos_aluno.
+        # Student photos (RF-15/RF-17). Empty = <instance_path>/fotos_aluno.
         self.FOTOS_ALUNO_DIR = os.getenv("FOTOS_ALUNO_DIR", "")
         self.FOTO_ALUNO_MAX_BYTES = self._get_int(
             "FOTO_ALUNO_MAX_BYTES", default=5 * 1024 * 1024, min_val=1024
         )
-        # Largura x altura. 25 MP cobre foto de celular e barra imagem pequena em bytes
-        # que ocupa gigabytes de memória ao ser aberta (bomba de descompressão).
+        # Width x height. 25 MP covers phone photos and blocks images small in bytes
+        # that take gigabytes of memory once opened (decompression bomb).
         self.FOTO_ALUNO_MAX_PIXELS = self._get_int(
             "FOTO_ALUNO_MAX_PIXELS", default=25_000_000, min_val=1
         )
 
-        # QR dinâmico de embarque (RF-15): código TOTP (RFC 6238) que muda a cada passo.
-        # A janela aceita até N passos antes ou depois do relógio do servidor.
+        # Dynamic boarding QR (RF-15): TOTP code (RFC 6238) that changes every step.
+        # The window accepts up to N steps before or after the server clock.
         self.QR_PASSO_SEGUNDOS = self._get_int(
             "QR_PASSO_SEGUNDOS", default=30, min_val=5, max_val=300
         )
         self.QR_DIGITOS = self._get_int("QR_DIGITOS", default=6, min_val=6, max_val=8)
         self.QR_JANELA_PASSOS = self._get_int("QR_JANELA_PASSOS", default=1, min_val=0, max_val=10)
-        # Fila offline (RF-18): quanto o relógio do app do motorista pode estar adiantado.
+        # Offline queue (RF-18): how far ahead the driver app's clock may be.
         self.SYNC_TOLERANCIA_SEGUNDOS = self._get_int(
             "SYNC_TOLERANCIA_SEGUNDOS", default=120, min_val=0, max_val=3600
         )
 
-        # PIN do convite: erros somados de todos os PINs até o PIN entrar em pausa.
+        # Invite PIN: errors summed across all PINs before the PIN is locked.
         self.CONVITE_PIN_MAX_ERROS_TOTAL = self._get_int(
             "CONVITE_PIN_MAX_ERROS_TOTAL", default=20, min_val=5, max_val=1000
         )
-        # Minutos de pausa do PIN depois desse limite; no fim da pausa os erros zeram.
+        # Minutes the PIN stays locked after that limit; errors reset when it ends.
         self.CONVITE_PIN_BLOQUEIO_MINUTOS = self._get_int(
             "CONVITE_PIN_BLOQUEIO_MINUTOS", default=60, min_val=1, max_val=1440
         )
 
-        # Rate limit (Flask-Limiter). Formato do limite: "10 per minute", "2000 per hour".
+        # Rate limit (Flask-Limiter). Limit format: "10 per minute", "2000 per hour".
         self.RATELIMIT_ENABLED = os.getenv("RATELIMIT_ENABLED", "true").lower() == "true"
-        # memory:// conta separado em cada worker do gunicorn; produção usa Redis.
+        # memory:// counts separately in each gunicorn worker; production uses Redis.
         self.RATELIMIT_STORAGE_URI = os.getenv("RATELIMIT_STORAGE_URI", "memory://")
         self.RATELIMIT_DEFAULT = self._get_rate_limit("RATELIMIT_DEFAULT", "2000 per hour")
         self.RATELIMIT_AUTH = self._get_rate_limit("RATELIMIT_AUTH", "10 per minute")
         self.RATELIMIT_SENSITIVE = self._get_rate_limit("RATELIMIT_SENSITIVE", "5 per minute")
-        # GPS, telemetria e embarque mandam muitas requisições seguidas do mesmo usuário.
+        # GPS, telemetry and boarding send many requests in a row from the same user.
         self.RATELIMIT_REALTIME = self._get_rate_limit("RATELIMIT_REALTIME", "120 per minute")
         if (
             not self.DEBUG
