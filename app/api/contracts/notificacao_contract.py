@@ -30,6 +30,6 @@ def get_notificacao_response_model(api):
             "titulo": fields.String(description="Título"),
             "mensagem": fields.String(description="Mensagem"),
             "enviada": fields.Boolean(description="Push enviado"),
-            "data_envio": fields.String(description="Data de envio"),
+            "data_envio": fields.String(description="Data de envio (ISO 8601) ou null"),
         },
     )

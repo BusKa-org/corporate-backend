@@ -2,6 +2,8 @@
 
 from flask_restx import fields
 
+from app.models.enum import TipoInstituicao
+
 
 def register_models(api):
     """Register instituicao models with the API namespace."""
@@ -14,8 +16,20 @@ def register_models(api):
             "bairro": fields.String(description="Bairro"),
             "cidade": fields.String(description="Cidade"),
             "cep": fields.String(description="CEP"),
-            "latitude": fields.Float(description="Latitude"),
-            "longitude": fields.Float(description="Longitude"),
+            "latitude": fields.Float(required=True, description="Latitude"),
+            "longitude": fields.Float(required=True, description="Longitude"),
+        },
+    )
+
+    # Endereco has no coordinates; they come from the ponto (top-level latitude/longitude).
+    instituicao_endereco_response = api.model(
+        "InstituicaoEnderecoResponse",
+        {
+            "logradouro": fields.String(description="Logradouro"),
+            "numero": fields.String(description="Número"),
+            "bairro": fields.String(description="Bairro"),
+            "cidade": fields.String(description="Cidade"),
+            "cep": fields.String(description="CEP"),
         },
     )
 
@@ -26,8 +40,8 @@ def register_models(api):
             "cnpj": fields.String(required=True, description="CNPJ"),
             "tipo": fields.String(
                 required=True,
-                description="Tipo (INSTITUTO_FEDERAL, UNIVERSIDADE_PUBLICA, UNIVERSIDADE_PRIVADA, "
-                "ESCOLA_PUBLICA, ESCOLA_PRIVADA, ESCOLA_COMUNITARIA)",
+                enum=[t.name for t in TipoInstituicao],
+                description="Nome do tipo (TipoInstituicao)",
             ),
             "endereco": fields.Nested(
                 instituicao_endereco_input, required=True, description="Endereço"
@@ -44,7 +58,7 @@ def register_models(api):
             "sigla": fields.String(description="Sigla"),
             "uf": fields.String(description="UF"),
             "tipo": fields.String(description="Tipo"),
-            "endereco": fields.Nested(instituicao_endereco_input, description="Endereço"),
+            "endereco": fields.Nested(instituicao_endereco_response, description="Endereço"),
             "latitude": fields.Float(description="Latitude"),
             "longitude": fields.Float(description="Longitude"),
         },
