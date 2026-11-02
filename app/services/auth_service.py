@@ -1,5 +1,6 @@
 """Authentication service - login and registration."""
 
+import html
 import logging
 import secrets
 from datetime import UTC, datetime, timedelta
@@ -301,7 +302,7 @@ def request_password_reset(email_raw: str) -> None:
         "Equipe BusKá"
     )
     body_html = (
-        f"<p>Olá, {user.nome}.</p>"
+        f"<p>Olá, {html.escape(user.nome)}.</p>"
         "<p>Você solicitou a recuperação de senha no BusKá.</p>"
         f'<p><a href="{link}">Redefinir senha</a> (válido por 1 hora)</p>'
         "<p>Se não foi você, ignore este e-mail.</p>"
