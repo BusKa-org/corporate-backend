@@ -65,17 +65,15 @@ of how §2 resolves.
 
 ### 3.1 Current module manifest (`app/models`)
 
-Three of the four originally mixed files are now split, resolving the
-archaeology problem above for the model layer. Added 2026-09-09.
+The split of the mixed model files has not landed: BusKá-only classes still
+share files with the Background IP ones.
 
 | File | Owner | Notes |
 |---|---|---|
-| `user.py` | Background IP | `User`, `Motorista`, `Gestor` |
-| `aluno.py` | BusKá only | `Aluno`, split out of `user.py`, still a `User` subclass |
-| `geo.py` | Background IP | `Ponto`, `Endereco` |
-| `instituicao.py` | BusKá only | `Instituicao`, `TipoInstituicao`, split out of `geo.py` |
-| `enum.py` | Background IP | `TipoInstituicao` moved out to `instituicao.py` |
-| `organizacao.py`, `rota.py`, `viagem.py`, `onibus.py`, `notificacao.py`, `password_reset.py` | Background IP | unmixed already |
+| `user.py` | mixed | `User`, `Motorista`, `Gestor` (Background IP) and `Aluno` (BusKá only, a `User` subclass) |
+| `geo.py` | mixed | `Ponto`, `Endereco` (Background IP) and `Instituicao` (BusKá only) |
+| `enum.py` | mixed | shared enums plus `TipoInstituicao` (BusKá only) |
+| `organizacao.py`, `rota.py`, `viagem.py`, `onibus.py`, `notificacao.py`, `password_reset.py` | Background IP | unmixed |
 
 `app/__init__.py` is the fourth file the earlier inventory flagged as mixed.
 It still hardcodes the product's own namespaces (`aluno`, `instituicao`
@@ -237,5 +235,5 @@ the one place this plan still leaves duplication in place on purpose.
 - **Telemetry device auth.** The van's telemetry reader needs a long-lived
   token with no rotation or revocation path today, per `mebuska-deploy`'s own
   README. Needs a device-identity concept before production.
-- **Alembic downgrade-to-base.** Known broken migration artifact inherited
-  from `municipal-backend`; low priority, documented in `docs/migrations.md`.
+- **Alembic downgrade-to-base.** Fixed here (see `docs/migrations.md`); the
+  same inherited defect is still open in `municipal-backend`.

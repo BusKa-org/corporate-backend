@@ -16,12 +16,12 @@ Flask API for on-demand corporate transport (DRT).
 git clone https://github.com/BusKa-org/corporate-backend.git
 cd corporate-backend
 
-# Full setup (venv + dependencies + database + docker)
-chmod +x setup.sh start.sh
-./start.sh
+# Full setup (venv + dependencies + database), then starts the server
+chmod +x setup.sh
+./setup.sh
 
 # To reset the database
-./start.sh -e clean_database=true
+./setup.sh -e clean_database=true
 ```
 
 The API will be available at: **http://localhost:5000/docs**
@@ -77,7 +77,11 @@ make db-create      # Start the database and apply migrations
 make seed           # Seed sample data
 make db-reset       # Wipe the database
 make db-shell       # Connect to the database via psql
+make scheduler      # Run the scheduler jobs in a separate process (next to `make run`)
+make docs-openapi   # Export the OpenAPI spec to docs/openapi.json
 ```
+
+Run `make help` for the full list.
 
 ### Docker (Production)
 
@@ -86,6 +90,7 @@ make docker-build   # Build the image
 make docker-up      # Bring up containers (port 5000)
 make docker-down    # Stop containers
 make docker-logs    # Tail logs
+make docker-init-db # Extension + migrations + seed (idempotent)
 make docker-clean   # Clean up everything (volumes + images)
 ```
 
@@ -95,17 +100,21 @@ make docker-clean   # Clean up everything (volumes + images)
 mebuska-corporate/
 ├── app/                    # Application code
 │   ├── api/
-│   │   ├── controllers/    # Endpoint logic
-│   │   └── routes/         # Route definitions
+│   │   ├── controllers/    # Flask-RESTX endpoints
+│   │   └── contracts/      # Swagger models (documentation only)
 │   ├── core/
-│   │   ├── auth.py         # JWT authentication
-│   │   └── config.py       # Configuration
+│   │   ├── config.py       # Configuration
+│   │   ├── exceptions.py   # Typed exceptions
+│   │   └── error_handlers.py
 │   ├── models/             # SQLAlchemy models
-│   └── services/           # Business logic services
+│   ├── schemas/            # Marshmallow validation + serialization
+│   ├── services/           # Business logic services
+│   └── tasks/              # Scheduler jobs
 ├── database/               # SQL scripts
 │   ├── init.sql            # Schema and extensions
 ├── docs/                   # API documentation
-│   └── endpoints/          # YAML specs (Swagger)
+│   ├── openapi.json        # Exported spec (`make docs-openapi`)
+│   └── endpoints/          # Legacy YAML specs, not loaded by the app
 ├── infra/
 │   ├── database.yml        # Docker Compose (dev)
 │   └── terraform/          # Infrastructure (OpenStack)
@@ -118,7 +127,6 @@ mebuska-corporate/
 ├── docker-compose.prod.yml # Orchestration (prod)
 ├── Makefile                # Command automation
 ├── setup.sh                # Automated setup
-├── start.sh                # Setup + Docker
 └── pyproject.toml          # Python dependencies
 ```
 
@@ -134,10 +142,12 @@ DB_NAME=buska_db
 
 # API
 API_PORT=5000
-DEBUG=false
+FLASK_ENV=production
 JWT_SECRET_KEY=a_long_random_jwt_secret
 JWT_EXPIRES_HOURS=2
 ```
+
+Every setting, with its default, is in `.env.example` (read by `app/core/config.py`).
 
 ### Deploy (GitHub Actions)
 
@@ -160,14 +170,14 @@ refuses to start.
 ### API Documentation
 Full interactive API documentation is available at:
 - **Swagger UI**: http://localhost:5000/docs
-- **ReDoc**: http://localhost:5000/redoc
+- **OpenAPI JSON**: http://localhost:5000/openapi.json
 
 Main endpoints:
-- `POST /auth/login` - Authenticate
-- `POST /auth/register` - Create an account
-- `GET /rotas` - List routes
-- `GET /viagens` - List trips
-- `GET /me` - Authenticated user's data
+- `POST /v1/auth/login` - Authenticate
+- `POST /v1/convites/aceite/<token>` - Create an account from an invitation
+- `GET /v1/rotas/` - List routes
+- `GET /v1/viagens/` - List trips
+- `GET /v1/users/me` - Authenticated user's data
 
 ## 🔒 Security
 
@@ -204,12 +214,14 @@ ansible-playbook ansible/deploy-prod.yml
 ### Local Docker
 
 ```bash
-./start.sh
+ansible-playbook -i ansible/hosts.ini ansible/run-docker.yml
 ```
 
 Containers started:
 - `buska_api` - Flask API with Gunicorn (port 5000)
+- `buska_scheduler` - scheduler jobs
 - `buska_db_prod` - PostgreSQL + PostGIS (port 5432)
+- `buska_redis` - rate limit counters
 
 ## 🐛 Troubleshooting
 
@@ -221,8 +233,8 @@ pip install -e "."
 
 ### Logs aren't in a readable format
 ```bash
-# Add DEBUG=true to .env
-echo "DEBUG=true" >> .env
+# Readable logs are the development format: set FLASK_ENV=development in .env
+echo "FLASK_ENV=development" >> .env
 
 # Clear cache and restart
 find . -type d -name "__pycache__" -exec rm -r {} +
