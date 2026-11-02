@@ -201,10 +201,42 @@
       }
     },
     "/v1/consentimento": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "Aceite registrado",
+            "schema": {
+              "$ref": "#/definitions/ConsentimentoEstadoResponse"
+            }
+          },
+          "400": {
+            "description": "Versão do termo inválida"
+          }
+        },
+        "summary": "Registra o aceite da versão vigente do termo",
+        "description": "Corpo: {\"versao\": \"...\"}",
+        "operationId": "aceitar_consentimento",
+        "parameters": [
+          {
+            "name": "payload",
+            "required": true,
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/AceiteConsentimentoRequest"
+            }
+          }
+        ],
+        "tags": [
+          "consentimento"
+        ]
+      },
       "delete": {
         "responses": {
           "200": {
-            "description": "Consentimento revogado"
+            "description": "Consentimento revogado",
+            "schema": {
+              "$ref": "#/definitions/ConsentimentoEstadoResponse"
+            }
           },
           "409": {
             "description": "Não há consentimento vigente"
@@ -220,7 +252,10 @@
       "get": {
         "responses": {
           "200": {
-            "description": "Estado do consentimento do usuário logado"
+            "description": "Estado do consentimento do usuário logado",
+            "schema": {
+              "$ref": "#/definitions/ConsentimentoEstadoResponse"
+            }
           }
         },
         "summary": "Versão vigente do termo e se o usuário logado ainda precisa aceitar",
@@ -228,45 +263,16 @@
         "tags": [
           "consentimento"
         ]
-      },
-      "post": {
-        "responses": {
-          "200": {
-            "description": "Aceite registrado"
-          },
-          "400": {
-            "description": "Versão do termo inválida"
-          }
-        },
-        "summary": "Registra o aceite da versão vigente do termo",
-        "description": "Corpo: {\"versao\": \"...\"}",
-        "operationId": "aceitar_consentimento",
-        "tags": [
-          "consentimento"
-        ]
       }
     },
     "/v1/convites": {
-      "get": {
-        "responses": {
-          "200": {
-            "description": "Convites da organização"
-          },
-          "403": {
-            "description": "Não é gestor"
-          }
-        },
-        "summary": "(Gestor) Lista os convites da organização",
-        "description": "Filtro opcional: ?estado=",
-        "operationId": "listar_convites",
-        "tags": [
-          "convites"
-        ]
-      },
       "post": {
         "responses": {
           "200": {
-            "description": "Resultado por linha"
+            "description": "Resultado por linha",
+            "schema": {
+              "$ref": "#/definitions/ConvitesCreateResponse"
+            }
           },
           "400": {
             "description": "Lote inválido"
@@ -278,6 +284,43 @@
         "summary": "(Gestor) Convida por e-mail, até 500 por chamada",
         "description": "Corpo: {\"convites\": [{\"email\", ...}]}",
         "operationId": "criar_convites",
+        "parameters": [
+          {
+            "name": "payload",
+            "required": true,
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/ConvitesCreateRequest"
+            }
+          }
+        ],
+        "tags": [
+          "convites"
+        ]
+      },
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Convites da organização",
+            "schema": {
+              "$ref": "#/definitions/ConviteListResponse"
+            }
+          },
+          "403": {
+            "description": "Não é gestor"
+          }
+        },
+        "summary": "(Gestor) Lista os convites da organização",
+        "description": "Filtro opcional: ?estado=",
+        "operationId": "listar_convites",
+        "parameters": [
+          {
+            "in": "query",
+            "description": "PENDENTE, CONCLUIDO ou CANCELADO",
+            "name": "estado",
+            "type": "string"
+          }
+        ],
         "tags": [
           "convites"
         ]
@@ -292,21 +335,6 @@
           "type": "string"
         }
       ],
-      "get": {
-        "responses": {
-          "200": {
-            "description": "Dados do convite"
-          },
-          "404": {
-            "description": "Convite inválido ou expirado"
-          }
-        },
-        "summary": "(Público) Dados preenchidos pelo gestor e os campos que ainda faltam",
-        "operationId": "consultar_convite",
-        "tags": [
-          "convites"
-        ]
-      },
       "post": {
         "responses": {
           "201": {
@@ -325,6 +353,34 @@
         "summary": "(Público) Conclui o cadastro",
         "description": "Corpo: nome, cpf, telefone, instituicao_id, senha,\nnecessidades_acessibilidade, observacao_acessibilidade",
         "operationId": "concluir_convite",
+        "parameters": [
+          {
+            "name": "payload",
+            "required": true,
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/ConviteAceiteRequest"
+            }
+          }
+        ],
+        "tags": [
+          "convites"
+        ]
+      },
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Dados do convite",
+            "schema": {
+              "$ref": "#/definitions/ConviteDadosResponse"
+            }
+          },
+          "404": {
+            "description": "Convite inválido ou expirado"
+          }
+        },
+        "summary": "(Público) Dados preenchidos pelo gestor e os campos que ainda faltam",
+        "operationId": "consultar_convite",
         "tags": [
           "convites"
         ]
@@ -340,6 +396,16 @@
         "summary": "(Público) Envia um PIN de 10 minutos ao e-mail, se ele estiver habilitado",
         "description": "Corpo: {\"email\"}",
         "operationId": "solicitar_pin_do_convite",
+        "parameters": [
+          {
+            "name": "payload",
+            "required": true,
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/PinSolicitarRequest"
+            }
+          }
+        ],
         "tags": [
           "convites"
         ]
@@ -349,7 +415,10 @@
       "post": {
         "responses": {
           "200": {
-            "description": "PIN correto"
+            "description": "PIN correto",
+            "schema": {
+              "$ref": "#/definitions/PinValidarResponse"
+            }
           },
           "400": {
             "description": "PIN inválido ou expirado"
@@ -358,6 +427,16 @@
         "summary": "(Público) Confere o PIN",
         "description": "Devolve o token que abre /aceite/<token>. Corpo: {\"email\", \"pin\"}",
         "operationId": "validar_pin_do_convite",
+        "parameters": [
+          {
+            "name": "payload",
+            "required": true,
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/PinValidarRequest"
+            }
+          }
+        ],
         "tags": [
           "convites"
         ]
@@ -403,7 +482,10 @@
       "post": {
         "responses": {
           "200": {
-            "description": "Reenviado"
+            "description": "Reenviado",
+            "schema": {
+              "$ref": "#/definitions/ConviteResponse"
+            }
           },
           "404": {
             "description": "Não encontrado"
@@ -876,20 +958,6 @@
       }
     },
     "/v1/instituicoes/": {
-      "get": {
-        "responses": {
-          "200": {
-            "description": "Success",
-            "schema": {
-              "$ref": "#/definitions/InstituicaoListResponse"
-            }
-          }
-        },
-        "operationId": "list_instituicoes",
-        "tags": [
-          "instituicoes"
-        ]
-      },
       "post": {
         "responses": {
           "201": {
@@ -911,6 +979,20 @@
             }
           }
         ],
+        "tags": [
+          "instituicoes"
+        ]
+      },
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/InstituicaoListResponse"
+            }
+          }
+        },
+        "operationId": "list_instituicoes",
         "tags": [
           "instituicoes"
         ]
@@ -983,18 +1065,6 @@
       }
     },
     "/v1/notificacoes/": {
-      "get": {
-        "responses": {
-          "200": {
-            "description": "Success"
-          }
-        },
-        "summary": "Lista as notificações do usuário logado",
-        "operationId": "listar_minhas_notificacoes",
-        "tags": [
-          "notificacoes"
-        ]
-      },
       "post": {
         "responses": {
           "200": {
@@ -1013,6 +1083,24 @@
             }
           }
         ],
+        "tags": [
+          "notificacoes"
+        ]
+      },
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/NotificacaoResponse"
+              }
+            }
+          }
+        },
+        "summary": "Lista as notificações do usuário logado",
+        "operationId": "listar_minhas_notificacoes",
         "tags": [
           "notificacoes"
         ]
@@ -1041,26 +1129,6 @@
       }
     },
     "/v1/ocorrencias/": {
-      "get": {
-        "responses": {
-          "200": {
-            "description": "Success"
-          }
-        },
-        "summary": "(Gestor) Lista ocorrências da organização",
-        "operationId": "listar_ocorrencias",
-        "parameters": [
-          {
-            "in": "query",
-            "description": "Filter by status (ABERTA, RESOLVIDA)",
-            "name": "status",
-            "type": "string"
-          }
-        ],
-        "tags": [
-          "ocorrencias"
-        ]
-      },
       "post": {
         "responses": {
           "201": {
@@ -1080,6 +1148,32 @@
             "schema": {
               "$ref": "#/definitions/OcorrenciaInput"
             }
+          }
+        ],
+        "tags": [
+          "ocorrencias"
+        ]
+      },
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/OcorrenciaResponse"
+              }
+            }
+          }
+        },
+        "summary": "(Gestor) Lista ocorrências da organização",
+        "operationId": "listar_ocorrencias",
+        "parameters": [
+          {
+            "in": "query",
+            "description": "Filter by status (ABERTA, RESOLVIDA)",
+            "name": "status",
+            "type": "string"
           }
         ],
         "tags": [
@@ -1113,21 +1207,6 @@
       }
     },
     "/v1/onibus/": {
-      "get": {
-        "responses": {
-          "200": {
-            "description": "Success",
-            "schema": {
-              "$ref": "#/definitions/OnibusListResponse"
-            }
-          }
-        },
-        "summary": "Lista a frota da organização",
-        "operationId": "list_onibus",
-        "tags": [
-          "onibus"
-        ]
-      },
       "post": {
         "responses": {
           "201": {
@@ -1149,6 +1228,21 @@
             }
           }
         ],
+        "tags": [
+          "onibus"
+        ]
+      },
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/OnibusListResponse"
+            }
+          }
+        },
+        "summary": "Lista a frota da organização",
+        "operationId": "list_onibus",
         "tags": [
           "onibus"
         ]
@@ -1225,21 +1319,6 @@
           "type": "string"
         }
       ],
-      "get": {
-        "responses": {
-          "200": {
-            "description": "Success",
-            "schema": {
-              "$ref": "#/definitions/JanelaListResponse"
-            }
-          }
-        },
-        "summary": "Lista as janelas de disponibilidade do ônibus",
-        "operationId": "list_janelas",
-        "tags": [
-          "onibus"
-        ]
-      },
       "post": {
         "responses": {
           "201": {
@@ -1261,6 +1340,21 @@
             }
           }
         ],
+        "tags": [
+          "onibus"
+        ]
+      },
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/JanelaListResponse"
+            }
+          }
+        },
+        "summary": "Lista as janelas de disponibilidade do ônibus",
+        "operationId": "list_janelas",
         "tags": [
           "onibus"
         ]
@@ -1295,20 +1389,6 @@
       }
     },
     "/v1/pontos/": {
-      "get": {
-        "responses": {
-          "200": {
-            "description": "Success",
-            "schema": {
-              "$ref": "#/definitions/PontoListResponse"
-            }
-          }
-        },
-        "operationId": "list_pontos",
-        "tags": [
-          "pontos"
-        ]
-      },
       "post": {
         "responses": {
           "201": {
@@ -1332,6 +1412,20 @@
         "tags": [
           "pontos"
         ]
+      },
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/PontoListResponse"
+            }
+          }
+        },
+        "operationId": "list_pontos",
+        "tags": [
+          "pontos"
+        ]
       }
     },
     "/v1/pontos/{id}": {
@@ -1343,30 +1437,6 @@
           "type": "string"
         }
       ],
-      "put": {
-        "responses": {
-          "200": {
-            "description": "Success",
-            "schema": {
-              "$ref": "#/definitions/PontoResponse"
-            }
-          }
-        },
-        "operationId": "update_ponto",
-        "parameters": [
-          {
-            "name": "payload",
-            "required": true,
-            "in": "body",
-            "schema": {
-              "$ref": "#/definitions/PontoUpdateRequest"
-            }
-          }
-        ],
-        "tags": [
-          "pontos"
-        ]
-      },
       "delete": {
         "responses": {
           "200": {
@@ -1391,23 +1461,33 @@
         "tags": [
           "pontos"
         ]
-      }
-    },
-    "/v1/rotas/": {
-      "get": {
+      },
+      "put": {
         "responses": {
           "200": {
             "description": "Success",
             "schema": {
-              "$ref": "#/definitions/RotaListResponse"
+              "$ref": "#/definitions/PontoResponse"
             }
           }
         },
-        "operationId": "list_rotas",
+        "operationId": "update_ponto",
+        "parameters": [
+          {
+            "name": "payload",
+            "required": true,
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/PontoUpdateRequest"
+            }
+          }
+        ],
         "tags": [
-          "rotas"
+          "pontos"
         ]
-      },
+      }
+    },
+    "/v1/rotas/": {
       "post": {
         "responses": {
           "201": {
@@ -1428,6 +1508,20 @@
             }
           }
         ],
+        "tags": [
+          "rotas"
+        ]
+      },
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/RotaListResponse"
+            }
+          }
+        },
+        "operationId": "list_rotas",
         "tags": [
           "rotas"
         ]
@@ -1458,27 +1552,6 @@
           "type": "string"
         }
       ],
-      "put": {
-        "responses": {
-          "200": {
-            "description": "Success"
-          }
-        },
-        "operationId": "update_rota",
-        "parameters": [
-          {
-            "name": "payload",
-            "required": true,
-            "in": "body",
-            "schema": {
-              "$ref": "#/definitions/RotaUpdateRequest"
-            }
-          }
-        ],
-        "tags": [
-          "rotas"
-        ]
-      },
       "delete": {
         "responses": {
           "200": {
@@ -1503,6 +1576,30 @@
         "tags": [
           "rotas"
         ]
+      },
+      "put": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/RotaResponse"
+            }
+          }
+        },
+        "operationId": "update_rota",
+        "parameters": [
+          {
+            "name": "payload",
+            "required": true,
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/RotaUpdateRequest"
+            }
+          }
+        ],
+        "tags": [
+          "rotas"
+        ]
       }
     },
     "/v1/rotas/{id}/horarios": {
@@ -1514,20 +1611,6 @@
           "type": "string"
         }
       ],
-      "get": {
-        "responses": {
-          "200": {
-            "description": "Success",
-            "schema": {
-              "$ref": "#/definitions/RotaHorarioListResponse"
-            }
-          }
-        },
-        "operationId": "list_rota_horarios",
-        "tags": [
-          "rotas"
-        ]
-      },
       "post": {
         "responses": {
           "201": {
@@ -1551,6 +1634,20 @@
         "tags": [
           "rotas"
         ]
+      },
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/RotaHorarioListResponse"
+            }
+          }
+        },
+        "operationId": "list_rota_horarios",
+        "tags": [
+          "rotas"
+        ]
       }
     },
     "/v1/rotas/{id}/pontos": {
@@ -1562,20 +1659,6 @@
           "type": "string"
         }
       ],
-      "get": {
-        "responses": {
-          "200": {
-            "description": "Success",
-            "schema": {
-              "$ref": "#/definitions/PontoFlatListResponse"
-            }
-          }
-        },
-        "operationId": "list_rota_pontos",
-        "tags": [
-          "rotas"
-        ]
-      },
       "post": {
         "responses": {
           "200": {
@@ -1593,6 +1676,20 @@
             }
           }
         ],
+        "tags": [
+          "rotas"
+        ]
+      },
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/PontoFlatListResponse"
+            }
+          }
+        },
+        "operationId": "list_rota_pontos",
         "tags": [
           "rotas"
         ]
@@ -1898,7 +1995,10 @@
       "patch": {
         "responses": {
           "200": {
-            "description": "Token atualizado"
+            "description": "Token atualizado",
+            "schema": {
+              "$ref": "#/definitions/FcmTokenResponse"
+            }
           },
           "400": {
             "description": "Token não enviado"
@@ -1940,6 +2040,16 @@
         "summary": "Exclui a conta e os dados pessoais do passageiro logado",
         "description": "Corpo: {\"email\", \"senha\"}",
         "operationId": "delete_my_account",
+        "parameters": [
+          {
+            "name": "payload",
+            "required": true,
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/ExcluirContaRequest"
+            }
+          }
+        ],
         "tags": [
           "users"
         ]
@@ -1949,7 +2059,7 @@
           "200": {
             "description": "Success",
             "schema": {
-              "$ref": "#/definitions/UserResponse"
+              "$ref": "#/definitions/UserMeResponse"
             }
           },
           "404": {
@@ -1995,36 +2105,6 @@
       }
     },
     "/v1/users/motoristas": {
-      "get": {
-        "responses": {
-          "200": {
-            "description": "Success",
-            "schema": {
-              "type": "array",
-              "items": {
-                "$ref": "#/definitions/UserListResponse"
-              }
-            }
-          },
-          "403": {
-            "description": "Forbidden - not a gestor"
-          }
-        },
-        "summary": "Lista motoristas do mesmo município do Gestor",
-        "operationId": "list_motoristas",
-        "parameters": [
-          {
-            "name": "X-Fields",
-            "in": "header",
-            "type": "string",
-            "format": "mask",
-            "description": "An optional fields mask"
-          }
-        ],
-        "tags": [
-          "users"
-        ]
-      },
       "post": {
         "responses": {
           "201": {
@@ -2053,6 +2133,36 @@
             "schema": {
               "$ref": "#/definitions/MotoristaCreateRequest"
             }
+          }
+        ],
+        "tags": [
+          "users"
+        ]
+      },
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/UserListResponse"
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden - not a gestor"
+          }
+        },
+        "summary": "Lista motoristas do mesmo município do Gestor",
+        "operationId": "list_motoristas",
+        "parameters": [
+          {
+            "name": "X-Fields",
+            "in": "header",
+            "type": "string",
+            "format": "mask",
+            "description": "An optional fields mask"
           }
         ],
         "tags": [
@@ -2158,6 +2268,30 @@
       }
     },
     "/v1/viagens/": {
+      "post": {
+        "responses": {
+          "201": {
+            "description": "Created",
+            "schema": {
+              "$ref": "#/definitions/ViagemResponse"
+            }
+          }
+        },
+        "operationId": "create_viagem",
+        "parameters": [
+          {
+            "name": "payload",
+            "required": true,
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/ViagemCreateRequest"
+            }
+          }
+        ],
+        "tags": [
+          "viagens"
+        ]
+      },
       "get": {
         "responses": {
           "200": {
@@ -2198,30 +2332,6 @@
             "in": "query",
             "type": "string",
             "description": "UUID da rota"
-          }
-        ],
-        "tags": [
-          "viagens"
-        ]
-      },
-      "post": {
-        "responses": {
-          "201": {
-            "description": "Created",
-            "schema": {
-              "$ref": "#/definitions/ViagemResponse"
-            }
-          }
-        },
-        "operationId": "create_viagem",
-        "parameters": [
-          {
-            "name": "payload",
-            "required": true,
-            "in": "body",
-            "schema": {
-              "$ref": "#/definitions/ViagemCreateRequest"
-            }
           }
         ],
         "tags": [
@@ -2307,7 +2417,10 @@
       "put": {
         "responses": {
           "200": {
-            "description": "Trip cancelled successfully"
+            "description": "Trip cancelled successfully",
+            "schema": {
+              "$ref": "#/definitions/ViagemCancelarResponse"
+            }
           }
         },
         "summary": "Cancela uma viagem agendada e notifica alunos (Gestor)",
@@ -2451,22 +2564,13 @@
           "type": "string"
         }
       ],
-      "get": {
-        "responses": {
-          "200": {
-            "description": "Success"
-          }
-        },
-        "summary": "(Aluno/Motorista) Obtém a localização atual do ônibus (viagem em andamento)",
-        "operationId": "obter_localizacao_onibus",
-        "tags": [
-          "viagens"
-        ]
-      },
       "post": {
         "responses": {
           "200": {
-            "description": "Success"
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/LocalizacaoMotoristaResponse"
+            }
           }
         },
         "summary": "(Motorista) Envia coordenada GPS atual do ônibus em tempo real",
@@ -2481,6 +2585,21 @@
             }
           }
         ],
+        "tags": [
+          "viagens"
+        ]
+      },
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/LocalizacaoOnibusResponse"
+            }
+          }
+        },
+        "summary": "(Aluno/Motorista) Obtém a localização atual do ônibus (viagem em andamento)",
+        "operationId": "obter_localizacao_onibus",
         "tags": [
           "viagens"
         ]
@@ -2549,7 +2668,10 @@
       "post": {
         "responses": {
           "200": {
-            "description": "Success"
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/LocalizacaoAlunoResponse"
+            }
           }
         },
         "summary": "Recebe o GPS em tempo real do Aluno para o Auto-Checkin (Geofencing)",
@@ -2693,6 +2815,10 @@
           "type": "string",
           "description": "JWT Token"
         },
+        "consentimento_pendente": {
+          "type": "boolean",
+          "description": "true quando o usuário ainda não aceitou a versão vigente do termo"
+        },
         "user": {
           "description": "Dados do usuário",
           "allOf": [
@@ -2784,7 +2910,7 @@
         },
         "status": {
           "type": "string",
-          "description": "Status (PENDING_SIGNUP, ACTIVE, DISABLED)"
+          "description": "Status (PENDING_SIGNUP, PENDING_APPROVAL, ACTIVE, DISABLED, DELETED)"
         },
         "signup_completed_at": {
           "type": "string",
@@ -2842,6 +2968,23 @@
       },
       "type": "object"
     },
+    "ExcluirContaRequest": {
+      "required": [
+        "email",
+        "senha"
+      ],
+      "properties": {
+        "email": {
+          "type": "string",
+          "description": "E-mail da conta"
+        },
+        "senha": {
+          "type": "string",
+          "description": "Senha atual"
+        }
+      },
+      "type": "object"
+    },
     "UpdateProfileRequest": {
       "properties": {
         "nome": {
@@ -2859,6 +3002,100 @@
         "cnh": {
           "type": "string",
           "description": "CNH (apenas motoristas)"
+        }
+      },
+      "type": "object"
+    },
+    "UserMeResponse": {
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "UUID do usuário"
+        },
+        "organizacao_id": {
+          "type": "string",
+          "description": "UUID da organização"
+        },
+        "nome": {
+          "type": "string",
+          "description": "Nome completo"
+        },
+        "email": {
+          "type": "string",
+          "description": "Email"
+        },
+        "telefone": {
+          "type": "string",
+          "description": "Telefone"
+        },
+        "cpf": {
+          "type": "string",
+          "description": "CPF"
+        },
+        "role": {
+          "type": "string",
+          "description": "Perfil (ALUNO, MOTORISTA, GESTOR)"
+        },
+        "status": {
+          "type": "string",
+          "description": "Status (PENDING_SIGNUP, PENDING_APPROVAL, ACTIVE, DISABLED, DELETED)"
+        },
+        "signup_completed_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Data de conclusão do cadastro"
+        },
+        "municipio_nome": {
+          "type": "string",
+          "description": "Nome do município (organização)"
+        },
+        "municipio_uf": {
+          "type": "string",
+          "description": "UF do município"
+        },
+        "matricula": {
+          "type": "string",
+          "description": "Matrícula (aluno)"
+        },
+        "nome_pai": {
+          "type": "string",
+          "description": "Nome do pai (aluno)"
+        },
+        "nome_mae": {
+          "type": "string",
+          "description": "Nome da mãe (aluno)"
+        },
+        "cnh": {
+          "type": "string",
+          "description": "CNH (motorista)"
+        },
+        "horario_inicio": {
+          "type": "string",
+          "description": "Início do horário de trabalho (HH:MM)"
+        },
+        "horario_fim": {
+          "type": "string",
+          "description": "Fim do horário de trabalho (HH:MM)"
+        },
+        "dias_trabalho": {
+          "type": "array",
+          "description": "Dias de trabalho (SEG..DOM)",
+          "items": {
+            "type": "string"
+          }
+        },
+        "status_motorista": {
+          "type": "string",
+          "description": "Estado do motorista, calculado (ATIVO, EM_ROTA, EM_DESCANSO_OBRIGATORIO)"
+        },
+        "descanso_ate": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Fim do descanso obrigatório (só quando EM_DESCANSO_OBRIGATORIO)"
+        },
+        "consentimento_pendente": {
+          "type": "boolean",
+          "description": "true quando o usuário ainda não aceitou a versão vigente do termo"
         }
       },
       "type": "object"
@@ -2928,10 +3165,6 @@
           "type": "string",
           "description": "CNH"
         },
-        "salario": {
-          "type": "number",
-          "description": "Salário"
-        },
         "horario_inicio": {
           "type": "string",
           "description": "Início do horário de trabalho (HH:MM)"
@@ -2988,6 +3221,307 @@
       },
       "type": "object"
     },
+    "FcmTokenResponse": {
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Mensagem de sucesso"
+        }
+      },
+      "type": "object"
+    },
+    "AceiteConsentimentoRequest": {
+      "required": [
+        "versao"
+      ],
+      "properties": {
+        "versao": {
+          "type": "string",
+          "description": "Versão vigente do termo aceita"
+        }
+      },
+      "type": "object"
+    },
+    "ConsentimentoEstadoResponse": {
+      "properties": {
+        "versao_vigente": {
+          "type": "string",
+          "description": "Versão vigente do termo"
+        },
+        "pendente": {
+          "type": "boolean",
+          "description": "true quando o usuário ainda precisa aceitar"
+        }
+      },
+      "type": "object"
+    },
+    "ConvitesCreateRequest": {
+      "required": [
+        "convites"
+      ],
+      "properties": {
+        "convites": {
+          "type": "array",
+          "description": "De 1 a 500 convites; cada linha é validada sozinha",
+          "items": {
+            "$ref": "#/definitions/ConviteItemRequest"
+          }
+        }
+      },
+      "type": "object"
+    },
+    "ConviteItemRequest": {
+      "required": [
+        "email"
+      ],
+      "properties": {
+        "email": {
+          "type": "string",
+          "description": "E-mail do convidado"
+        },
+        "nome": {
+          "type": "string",
+          "description": "Nome (até 100 caracteres)"
+        },
+        "cpf": {
+          "type": "string",
+          "description": "CPF"
+        },
+        "telefone": {
+          "type": "string",
+          "description": "Telefone"
+        },
+        "instituicao_id": {
+          "type": "string",
+          "description": "UUID da instituição da organização"
+        }
+      },
+      "type": "object"
+    },
+    "ConvitesCreateResponse": {
+      "properties": {
+        "resultados": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ConviteResultado"
+          }
+        }
+      },
+      "type": "object"
+    },
+    "ConviteResultado": {
+      "properties": {
+        "email": {
+          "type": "string",
+          "description": "E-mail da linha"
+        },
+        "resultado": {
+          "type": "string",
+          "example": "CRIADO",
+          "enum": [
+            "CRIADO",
+            "RENOVADO",
+            "PULADO",
+            "INVALIDO"
+          ]
+        },
+        "motivo": {
+          "type": "string",
+          "description": "Motivo quando PULADO ou INVALIDO"
+        }
+      },
+      "type": "object"
+    },
+    "ConviteListResponse": {
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ConviteResponse"
+          }
+        },
+        "total": {
+          "type": "integer",
+          "description": "Total de convites"
+        }
+      },
+      "type": "object"
+    },
+    "ConviteResponse": {
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "UUID do convite"
+        },
+        "email": {
+          "type": "string",
+          "description": "E-mail"
+        },
+        "nome": {
+          "type": "string",
+          "description": "Nome"
+        },
+        "cpf": {
+          "type": "string",
+          "description": "CPF"
+        },
+        "telefone": {
+          "type": "string",
+          "description": "Telefone"
+        },
+        "instituicao_id": {
+          "type": "string",
+          "description": "UUID da instituição"
+        },
+        "estado": {
+          "type": "string",
+          "example": "PENDENTE",
+          "enum": [
+            "PENDENTE",
+            "CONCLUIDO",
+            "CANCELADO"
+          ]
+        },
+        "envio_estado": {
+          "type": "string",
+          "example": "PENDENTE",
+          "enum": [
+            "PENDENTE",
+            "ENVIADO",
+            "FALHOU"
+          ]
+        },
+        "expira_em": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Validade do link"
+        },
+        "vencido": {
+          "type": "boolean",
+          "description": "PENDENTE com a validade vencida"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Data de criação"
+        },
+        "concluido_em": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Data de conclusão do cadastro"
+        }
+      },
+      "type": "object"
+    },
+    "ConviteAceiteRequest": {
+      "required": [
+        "senha"
+      ],
+      "properties": {
+        "senha": {
+          "type": "string",
+          "description": "Senha da nova conta"
+        },
+        "nome": {
+          "type": "string",
+          "description": "Obrigatório se o convite não trouxer"
+        },
+        "cpf": {
+          "type": "string",
+          "description": "Obrigatório se o convite não trouxer"
+        },
+        "telefone": {
+          "type": "string",
+          "description": "Telefone"
+        },
+        "instituicao_id": {
+          "type": "string",
+          "description": "Obrigatório se o convite não trouxer"
+        },
+        "necessidades_acessibilidade": {
+          "type": "array",
+          "description": "CADEIRA_DE_RODAS, MOBILIDADE_REDUZIDA, DEFICIENCIA_VISUAL, DEFICIENCIA_AUDITIVA, DEFICIENCIA_INTELECTUAL, OUTRA",
+          "items": {
+            "type": "string"
+          }
+        },
+        "observacao_acessibilidade": {
+          "type": "string",
+          "description": "Até 500 caracteres"
+        }
+      },
+      "type": "object"
+    },
+    "ConviteDadosResponse": {
+      "properties": {
+        "email": {
+          "type": "string",
+          "description": "E-mail"
+        },
+        "nome": {
+          "type": "string",
+          "description": "Nome preenchido pelo gestor"
+        },
+        "cpf": {
+          "type": "string",
+          "description": "CPF preenchido pelo gestor"
+        },
+        "telefone": {
+          "type": "string",
+          "description": "Telefone preenchido pelo gestor"
+        },
+        "instituicao_id": {
+          "type": "string",
+          "description": "UUID da instituição"
+        },
+        "campos_faltando": {
+          "type": "array",
+          "description": "Campos que a pessoa ainda precisa enviar",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "type": "object"
+    },
+    "PinSolicitarRequest": {
+      "required": [
+        "email"
+      ],
+      "properties": {
+        "email": {
+          "type": "string",
+          "description": "E-mail convidado"
+        }
+      },
+      "type": "object"
+    },
+    "PinValidarRequest": {
+      "required": [
+        "email",
+        "pin"
+      ],
+      "properties": {
+        "email": {
+          "type": "string",
+          "description": "E-mail convidado"
+        },
+        "pin": {
+          "type": "string",
+          "description": "PIN de 8 dígitos"
+        }
+      },
+      "type": "object"
+    },
+    "PinValidarResponse": {
+      "properties": {
+        "token": {
+          "type": "string",
+          "description": "Token do convite, usado em /aceite/<token>"
+        }
+      },
+      "type": "object"
+    },
     "NotificacaoInput": {
       "required": [
         "mensagem",
@@ -3017,8 +3551,34 @@
       },
       "type": "object"
     },
+    "NotificacaoResponse": {
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "UUID da notificação"
+        },
+        "titulo": {
+          "type": "string",
+          "description": "Título"
+        },
+        "mensagem": {
+          "type": "string",
+          "description": "Mensagem"
+        },
+        "enviada": {
+          "type": "boolean",
+          "description": "Push enviado"
+        },
+        "data_envio": {
+          "type": "string",
+          "description": "Data de envio"
+        }
+      },
+      "type": "object"
+    },
     "OnibusCreateRequest": {
       "required": [
+        "capacidade",
         "placa"
       ],
       "properties": {
@@ -3033,25 +3593,6 @@
         "capacidade": {
           "type": "integer",
           "description": "Capacidade de passageiros"
-        },
-        "ano": {
-          "type": "integer",
-          "description": "Ano de fabricação"
-        }
-      },
-      "type": "object"
-    },
-    "OnibusListResponse": {
-      "properties": {
-        "items": {
-          "type": "array",
-          "items": {
-            "$ref": "#/definitions/OnibusResponse"
-          }
-        },
-        "total": {
-          "type": "integer",
-          "description": "Total de ônibus"
         }
       },
       "type": "object"
@@ -3074,9 +3615,24 @@
           "type": "integer",
           "description": "Capacidade"
         },
-        "ano": {
+        "organizacao_id": {
+          "type": "string",
+          "description": "UUID da organização"
+        }
+      },
+      "type": "object"
+    },
+    "OnibusListResponse": {
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/OnibusResponse"
+          }
+        },
+        "total": {
           "type": "integer",
-          "description": "Ano"
+          "description": "Total de ônibus"
         }
       },
       "type": "object"
@@ -3135,21 +3691,6 @@
       },
       "type": "object"
     },
-    "JanelaListResponse": {
-      "properties": {
-        "items": {
-          "type": "array",
-          "items": {
-            "$ref": "#/definitions/JanelaResponse"
-          }
-        },
-        "total": {
-          "type": "integer",
-          "description": "Total de janelas"
-        }
-      },
-      "type": "object"
-    },
     "JanelaResponse": {
       "properties": {
         "id": {
@@ -3184,6 +3725,21 @@
           "type": "string",
           "format": "date-time",
           "description": "Data de criação"
+        }
+      },
+      "type": "object"
+    },
+    "JanelaListResponse": {
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/JanelaResponse"
+          }
+        },
+        "total": {
+          "type": "integer",
+          "description": "Total de janelas"
         }
       },
       "type": "object"
@@ -3281,21 +3837,6 @@
       },
       "type": "object"
     },
-    "RotaListResponse": {
-      "properties": {
-        "items": {
-          "type": "array",
-          "items": {
-            "$ref": "#/definitions/RotaResponse"
-          }
-        },
-        "total": {
-          "type": "integer",
-          "description": "Total de rotas"
-        }
-      },
-      "type": "object"
-    },
     "RotaResponse": {
       "properties": {
         "id": {
@@ -3345,7 +3886,25 @@
       },
       "type": "object"
     },
+    "RotaListResponse": {
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RotaResponse"
+          }
+        },
+        "total": {
+          "type": "integer",
+          "description": "Total de rotas"
+        }
+      },
+      "type": "object"
+    },
     "RotaPontosAddRequest": {
+      "required": [
+        "pontos"
+      ],
       "properties": {
         "pontos": {
           "type": "array",
@@ -3397,21 +3956,6 @@
       },
       "type": "object"
     },
-    "RotaHorarioListResponse": {
-      "properties": {
-        "items": {
-          "type": "array",
-          "items": {
-            "$ref": "#/definitions/RotaHorarioResponse"
-          }
-        },
-        "total": {
-          "type": "integer",
-          "description": "Total de horários"
-        }
-      },
-      "type": "object"
-    },
     "RotaHorarioResponse": {
       "properties": {
         "id": {
@@ -3436,10 +3980,22 @@
       },
       "type": "object"
     },
+    "RotaHorarioListResponse": {
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RotaHorarioResponse"
+          }
+        },
+        "total": {
+          "type": "integer",
+          "description": "Total de horários"
+        }
+      },
+      "type": "object"
+    },
     "RotaUpdateRequest": {
-      "required": [
-        "nome"
-      ],
       "properties": {
         "nome": {
           "type": "string",
@@ -3464,25 +4020,11 @@
         },
         "motorista_padrao_id": {
           "type": "string",
-          "description": "UUID do motorista padrão"
+          "description": "UUID do motorista padrão (null remove)"
         },
         "veiculo_padrao_id": {
           "type": "string",
-          "description": "UUID do veículo padrão"
-        },
-        "pontos": {
-          "type": "array",
-          "description": "Pontos da rota",
-          "items": {
-            "$ref": "#/definitions/RotaPontoAddRequest"
-          }
-        },
-        "horarios": {
-          "type": "array",
-          "description": "Grade de horários",
-          "items": {
-            "$ref": "#/definitions/RotaHorarioCreateRequest"
-          }
+          "description": "UUID do veículo padrão (null remove)"
         }
       },
       "type": "object"
@@ -3781,21 +4323,6 @@
       },
       "type": "object"
     },
-    "PontoListResponse": {
-      "properties": {
-        "items": {
-          "type": "array",
-          "items": {
-            "$ref": "#/definitions/PontoResponse"
-          }
-        },
-        "total": {
-          "type": "integer",
-          "description": "Total de pontos"
-        }
-      },
-      "type": "object"
-    },
     "PontoResponse": {
       "properties": {
         "id": {
@@ -3821,6 +4348,21 @@
         "instituicao": {
           "type": "string",
           "description": "Instituição vinculada"
+        }
+      },
+      "type": "object"
+    },
+    "PontoListResponse": {
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/PontoResponse"
+          }
+        },
+        "total": {
+          "type": "integer",
+          "description": "Total de pontos"
         }
       },
       "type": "object"
@@ -3948,6 +4490,14 @@
         "ponto_embarque_id": {
           "type": "string",
           "description": "UUID do ponto de embarque"
+        },
+        "alunos_confirmados_count": {
+          "type": "integer",
+          "description": "Alunos confirmados"
+        },
+        "total_alunos": {
+          "type": "integer",
+          "description": "Alunos inscritos na rota"
         }
       },
       "type": "object"
@@ -4000,7 +4550,7 @@
         },
         "ponto_embarque_id": {
           "type": "string",
-          "description": "UUID do ponto de embarque (opcional)"
+          "description": "UUID do ponto de embarque (obrigatório quando confirmacao=true)"
         }
       },
       "type": "object"
@@ -4034,7 +4584,11 @@
         },
         "ponto_embarque": {
           "type": "string",
-          "description": "UUID do ponto de embarque"
+          "description": "Apelido do ponto de embarque"
+        },
+        "ponto_destino": {
+          "type": "string",
+          "description": "Apelido do ponto de destino"
         }
       },
       "type": "object"
@@ -4042,7 +4596,6 @@
     "ViagemCreateRequest": {
       "required": [
         "data",
-        "horario_id",
         "rota_id"
       ],
       "properties": {
@@ -4050,36 +4603,9 @@
           "type": "string",
           "description": "UUID da rota"
         },
-        "horario_id": {
-          "type": "string",
-          "description": "UUID do horário"
-        },
         "data": {
           "type": "string",
           "description": "Data (YYYY-MM-DD)"
-        },
-        "motorista_id": {
-          "type": "string",
-          "description": "UUID do motorista (opcional)"
-        },
-        "veiculo_id": {
-          "type": "string",
-          "description": "UUID do veículo (opcional)"
-        }
-      },
-      "type": "object"
-    },
-    "ViagemListResponse": {
-      "properties": {
-        "items": {
-          "type": "array",
-          "items": {
-            "$ref": "#/definitions/ViagemResponse"
-          }
-        },
-        "total": {
-          "type": "integer",
-          "description": "Total de viagens"
         }
       },
       "type": "object"
@@ -4136,6 +4662,79 @@
         "veiculo_placa": {
           "type": "string",
           "description": "Placa do veículo"
+        },
+        "origem": {
+          "type": "string",
+          "description": "Apelido do primeiro ponto da rota"
+        },
+        "destino": {
+          "type": "string",
+          "description": "Apelido do último ponto da rota"
+        },
+        "pontos": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ViagemPontoResponse"
+          }
+        },
+        "alunos": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ViagemAlunoConfirmacaoResponse"
+          }
+        },
+        "total_alunos": {
+          "type": "integer",
+          "description": "Alunos inscritos na rota"
+        },
+        "alunos_confirmados_count": {
+          "type": "integer",
+          "description": "Alunos confirmados"
+        },
+        "alunos_embarcados_count": {
+          "type": "integer",
+          "description": "Alunos embarcados"
+        }
+      },
+      "type": "object"
+    },
+    "ViagemPontoResponse": {
+      "properties": {
+        "ponto_id": {
+          "type": "string",
+          "description": "UUID do ponto"
+        },
+        "apelido": {
+          "type": "string",
+          "description": "Apelido do ponto"
+        },
+        "ordem": {
+          "type": "integer",
+          "description": "Ordem no roteiro"
+        },
+        "visitado": {
+          "type": "boolean",
+          "description": "Ponto já visitado"
+        },
+        "chegada_real": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Chegada real ao ponto"
+        }
+      },
+      "type": "object"
+    },
+    "ViagemListResponse": {
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ViagemResponse"
+          }
+        },
+        "total": {
+          "type": "integer",
+          "description": "Total de viagens"
         }
       },
       "type": "object"
@@ -4147,7 +4746,20 @@
       "properties": {
         "acao": {
           "type": "string",
-          "description": "iniciar ou finalizar"
+          "description": "INICIAR ou FINALIZAR"
+        }
+      },
+      "type": "object"
+    },
+    "ViagemCancelarResponse": {
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Mensagem de sucesso"
+        },
+        "alunos_notificados": {
+          "type": "integer",
+          "description": "Alunos notificados"
         }
       },
       "type": "object"
@@ -4165,6 +4777,49 @@
         "longitude": {
           "type": "number",
           "description": "Longitude atual do ônibus"
+        }
+      },
+      "type": "object"
+    },
+    "LocalizacaoMotoristaResponse": {
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Resultado"
+        },
+        "distancia_metros": {
+          "type": "integer",
+          "description": "Distância até o próximo ponto"
+        }
+      },
+      "type": "object"
+    },
+    "LocalizacaoOnibusResponse": {
+      "properties": {
+        "latitude": {
+          "type": "number",
+          "description": "Latitude do ônibus"
+        },
+        "longitude": {
+          "type": "number",
+          "description": "Longitude do ônibus"
+        },
+        "atualizado_em": {
+          "type": "string",
+          "description": "Hora do último GPS (ISO 8601)"
+        }
+      },
+      "type": "object"
+    },
+    "LocalizacaoAlunoResponse": {
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Resultado"
+        },
+        "embarcou": {
+          "type": "boolean",
+          "description": "Embarque já registrado"
         }
       },
       "type": "object"
@@ -4194,6 +4849,10 @@
           "type": "string",
           "description": "Nome"
         },
+        "cnpj": {
+          "type": "string",
+          "description": "CNPJ"
+        },
         "sigla": {
           "type": "string",
           "description": "Sigla"
@@ -4207,42 +4866,29 @@
           "description": "Tipo"
         },
         "endereco": {
-          "type": "string",
-          "description": "Endereço formatado"
-        }
-      },
-      "type": "object"
-    },
-    "InstituicaoCreateRequest": {
-      "required": [
-        "endereco",
-        "nome"
-      ],
-      "properties": {
-        "nome": {
-          "type": "string",
-          "description": "Nome da instituição"
-        },
-        "tipo": {
-          "type": "string",
-          "description": "Tipo (ESCOLA, CRECHE, UNIVERSIDADE)"
-        },
-        "endereco": {
           "description": "Endereço",
           "allOf": [
             {
               "$ref": "#/definitions/InstituicaoEnderecoInput"
             }
           ]
+        },
+        "latitude": {
+          "type": "number",
+          "description": "Latitude"
+        },
+        "longitude": {
+          "type": "number",
+          "description": "Longitude"
         }
       },
       "type": "object"
     },
     "InstituicaoEnderecoInput": {
       "properties": {
-        "rua": {
+        "logradouro": {
           "type": "string",
-          "description": "Nome da rua"
+          "description": "Logradouro"
         },
         "numero": {
           "type": "string",
@@ -4256,13 +4902,48 @@
           "type": "string",
           "description": "Cidade"
         },
-        "estado": {
-          "type": "string",
-          "description": "Estado (UF)"
-        },
         "cep": {
           "type": "string",
           "description": "CEP"
+        },
+        "latitude": {
+          "type": "number",
+          "description": "Latitude"
+        },
+        "longitude": {
+          "type": "number",
+          "description": "Longitude"
+        }
+      },
+      "type": "object"
+    },
+    "InstituicaoCreateRequest": {
+      "required": [
+        "cnpj",
+        "endereco",
+        "nome",
+        "tipo"
+      ],
+      "properties": {
+        "nome": {
+          "type": "string",
+          "description": "Nome da instituição"
+        },
+        "cnpj": {
+          "type": "string",
+          "description": "CNPJ"
+        },
+        "tipo": {
+          "type": "string",
+          "description": "Tipo (INSTITUTO_FEDERAL, UNIVERSIDADE_PUBLICA, UNIVERSIDADE_PRIVADA, ESCOLA_PUBLICA, ESCOLA_PRIVADA, ESCOLA_COMUNITARIA)"
+        },
+        "endereco": {
+          "description": "Endereço",
+          "allOf": [
+            {
+              "$ref": "#/definitions/InstituicaoEnderecoInput"
+            }
+          ]
         }
       },
       "type": "object"
@@ -4311,14 +4992,15 @@
         "bairro",
         "cep",
         "cidade",
-        "estado",
-        "numero",
-        "rua"
+        "latitude",
+        "logradouro",
+        "longitude",
+        "numero"
       ],
       "properties": {
-        "rua": {
+        "logradouro": {
           "type": "string",
-          "description": "Nome da rua"
+          "description": "Logradouro"
         },
         "numero": {
           "type": "string",
@@ -4332,17 +5014,17 @@
           "type": "string",
           "description": "Cidade"
         },
-        "estado": {
-          "type": "string",
-          "description": "Estado (UF)"
-        },
         "cep": {
           "type": "string",
           "description": "CEP"
         },
-        "complemento": {
-          "type": "string",
-          "description": "Complemento"
+        "latitude": {
+          "type": "number",
+          "description": "Latitude"
+        },
+        "longitude": {
+          "type": "number",
+          "description": "Longitude"
         }
       },
       "type": "object"
@@ -4383,7 +5065,7 @@
         },
         "status": {
           "type": "string",
-          "description": "Status (PENDING_SIGNUP, PENDING_APPROVAL, ACTIVE, DISABLED)"
+          "description": "Status (PENDING_SIGNUP, PENDING_APPROVAL, ACTIVE, DISABLED, DELETED)"
         },
         "signup_completed_at": {
           "type": "string",
