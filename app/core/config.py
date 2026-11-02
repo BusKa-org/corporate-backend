@@ -52,8 +52,9 @@ class Settings:
         self.MAIL_PASSWORD = os.getenv("MAIL_PASSWORD", "")
         self.MAIL_USE_TLS = os.getenv("MAIL_USE_TLS", "true").lower() == "true"
 
-        # Frontend URL (used for links in invitation e-mails)
-        self.FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:8081")
+        # Frontend URL (used for links in invitation and password reset e-mails).
+        # Required in production: an empty value would build relative, broken links.
+        self.FRONTEND_URL = self._get_required("FRONTEND_URL", default="http://localhost:8081")
 
         # Link de download do app, incluído no e-mail de convite (opcional)
         self.APP_DOWNLOAD_URL = os.getenv("APP_DOWNLOAD_URL", "")
@@ -167,12 +168,17 @@ class Settings:
         self._validate()
 
     def _get_required(self, key: str, default: str | None = None) -> str:
-        """Get a required string value."""
-        value = os.getenv(key, default if self.DEBUG else None)
-        if not value:
-            self._errors.append(f"{key} is required")
-            return ""
-        return value
+        """Get a required string value.
+
+        Outside production, an unset or empty value falls back to the default.
+        """
+        value = os.getenv(key, "")
+        if value:
+            return value
+        if self.DEBUG and default:
+            return default
+        self._errors.append(f"{key} is required")
+        return ""
 
     def _get_int(
         self, key: str, default: int, min_val: int | None = None, max_val: int | None = None
