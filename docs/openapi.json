@@ -200,6 +200,33 @@
         ]
       }
     },
+    "/v1/auth/reset-password": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "Password reset"
+          },
+          "400": {
+            "description": "Validation error, or invalid/expired token"
+          }
+        },
+        "summary": "Reset password with the token from the e-mail link (sent by the frontend)",
+        "operationId": "auth_reset_password",
+        "parameters": [
+          {
+            "name": "payload",
+            "required": true,
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/ResetPasswordRequest"
+            }
+          }
+        ],
+        "tags": [
+          "auth"
+        ]
+      }
+    },
     "/v1/consentimento": {
       "delete": {
         "responses": {
@@ -1163,6 +1190,31 @@
           "type": "string"
         }
       ],
+      "patch": {
+        "responses": {
+          "200": {
+            "description": "Updated",
+            "schema": {
+              "$ref": "#/definitions/OnibusResponse"
+            }
+          }
+        },
+        "summary": "Atualiza dados de um ônibus",
+        "operationId": "update_onibus",
+        "parameters": [
+          {
+            "name": "payload",
+            "required": true,
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/OnibusUpdateRequest"
+            }
+          }
+        ],
+        "tags": [
+          "onibus"
+        ]
+      },
       "delete": {
         "responses": {
           "200": {
@@ -1186,31 +1238,6 @@
         },
         "summary": "Detalhes de um ônibus",
         "operationId": "get_onibus",
-        "tags": [
-          "onibus"
-        ]
-      },
-      "patch": {
-        "responses": {
-          "200": {
-            "description": "Updated",
-            "schema": {
-              "$ref": "#/definitions/OnibusResponse"
-            }
-          }
-        },
-        "summary": "Atualiza dados de um ônibus",
-        "operationId": "update_onibus",
-        "parameters": [
-          {
-            "name": "payload",
-            "required": true,
-            "in": "body",
-            "schema": {
-              "$ref": "#/definitions/OnibusUpdateRequest"
-            }
-          }
-        ],
         "tags": [
           "onibus"
         ]
@@ -1922,6 +1949,37 @@
       }
     },
     "/v1/users/me": {
+      "patch": {
+        "responses": {
+          "200": {
+            "description": "Updated",
+            "schema": {
+              "$ref": "#/definitions/UserResponse"
+            }
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "409": {
+            "description": "Conflict"
+          }
+        },
+        "summary": "Atualiza perfil do usuário logado (nome, telefone, receber_notificacoes, cnh)",
+        "operationId": "update_my_profile",
+        "parameters": [
+          {
+            "name": "payload",
+            "required": true,
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/UpdateProfileRequest"
+            }
+          }
+        ],
+        "tags": [
+          "users"
+        ]
+      },
       "delete": {
         "responses": {
           "200": {
@@ -1958,37 +2016,6 @@
         },
         "summary": "Perfil do usuário logado",
         "operationId": "get_my_profile",
-        "tags": [
-          "users"
-        ]
-      },
-      "patch": {
-        "responses": {
-          "200": {
-            "description": "Updated",
-            "schema": {
-              "$ref": "#/definitions/UserResponse"
-            }
-          },
-          "400": {
-            "description": "Validation error"
-          },
-          "409": {
-            "description": "Conflict"
-          }
-        },
-        "summary": "Atualiza perfil do usuário logado (nome, telefone, receber_notificacoes, cnh)",
-        "operationId": "update_my_profile",
-        "parameters": [
-          {
-            "name": "payload",
-            "required": true,
-            "in": "body",
-            "schema": {
-              "$ref": "#/definitions/UpdateProfileRequest"
-            }
-          }
-        ],
         "tags": [
           "users"
         ]
@@ -2069,27 +2096,6 @@
           "type": "string"
         }
       ],
-      "delete": {
-        "responses": {
-          "200": {
-            "description": "Deleted"
-          },
-          "403": {
-            "description": "Forbidden"
-          },
-          "404": {
-            "description": "Not found"
-          },
-          "400": {
-            "description": "Has linked trips"
-          }
-        },
-        "summary": "Gestor remove um motorista",
-        "operationId": "delete_motorista",
-        "tags": [
-          "users"
-        ]
-      },
       "patch": {
         "responses": {
           "200": {
@@ -2120,6 +2126,27 @@
             }
           }
         ],
+        "tags": [
+          "users"
+        ]
+      },
+      "delete": {
+        "responses": {
+          "200": {
+            "description": "Deleted"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "400": {
+            "description": "Has linked trips"
+          }
+        },
+        "summary": "Gestor remove um motorista",
+        "operationId": "delete_motorista",
         "tags": [
           "users"
         ]
@@ -2733,6 +2760,28 @@
         "email": {
           "type": "string",
           "description": "Email para recuperação de senha"
+        }
+      },
+      "type": "object"
+    },
+    "ResetPasswordRequest": {
+      "required": [
+        "confirm_password",
+        "new_password",
+        "token"
+      ],
+      "properties": {
+        "token": {
+          "type": "string",
+          "description": "Token do link enviado por e-mail"
+        },
+        "new_password": {
+          "type": "string",
+          "description": "Nova senha"
+        },
+        "confirm_password": {
+          "type": "string",
+          "description": "Confirmação da senha"
         }
       },
       "type": "object"
