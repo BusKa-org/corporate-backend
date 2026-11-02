@@ -12,6 +12,7 @@ from app.services import consentimento_service
 
 api = Namespace("consentimento", description="Consentimento LGPD (termo e política de privacidade)")
 
+# Validation schemas (Marshmallow)
 aceite_request_schema = AceiteRequestSchema()
 estado_response_schema = ConsentimentoEstadoResponseSchema()
 

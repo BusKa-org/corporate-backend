@@ -40,11 +40,10 @@ from app.services.consentimento_service import exige_consentimento
 
 api = Namespace("viagens", description="Execução de Viagens")
 
+# API contracts (Swagger documentation)
 ponto_models = ponto_contract.register_models(api)
 credencial_embarque_models = credencial_embarque_contract.register_models(api)
 solicitacao_models = solicitacao_contract.register_models(api)
-
-# API contracts (Swagger documentation)
 models = viagem_contract.register_models(api)
 
 # Validation schemas (Marshmallow)
@@ -60,7 +59,6 @@ viagem_list_query_schema = ViagemListQuerySchema()
 message_response_schema = MessageResponseSchema()
 viagem_aluno_confirmacao_response_schema = ViagemAlunoConfirmacaoResponseSchema()
 viagem_agenda_aluno_list_response_schema = ViagemAgendaAlunoListResponseSchema()
-
 
 ponto_flat_list_response_schema = PontoFlatListResponseSchema()
 credencial_embarque_response_schema = CredencialEmbarqueResponseSchema()

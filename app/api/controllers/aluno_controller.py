@@ -19,7 +19,7 @@ api = Namespace("alunos", description="Área do Aluno (App)")
 # API contracts (Swagger documentation)
 models = aluno_contract.register_models(api)
 
-# Validation / serialisation schemas (Marshmallow)
+# Validation schemas (Marshmallow)
 me_update_schema = AlunoMeUpdateRequestSchema()
 aluno_response_schema = AlunoResponseSchema()
 aluno_list_response_schema = AlunoListResponseSchema()

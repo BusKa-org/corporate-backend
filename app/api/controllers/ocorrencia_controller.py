@@ -8,6 +8,7 @@ from app.services.ocorrencia_service import OcorrenciaService
 
 api = Namespace("ocorrencias", description="Registro de ocorrências / problemas")
 
+# API contracts (Swagger documentation)
 _ocorrencia_input = api.model(
     "OcorrenciaInput",
     {
