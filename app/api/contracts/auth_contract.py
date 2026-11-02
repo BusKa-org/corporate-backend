@@ -29,6 +29,9 @@ def register_models(api):
         {
             "message": fields.String(description="Mensagem de sucesso"),
             "token": fields.String(description="JWT Token"),
+            "consentimento_pendente": fields.Boolean(
+                description="true quando o usuário ainda não aceitou a versão vigente do termo"
+            ),
             "user": fields.Nested(user_info, description="Dados do usuário"),
         },
     )

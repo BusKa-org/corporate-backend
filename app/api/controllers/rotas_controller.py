@@ -185,7 +185,7 @@ class RotaResource(Resource):
 
     @api.doc("update_rota")
     @api.expect(models["rota_update_request"])
-    @api.response(200, "Success")
+    @api.response(200, "Success", models["rota_response"])
     @jwt_required()
     def put(self, id: str) -> tuple[dict[str, Any], int]:
         current_user_id = get_jwt_identity()

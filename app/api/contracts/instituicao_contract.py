@@ -9,12 +9,13 @@ def register_models(api):
     instituicao_endereco_input = api.model(
         "InstituicaoEnderecoInput",
         {
-            "rua": fields.String(description="Nome da rua"),
+            "logradouro": fields.String(description="Logradouro"),
             "numero": fields.String(description="Número"),
             "bairro": fields.String(description="Bairro"),
             "cidade": fields.String(description="Cidade"),
-            "estado": fields.String(description="Estado (UF)"),
             "cep": fields.String(description="CEP"),
+            "latitude": fields.Float(description="Latitude"),
+            "longitude": fields.Float(description="Longitude"),
         },
     )
 
@@ -22,7 +23,12 @@ def register_models(api):
         "InstituicaoCreateRequest",
         {
             "nome": fields.String(required=True, description="Nome da instituição"),
-            "tipo": fields.String(description="Tipo (ESCOLA, CRECHE, UNIVERSIDADE)"),
+            "cnpj": fields.String(required=True, description="CNPJ"),
+            "tipo": fields.String(
+                required=True,
+                description="Tipo (INSTITUTO_FEDERAL, UNIVERSIDADE_PUBLICA, UNIVERSIDADE_PRIVADA, "
+                "ESCOLA_PUBLICA, ESCOLA_PRIVADA, ESCOLA_COMUNITARIA)",
+            ),
             "endereco": fields.Nested(
                 instituicao_endereco_input, required=True, description="Endereço"
             ),
@@ -34,10 +40,13 @@ def register_models(api):
         {
             "id": fields.String(description="UUID"),
             "nome": fields.String(description="Nome"),
+            "cnpj": fields.String(description="CNPJ"),
             "sigla": fields.String(description="Sigla"),
             "uf": fields.String(description="UF"),
             "tipo": fields.String(description="Tipo"),
-            "endereco": fields.String(description="Endereço formatado"),
+            "endereco": fields.Nested(instituicao_endereco_input, description="Endereço"),
+            "latitude": fields.Float(description="Latitude"),
+            "longitude": fields.Float(description="Longitude"),
         },
     )
 

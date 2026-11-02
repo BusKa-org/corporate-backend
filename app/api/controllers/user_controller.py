@@ -61,7 +61,7 @@ class UserList(Resource):
 @api.route("/me")
 class UserProfile(Resource):
     @api.doc("get_my_profile", responses={200: "Success", 404: "User not found"})
-    @api.response(200, "Success", models["user_response"])
+    @api.response(200, "Success", models["user_me_response"])
     @jwt_required()
     def get(self) -> tuple[dict[str, Any], int]:
         """Perfil do usuário logado"""
@@ -96,6 +96,7 @@ class UserProfile(Resource):
             409: "Viagem em andamento",
         },
     )
+    @api.expect(models["excluir_conta_request"])
     @jwt_required()
     def delete(self) -> tuple[dict[str, str], int]:
         """Exclui a conta e os dados pessoais do passageiro logado. Corpo: {"email", "senha"}"""
@@ -214,7 +215,7 @@ class UserChangePassword(Resource):
 class UserFcmToken(Resource):
     @api.doc("update_fcm_token", responses={200: "Token atualizado", 400: "Token não enviado"})
     @api.expect(models["fcm_token_request"])
-    @api.response(200, "Token updated successfully")
+    @api.response(200, "Token updated successfully", models["fcm_token_response"])
     @jwt_required()
     def patch(self) -> tuple[dict[str, str], int]:
         """Atualiza o Token do Firebase (Push Notifications) do aparelho do usuário"""

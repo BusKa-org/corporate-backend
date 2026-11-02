@@ -42,7 +42,7 @@ def register_models(api):
         "RotaPontosAddRequest",
         {
             "pontos": fields.List(
-                fields.Nested(rota_ponto_add_request), description="Pontos da rota"
+                fields.Nested(rota_ponto_add_request), required=True, description="Pontos da rota"
             ),
         },
     )
@@ -72,21 +72,17 @@ def register_models(api):
     rota_update_request = api.model(
         "RotaUpdateRequest",
         {
-            "nome": fields.String(required=True, description="Nome da rota"),
+            "nome": fields.String(description="Nome da rota"),
             "tipo": fields.String(
                 enum=TIPOS_VIAGEM,
                 description="Não pode ser alterado: só o tipo atual é aceito (outro valor dá 400)",
             ),
             "buffer_minutos": fields.Integer(description=BUFFER_DESC),
             "prazo_inicio_minutos": fields.Integer(description=PRAZO_DESC),
-            "motorista_padrao_id": fields.String(description="UUID do motorista padrão"),
-            "veiculo_padrao_id": fields.String(description="UUID do veículo padrão"),
-            "pontos": fields.List(
-                fields.Nested(rota_ponto_add_request), description="Pontos da rota"
+            "motorista_padrao_id": fields.String(
+                description="UUID do motorista padrão (null remove)"
             ),
-            "horarios": fields.List(
-                fields.Nested(rota_horario_create_request), description="Grade de horários"
-            ),
+            "veiculo_padrao_id": fields.String(description="UUID do veículo padrão (null remove)"),
         },
     )
 

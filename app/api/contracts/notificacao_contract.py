@@ -20,3 +20,16 @@ def get_notificacao_input_model(api):
             "viagem_id": fields.String(description="ID da viagem (opcional)", example=""),
         },
     )
+
+
+def get_notificacao_response_model(api):
+    return api.model(
+        "NotificacaoResponse",
+        {
+            "id": fields.String(description="UUID da notificação"),
+            "titulo": fields.String(description="Título"),
+            "mensagem": fields.String(description="Mensagem"),
+            "enviada": fields.Boolean(description="Push enviado"),
+            "data_envio": fields.String(description="Data de envio"),
+        },
+    )

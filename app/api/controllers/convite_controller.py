@@ -4,6 +4,7 @@ from flask import request
 from flask_jwt_extended import get_jwt_identity, jwt_required
 from flask_restx import Namespace, Resource
 
+from app.api.contracts import convite_contract
 from app.extensions import (
     limite_auth_por_email,
     limite_auth_por_token,
@@ -21,6 +22,8 @@ from app.services import convite_service
 
 api = Namespace("convites", description="Convites de cadastro de passageiros")
 
+models = convite_contract.register_models(api)
+
 convites_create_schema = ConvitesCreateRequestSchema()
 convite_list_query_schema = ConviteListQuerySchema()
 convite_aceite_schema = ConviteAceiteRequestSchema()
@@ -32,6 +35,8 @@ pin_validar_schema = PinValidarRequestSchema()
 @api.route("")
 class ConviteListResource(Resource):
     @api.doc("listar_convites", responses={200: "Convites da organização", 403: "Não é gestor"})
+    @api.param("estado", "PENDENTE, CONCLUIDO ou CANCELADO", _in="query")
+    @api.response(200, "Success", models["convite_list_response"])
     @jwt_required()
     def get(self) -> tuple[dict[str, Any], int]:
         """(Gestor) Lista os convites da organização. Filtro opcional: ?estado="""
@@ -46,6 +51,8 @@ class ConviteListResource(Resource):
         "criar_convites",
         responses={200: "Resultado por linha", 400: "Lote inválido", 403: "Não é gestor"},
     )
+    @api.expect(models["convites_create_request"])
+    @api.response(200, "Success", models["convites_create_response"])
     @jwt_required()
     def post(self) -> tuple[dict[str, Any], int]:
         """(Gestor) Convida por e-mail, até 500 por chamada. Corpo: {"convites": [{"email", ...}]}"""
@@ -71,6 +78,7 @@ class ConviteReenviarResource(Resource):
     @api.doc(
         "reenviar_convite", responses={200: "Reenviado", 404: "Não encontrado", 409: "Não pendente"}
     )
+    @api.response(200, "Success", models["convite_response"])
     @jwt_required()
     def post(self, convite_id: str) -> tuple[dict[str, Any], int]:
         """(Gestor) Reenvia um convite pendente. O link anterior deixa de valer."""
@@ -84,6 +92,7 @@ class ConviteAceiteResource(Resource):
         "consultar_convite",
         responses={200: "Dados do convite", 404: "Convite inválido ou expirado"},
     )
+    @api.response(200, "Success", models["convite_dados_response"])
     @limite_auth_por_token
     def get(self, token: str) -> tuple[dict[str, Any], int]:
         """(Público) Dados preenchidos pelo gestor e os campos que ainda faltam"""
@@ -98,6 +107,7 @@ class ConviteAceiteResource(Resource):
             409: "E-mail ou CPF já cadastrado",
         },
     )
+    @api.expect(models["convite_aceite_request"])
     @limite_auth_por_token
     def post(self, token: str) -> tuple[dict[str, str], int]:
         """(Público) Conclui o cadastro. Corpo: nome, cpf, telefone, instituicao_id, senha,
@@ -110,6 +120,7 @@ class ConviteAceiteResource(Resource):
 @api.route("/pin")
 class ConvitePinSolicitarResource(Resource):
     @api.doc("solicitar_pin_do_convite", responses={200: "Resposta igual para qualquer e-mail"})
+    @api.expect(models["pin_solicitar_request"])
     @limite_auth_por_email
     def post(self) -> tuple[dict[str, str], int]:
         """(Público) Envia um PIN de 10 minutos ao e-mail, se ele estiver habilitado. Corpo: {"email"}"""
@@ -125,6 +136,8 @@ class ConvitePinValidarResource(Resource):
     @api.doc(
         "validar_pin_do_convite", responses={200: "PIN correto", 400: "PIN inválido ou expirado"}
     )
+    @api.expect(models["pin_validar_request"])
+    @api.response(200, "Success", models["pin_validar_response"])
     @limite_sensivel_por_email
     def post(self) -> tuple[dict[str, str], int]:
         """(Público) Confere o PIN. Devolve o token que abre /aceite/<token>. Corpo: {"email", "pin"}"""

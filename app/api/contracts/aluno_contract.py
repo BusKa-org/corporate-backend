@@ -2,6 +2,11 @@
 
 from flask_restx import fields
 
+ACESSIBILIDADE_DESC = (
+    "CADEIRA_DE_RODAS, MOBILIDADE_REDUZIDA, DEFICIENCIA_VISUAL, "
+    "DEFICIENCIA_AUDITIVA, DEFICIENCIA_INTELECTUAL, OUTRA"
+)
+
 
 def register_models(api):
     """Register aluno models with the API namespace."""
@@ -9,13 +14,13 @@ def register_models(api):
     endereco_input = api.model(
         "EnderecoInput",
         {
-            "rua": fields.String(required=True, description="Nome da rua"),
+            "logradouro": fields.String(required=True, description="Logradouro"),
             "numero": fields.String(required=True, description="Número"),
             "bairro": fields.String(required=True, description="Bairro"),
             "cidade": fields.String(required=True, description="Cidade"),
-            "estado": fields.String(required=True, description="Estado (UF)"),
             "cep": fields.String(required=True, description="CEP"),
-            "complemento": fields.String(required=False, description="Complemento"),
+            "latitude": fields.Float(required=True, description="Latitude"),
+            "longitude": fields.Float(required=True, description="Longitude"),
         },
     )
 
@@ -31,8 +36,7 @@ def register_models(api):
             "necessidades_acessibilidade": fields.List(
                 fields.String,
                 required=False,
-                description="CADEIRA_DE_RODAS, MOBILIDADE_REDUZIDA, DEFICIENCIA_VISUAL, "
-                "DEFICIENCIA_AUDITIVA, DEFICIENCIA_INTELECTUAL, OUTRA",
+                description=ACESSIBILIDADE_DESC,
             ),
             "observacao_acessibilidade": fields.String(
                 required=False, description="Observação livre sobre acessibilidade"
@@ -52,7 +56,7 @@ def register_models(api):
             "escola": fields.String(description="Nome da escola"),
             "instituicao_id": fields.String(description="UUID da instituição"),
             "status": fields.String(
-                description="Status (PENDING_SIGNUP, PENDING_APPROVAL, ACTIVE, DISABLED)"
+                description="Status (PENDING_SIGNUP, PENDING_APPROVAL, ACTIVE, DISABLED, DELETED)"
             ),
             "signup_completed_at": fields.DateTime(description="Data de conclusão do cadastro"),
             "data_nascimento": fields.String(description="Data de nascimento"),
