@@ -65,17 +65,28 @@ of how §2 resolves.
 
 ### 3.1 Current module manifest (`app/models`)
 
-The split of the mixed model files has not landed: BusKá-only classes still
-share files with the Background IP ones.
+The split of the mixed model files has not landed: segment-specific classes
+still share files with the Background IP ones. Ownership follows §5: on-demand
+trip work (availability windows, ride requests, buffer, capacity, QR boarding)
+is PaqTcPB's, scheduled school routes are BusKá's municipal module. Files built
+after the fork whose owner §2/§5 does not settle are marked "a classificar".
 
 | File | Owner | Notes |
 |---|---|---|
 | `user.py` | mixed | `User`, `Motorista`, `Gestor` (Background IP) and `Aluno` (BusKá only, a `User` subclass) |
 | `geo.py` | mixed | `Ponto`, `Endereco` (Background IP) and `Instituicao` (BusKá only) |
 | `enum.py` | mixed | shared enums plus `TipoInstituicao` (BusKá only) |
-| `organizacao.py`, `rota.py`, `viagem.py`, `onibus.py`, `notificacao.py`, `password_reset.py` | Background IP | unmixed |
+| `rota.py` | mixed | `Rota`, `RotaPonto` (Background IP) and `HorarioRota`, `DiasOperacao`, `RotaAluno` (BusKá only, scheduled routes and subscription) |
+| `viagem.py` | mixed | `Viagem`, `ViagemPonto`, `AlunosConfirmados`, `TelemetriaViagem` (Background IP) and `SolicitacaoViagem` (PaqTcPB, ride requests) |
+| `onibus.py` | mixed | `Onibus` (Background IP) and `JanelaDisponibilidade` (PaqTcPB, availability windows) |
+| `credencial_embarque.py` | PaqTcPB | `CredencialEmbarque`, QR boarding |
+| `organizacao.py`, `notificacao.py`, `password_reset.py`, `base.py` | Background IP | unmixed |
+| `consentimento.py`, `retencao_legal.py` | a classificar | LGPD consent and data kept after account deletion |
+| `convite.py` | a classificar | passenger invitations |
+| `ocorrencia.py` | a classificar | incident reports (inherited flow, now also opened by QR boarding refusals) |
+| `telemetria.py` | a classificar | `TelemetriaVeiculo`, battery telemetry |
 
-`app/__init__.py` is the fourth file the earlier inventory flagged as mixed.
+`app/__init__.py` is also mixed, though it is not a model file.
 It still hardcodes the product's own namespaces (`aluno`, `instituicao`
 included) alongside plugin discovery, since removing BusKá's controllers
 from the product's own registration list is a service-layer decision (which
