@@ -1,7 +1,7 @@
-"""Registro de consentimento LGPD.
+"""LGPD consent record.
 
-Uma linha por evento: aceite ou revogação de uma versão do termo. O estado
-atual do usuário é a linha mais recente dele. Recusar o termo não grava nada.
+One row per event: acceptance or revocation of a terms version. The user's
+current state is their latest row. Refusing the terms records nothing.
 """
 
 from sqlalchemy.dialects.postgresql import UUID
@@ -16,7 +16,7 @@ class Consentimento(db.Model):
     __tablename__ = "consentimento"
     __table_args__ = (db.Index("idx_consentimento_usuario", "usuario_id"),)
 
-    # Inteiro sequencial: a ordem dos eventos do usuário sai do id.
+    # Sequential integer: the order of a user's events comes from the id.
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     usuario_id = db.Column(
         UUID(as_uuid=True), db.ForeignKey("usuario.id", ondelete="CASCADE"), nullable=False

@@ -114,7 +114,7 @@ class ViagemListQuerySchema(BaseSchema):
     motorista_id = fields.String(required=False, allow_none=True, validate=validate_uuid4)
     rota_id = fields.String(required=False, allow_none=True, validate=validate_uuid4)
 
-    # Optional pagination (even if you don't use yet, it makes "total" correct later)
+    # Optional pagination, so "total" stays correct once it is used
     page = fields.Integer(required=False, load_default=1, validate=Range(min=1))
     per_page = fields.Integer(required=False, load_default=20, validate=Range(min=1, max=100))
 
@@ -147,7 +147,7 @@ class MessageResponseSchema(BaseSchema):
 class ViagemAlunoConfirmacaoResponseSchema(BaseSchema):
     aluno_id = fields.String()
     nome = fields.String(attribute="aluno.nome")
-    # Motorista confere a foto no embarque (RF-17) e vê quem precisa de ajuda.
+    # The driver checks the photo at boarding (RF-17) and sees who needs help.
     foto_url = fields.String(attribute="aluno.foto_url", dump_default=None)
     necessidades_acessibilidade = fields.List(
         fields.String(), attribute="aluno.necessidades_acessibilidade"
@@ -175,7 +175,6 @@ class ViagemResponseSchema(BaseSchema):
     motorista_nome = fields.String(attribute="motorista.nome", dump_default="Sem Motorista")
     veiculo_placa = fields.String(attribute="veiculo.placa", dump_default="Sem Veículo")
 
-    # Schedule info
     horario_inicio = fields.Method("get_horario_inicio")
     horario_fim = fields.DateTime(attribute="fim_real")
     inicio_real = fields.DateTime()  # Actual start time for elapsed calculation
@@ -189,7 +188,6 @@ class ViagemResponseSchema(BaseSchema):
         fields.Nested(ViagemAlunoConfirmacaoResponseSchema), attribute="alunos_confirmados"
     )
 
-    # Counts for dashboard
     total_alunos = fields.Method("get_total_alunos")
     alunos_confirmados_count = fields.Method("get_alunos_confirmados_count")
 
@@ -254,7 +252,7 @@ class ViagemResponseSchema(BaseSchema):
     alunos_embarcados_count = fields.Method("get_alunos_embarcados_count")
 
     def get_alunos_embarcados_count(self, obj):
-        """Conta apenas os alunos que a catraca/geofencing registrou (embarcou=True)"""
+        """Counts only students the turnstile/geofencing recorded as boarded (embarcou=True)"""
         if obj.alunos_confirmados:
             return sum(1 for a in obj.alunos_confirmados if a.embarcou)
         return 0
@@ -337,13 +335,11 @@ class ViagemAgendaAlunoResponseSchema(BaseSchema):
         return str(c.ponto_embarque_id) if (c and c.ponto_embarque_id) else None
 
 
-# ==========================================
-# Declaração de trajeto sob demanda (RF-13)
-# ==========================================
+# On-demand route declaration (RF-13)
 
 
 class DeclaracaoTrajetoRequestSchema(BaseSchema):
-    """RF-13: origem e destino entre os pontos fixos do circuito."""
+    """RF-13: origin and destination among the circuit's fixed stops."""
 
     ponto_origem_id = fields.UUID(required=True)
     ponto_destino_id = fields.UUID(required=True)

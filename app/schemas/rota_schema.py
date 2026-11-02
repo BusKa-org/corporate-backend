@@ -34,7 +34,7 @@ class RotaHorarioCreateRequestSchema(BaseSchema):
 
 
 def validar_buffer_minutos(valor: int) -> None:
-    """Limite lido na hora: cada implantação ajusta no .env (ROTA_BUFFER_MINUTOS_MAX)."""
+    """Limit read at call time: each deployment sets it in .env (ROTA_BUFFER_MINUTOS_MAX)."""
     validate.Range(min=1, max=current_app.config["ROTA_BUFFER_MINUTOS_MAX"])(valor)
 
 
@@ -63,7 +63,7 @@ class RotaUpdateRequestSchema(BaseSchema):
     """
 
     nome = fields.String()
-    # Só para recusar a troca com 400 em vez de ignorar o campo.
+    # Only so the change is rejected with 400 instead of silently ignoring the field.
     tipo = fields.Enum(TipoViagem)
     motorista_padrao_id = fields.String(allow_none=True)
     veiculo_padrao_id = fields.String(allow_none=True)

@@ -8,8 +8,8 @@ from .base import db
 class Organizacao(db.Model):
     """Tenant: the institution operating a transport service.
 
-    Replaces the municipal `Prefeitura`. `codigo_ibge` is dropped — corporate
-    tenants are not municipalities — and `sigla` becomes the stable public key.
+    Replaces the municipal `Prefeitura`. `codigo_ibge` is dropped (corporate
+    tenants are not municipalities) and `sigla` becomes the stable public key.
     """
 
     __tablename__ = "organizacao"
