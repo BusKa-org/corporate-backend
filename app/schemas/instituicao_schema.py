@@ -4,7 +4,7 @@ from app.models.enum import TipoInstituicao
 from app.schemas.common import BaseSchema
 from app.schemas.endereco_schema import EnderecoInputSchema, EnderecoResponseSchema
 
-# Lista montada a partir do enum para não divergir dele.
+# Built from the enum so the allowed list cannot drift from it.
 TIPOS_INSTITUICAO: list[str] = []
 for tipo_instituicao in TipoInstituicao:
     TIPOS_INSTITUICAO.append(tipo_instituicao.name)

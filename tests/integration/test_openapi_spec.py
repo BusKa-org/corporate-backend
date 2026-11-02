@@ -17,7 +17,7 @@ def test_openapi_spec_so_cita_seguranca_definida(client):
 
 @pytest.mark.integration
 def test_consentimento_registrado_uma_vez(app):
-    # Registrar o namespace duas vezes cria endpoints com sufixo "_2".
+    # Registering a namespace twice creates endpoints suffixed with "_2".
     for regra in app.url_map.iter_rules():
         if regra.endpoint.startswith("consentimento_"):
             assert not regra.endpoint.endswith("_2"), regra.endpoint
