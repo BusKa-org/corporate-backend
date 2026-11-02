@@ -25,14 +25,12 @@ def test_error_contract_unauthorized(client):
 
 @pytest.mark.integration
 def test_error_contract_sem_debug_nem_testing(app, client, monkeypatch):
-    """O contrato de erro precisa valer em produção, não só com DEBUG ligado.
+    """The error contract must hold in production, not only with DEBUG on.
 
-    O flask_restx trata as exceções levantadas dentro dos Resources com o
-    próprio handler, que devolve 500 genérico, e só delega para os
-    @app.errorhandler do Flask quando PROPAGATE_EXCEPTIONS é verdadeiro. Esse
-    valor cai para DEBUG or TESTING quando não é definido, então o resto da
-    suíte nunca exercita o comportamento real de produção: todo erro de
-    negócio (400, 401, 403, 404) virava 500 na VM.
+    flask_restx handles exceptions raised inside Resources with its own handler
+    (generic 500) and only delegates to Flask's @app.errorhandler when
+    PROPAGATE_EXCEPTIONS is true. That value falls back to DEBUG or TESTING, so
+    the rest of the suite never exercises the real production behavior.
     """
     monkeypatch.setitem(app.config, "DEBUG", False)
     monkeypatch.setitem(app.config, "TESTING", False)

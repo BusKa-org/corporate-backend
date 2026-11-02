@@ -1,7 +1,7 @@
-"""RF-21 — indicadores agregados do painel do gestor.
+"""RF-21: aggregated indicators of the manager dashboard.
 
-O cenário abaixo é montado com valores fixos para que cada indicador tenha um
-resultado calculado à mão, e não apenas um 200.
+The scenario below uses fixed values so each indicator has a hand-computed
+result, not just a 200.
 """
 
 from datetime import UTC, date, datetime, timedelta
@@ -63,9 +63,10 @@ def _embarcado(_db, viagem, aluno, ponto_embarque):
 
 @pytest.fixture()
 def cenario(_db, organizacao, gestor, motorista):
-    """Três viagens no período (duas nos limites), duas fora, uma de outra
-    organização, mais uma viagem programada herdada para provar que os dois
-    caminhos de rota entram no relatório."""
+    """Three trips in the period (two at the bounds), two outside, one from another
+    organization, plus an inherited scheduled trip to prove both route paths make
+    it into the report.
+    """
     pontos = [PontoFactory(organizacao_id=organizacao.id, apelido=f"P{i}") for i in range(1, 5)]
     _db.session.add_all(pontos)
     onibus = _onibus(_db, organizacao.id, "AAA0A01")
@@ -91,14 +92,14 @@ def cenario(_db, organizacao, gestor, motorista):
 
     comum = {"rota_id": rota.id, "veiculo_id": onibus.id, "motorista_id": motorista.user.id}
 
-    # Limite inferior: 3 embarques, 10 km, 3 negações.
+    # Lower bound: 3 boardings, 10 km, 3 denials.
     v1 = _viagem(_db, data=INICIO, status=StatusViagem.FINALIZADA, km_real=10, **comum)
-    # Limite superior: 2 embarques, sem km registrado, 1 negação.
+    # Upper bound: 2 boardings, no km recorded, 1 denial.
     v2 = _viagem(_db, data=FIM, status=StatusViagem.FINALIZADA, km_real=None, **comum)
-    # Rodada cancelada: conta em "viagens por status" e nas negações, mas não
-    # em ocupação nem IPK.
+    # Cancelled round: counts in "trips by status" and in denials, but not in
+    # occupancy or IPK.
     v3 = _viagem(_db, data=MEIO, status=StatusViagem.CANCELADA, km_real=None, **comum)
-    # Viagem programada herdada: chega pelo horario_rota_id, sem rota_id.
+    # Inherited scheduled trip: comes via horario_rota_id, without rota_id.
     v6 = _viagem(
         _db,
         data=MEIO,
@@ -108,7 +109,7 @@ def cenario(_db, organizacao, gestor, motorista):
         veiculo_id=onibus.id,
         motorista_id=motorista.user.id,
     )
-    # Fora do período, em ambos os lados.
+    # Outside the period, on both sides.
     v4 = _viagem(
         _db, data=INICIO - timedelta(days=1), status=StatusViagem.FINALIZADA, km_real=100, **comum
     )
@@ -134,8 +135,8 @@ def cenario(_db, organizacao, gestor, motorista):
         _embarcado(_db, fora, alunos[0], pontos[0])
         _negada(_db, fora, alunos[1], pontos[1])
 
-    # Trechos: v1 anda P1->P2 em 10 min e P2->P3 em 15 min; v2 anda P1->P2 em
-    # 20 min e não registra chegada em P3. Média de P1->P2 = 15 min.
+    # Legs: v1 does P1->P2 in 10 min and P2->P3 in 15 min; v2 does P1->P2 in
+    # 20 min and records no arrival at P3. Average P1->P2 = 15 min.
     base = datetime(2026, 3, 10, 7, 0, tzinfo=UTC)
     marcos = {
         v1.id: [base, base + timedelta(minutes=10), base + timedelta(minutes=25), None],
@@ -147,7 +148,7 @@ def cenario(_db, organizacao, gestor, motorista):
                 ViagemPonto(viagem_id=viagem_id, ponto_id=p.id, ordem=ordem, chegada_real=chegada)
             )
 
-    # Outra organização: nada disso pode aparecer no relatório do gestor acima.
+    # Another organization: none of this may show up in the manager's report above.
     outra = OrganizacaoFactory()
     _db.session.add(outra)
     _db.session.flush()
@@ -185,21 +186,21 @@ def test_indicadores_do_periodo_batem_com_o_calculo_manual(app, cenario, gestor)
     assert dados["sem_dados"] is False
     assert dados["periodo"] == {"inicio": "2026-03-10", "fim": "2026-03-12"}
 
-    # 1. Viagens por período: v1, v2, v3 e a programada v6. v4/v5 estão fora
-    # dos limites (um dia antes e um dia depois) e v7 é de outra organização.
+    # 1. Trips by period: v1, v2, v3 and the scheduled v6. v4/v5 are outside the
+    # bounds (one day before and one day after) and v7 is from another organization.
     assert dados["total_viagens"] == 4
     assert {i["status"]: i["total"] for i in dados["viagens_por_status"]} == {
         "FINALIZADA": 3,
         "CANCELADA": 1,
     }
 
-    # 2. Negações por ponto: P1 recebe 2 (v1) + 1 (v2) + 1 (v3), P2 recebe 1.
+    # 2. Denials per stop: P1 gets 2 (v1) + 1 (v2) + 1 (v3), P2 gets 1.
     assert dados["negacoes_por_ponto"] == [
         {"ponto_id": str(cenario["pontos"][0].id), "apelido": "P1", "negacoes": 4},
         {"ponto_id": str(cenario["pontos"][1].id), "apelido": "P2", "negacoes": 1},
     ]
 
-    # 3. Tempo médio por trecho: (10 + 20) / 2 e 15 min.
+    # 3. Average time per leg: (10 + 20) / 2 and 15 min.
     trechos = dados["tempo_medio_por_trecho"]
     assert [
         (t["ponto_origem"], t["ponto_destino"], t["minutos_medio"], t["amostras"]) for t in trechos
@@ -208,7 +209,7 @@ def test_indicadores_do_periodo_batem_com_o_calculo_manual(app, cenario, gestor)
         ("P2", "P3", 15.0, 1),
     ]
 
-    # 4. Ocupação: viagens operadas v1 (3), v2 (2) e v6 (1) sobre capacidade 20.
+    # 4. Occupancy: operated trips v1 (3), v2 (2) and v6 (1) over capacity 20.
     assert dados["ocupacao"] == {
         "viagens_consideradas": 3,
         "passageiros_media": 2.0,
@@ -216,7 +217,7 @@ def test_indicadores_do_periodo_batem_com_o_calculo_manual(app, cenario, gestor)
         "taxa_ocupacao": round((3 / 20 + 2 / 20 + 1 / 20) / 3, 4),
     }
 
-    # 5. IPK: só v1 (10 km, 3 pax) e v6 (5 km, 1 pax); v2 não tem km_real.
+    # 5. IPK: only v1 (10 km, 3 pax) and v6 (5 km, 1 pax); v2 has no km_real.
     assert dados["ipk"] == {
         "passageiros": 4,
         "km": 15.0,
@@ -227,8 +228,7 @@ def test_indicadores_do_periodo_batem_com_o_calculo_manual(app, cenario, gestor)
 
 
 def test_limites_do_periodo_sao_inclusivos_nas_duas_pontas(app, cenario, gestor):
-    """Encolher o intervalo em um dia de cada lado deve derrubar exatamente as
-    viagens dos limites."""
+    """Shrinking the range by one day on each side must drop exactly the trips at the bounds."""
     with app.app_context():
         so_inicio = indicadores_periodo(str(gestor.user.id), INICIO, INICIO)
         so_fim = indicadores_periodo(str(gestor.user.id), FIM, FIM)
@@ -242,7 +242,7 @@ def test_limites_do_periodo_sao_inclusivos_nas_duas_pontas(app, cenario, gestor)
 
 
 def test_km_real_nulo_nao_explode_e_nao_vira_zero(app, cenario, gestor):
-    """No dia em que nenhuma viagem operada tem km, o IPK é nulo — não zero."""
+    """On a day when no operated trip has km, IPK is null, not zero."""
     with app.app_context():
         dados = indicadores_periodo(str(gestor.user.id), FIM, FIM)
 
@@ -281,7 +281,7 @@ def test_gestor_nao_ve_dados_de_outra_organizacao(app, cenario, gestor, other_ge
 
     assert alheios["total_viagens"] == 0
     assert alheios["negacoes_por_ponto"] == []
-    # A viagem da terceira organização (50 km, 1 embarque) não vazou para cá.
+    # The third organization's trip (50 km, 1 boarding) did not leak in here.
     assert meus["ipk"]["km"] == 15.0
     assert all(i["apelido"] != "P_OUTRA" for i in meus["negacoes_por_ponto"])
 

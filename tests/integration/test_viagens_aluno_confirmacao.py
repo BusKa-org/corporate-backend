@@ -33,7 +33,7 @@ def test_confirmar_presenca_viagem_not_found(aluno):
 def test_confirmar_presenca_marshmallow_requires_ponto_if_confirmacao_true(
     aluno, rota_aluno, viagem_futura_agendada_com_motorista, dia_operacao
 ):
-    # schema exige ponto_embarque_id quando confirmacao=True
+    # the schema requires ponto_embarque_id when confirmacao=True
     r = aluno.client.put(
         f"/v1/viagens/{viagem_futura_agendada_com_motorista.id}/confirmacao",
         json={"confirmacao": True},
@@ -68,7 +68,6 @@ def test_confirmar_presenca_success_confirm_and_unconfirm(
     dia_operacao,
     rota_ponto,
 ):
-    # confirmar
     r = aluno.client.put(
         f"/v1/viagens/{viagem_futura_agendada_com_motorista.id}/confirmacao",
         json={"confirmacao": True, "ponto_embarque_id": str(rota_ponto.ponto_id)},
@@ -80,7 +79,6 @@ def test_confirmar_presenca_success_confirm_and_unconfirm(
     assert data.get("confirmacao") in (True, "true", 1) or True
     assert data.get("ponto_embarque") == str(rota_ponto.ponto.apelido)
 
-    # desconfirmar
     r2 = aluno.client.put(
         f"/v1/viagens/{viagem_futura_agendada_com_motorista.id}/confirmacao",
         json={"confirmacao": False},
@@ -88,8 +86,7 @@ def test_confirmar_presenca_success_confirm_and_unconfirm(
     assert r2.status_code == 200, r2.get_data(as_text=True)
 
     data2 = r2.get_json() or {}
-    # novamente: depende do teu controller; o importante é não 500 e limpar ponto
-    # se teu retorno for a confirmação serializada:
+    # again: what matters is no 500 and the stop being cleared
     if isinstance(data2, dict) and "ponto_embarque" in data2:
         assert data2["ponto_embarque"] is None
 

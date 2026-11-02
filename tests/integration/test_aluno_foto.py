@@ -1,4 +1,4 @@
-"""Foto do aluno: envio pelo próprio aluno e leitura por quem confere o embarque (RF-17)."""
+"""Student photo: uploaded by the student and read by whoever checks boarding (RF-17)."""
 
 import io
 import os
@@ -44,7 +44,7 @@ def test_aluno_envia_foto_e_consegue_ver(aluno, pasta_de_fotos):
 
 
 def test_foto_que_nao_e_imagem_e_recusada(aluno, pasta_de_fotos):
-    # O nome diz .png, mas o conteúdo não é: vale o conteúdo.
+    # The name says .png but the content is not: the content wins.
     resposta = _enviar(aluno, b"<html>nao sou imagem</html>")
 
     assert resposta.status_code == 400

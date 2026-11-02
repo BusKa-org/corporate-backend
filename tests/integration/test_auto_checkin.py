@@ -10,7 +10,7 @@ from app.tasks.viagem_tasks import realizar_auto_checkin
 def test_realizar_auto_checkin_sucesso(
     mock_scheduler, mock_notificacao, mock_alunos_conf, mock_db, app
 ):
-    """Testa se o robô marca embarcou=True quando estão no mesmo lugar."""
+    """Checks that the robot sets embarcou=True when they are at the same place."""
     with app.app_context():
         mock_viagem = MagicMock()
         mock_viagem.motorista_lat = -23.550520
@@ -36,7 +36,7 @@ def test_realizar_auto_checkin_sucesso(
 @patch("app.tasks.viagem_tasks.AlunosConfirmados")
 @patch("app.tasks.viagem_tasks.scheduler")
 def test_realizar_auto_checkin_longe_reagenda(mock_scheduler, mock_alunos_conf, mock_db, app):
-    """Testa se o robô falha, consome uma tentativa e agenda a próxima."""
+    """Checks that the robot fails, uses up an attempt and schedules the next one."""
     with app.app_context():
         mock_viagem = MagicMock()
         mock_viagem.motorista_lat = -23.550520
