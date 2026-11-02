@@ -33,6 +33,10 @@ def create_instituicao(gestor_id: str, data: dict[str, Any]) -> Instituicao:
     if not end_data:
         raise ValidationError("Dados de endereço são obrigatórios")
 
+    organizacao = db.session.get(Organizacao, user.organizacao_id)
+    if not organizacao or not organizacao.estado:
+        raise ValidationError("Organização sem UF cadastrada")
+
     try:
         novo_ponto = Ponto(
             organizacao_id=user.organizacao_id,
@@ -46,7 +50,13 @@ def create_instituicao(gestor_id: str, data: dict[str, Any]) -> Instituicao:
         nova_inst = Instituicao(
             nome=nome,
             cnpj=cnpj,
-            tipo=TipoInstituicao(tipo_str),
+            # O schema valida o NOME do enum (ex.: "INSTITUTO_FEDERAL"), não o valor.
+            tipo=TipoInstituicao[tipo_str],
+            # Cadastro feito pelo gestor, não importado de EMEC/INEP (igual ao seed).
+            fonte="MANUAL",
+            codigo_externo=cnpj,
+            uf=organizacao.estado,
+            organizacao_id=user.organizacao_id,
             ponto_id=novo_ponto.id,
         )
         db.session.add(nova_inst)

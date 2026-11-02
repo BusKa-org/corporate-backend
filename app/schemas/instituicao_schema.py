@@ -1,7 +1,13 @@
 from marshmallow import fields, validate
 
+from app.models.enum import TipoInstituicao
 from app.schemas.common import BaseSchema
-from app.schemas.endereco_schema import EnderecoResponseSchema
+from app.schemas.endereco_schema import EnderecoInputSchema, EnderecoResponseSchema
+
+# Lista montada a partir do enum para não divergir dele.
+TIPOS_INSTITUICAO: list[str] = []
+for tipo_instituicao in TipoInstituicao:
+    TIPOS_INSTITUICAO.append(tipo_instituicao.name)
 
 
 class InstituicaoCreateRequestSchema(BaseSchema):
@@ -9,19 +15,10 @@ class InstituicaoCreateRequestSchema(BaseSchema):
     cnpj = fields.String(required=True)
     tipo = fields.String(
         required=True,
-        validate=validate.OneOf(
-            [
-                "INSTITUTO_FEDERAL",
-                "UNIVERSIDADE_PUBLICA",
-                "UNIVERSIDADE_PRIVADA",
-                "ESCOLA_PUBLICA",
-                "ESCOLA_PRIVADA",
-                "ESCOLA_COMUNITARIA",
-            ]
-        ),
+        validate=validate.OneOf(TIPOS_INSTITUICAO),
         metadata={"description": "Tipo da instituição conforme modelo"},
     )
-    endereco = fields.Nested(EnderecoResponseSchema, required=True)
+    endereco = fields.Nested(EnderecoInputSchema, required=True)
 
 
 class InstituicaoResponseSchema(BaseSchema):
