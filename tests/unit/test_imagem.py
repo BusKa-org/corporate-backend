@@ -20,7 +20,7 @@ def test_jpeg_sem_metadados_fica_igual():
 
 
 def test_jpeg_descarta_o_que_vem_depois_do_fim_da_imagem():
-    # Celulares anexam uma segunda imagem, com EXIF próprio, depois do FF D9.
+    # Phones append a second image, with its own EXIF, after FF D9.
     original = imagens.jpeg() + imagens.jpeg(com_exif=True)
 
     assert remover_metadados(original, "image/jpeg") == imagens.jpeg()
@@ -102,7 +102,7 @@ def test_dimensoes_lidas_do_cabecalho(conteudo, tipo):
 
 
 def test_dimensoes_acima_do_limite_sao_lidas_inteiras():
-    # 14 bits é o máximo do VP8L; o serviço compara com o limite de pixels.
+    # 14 bits is the VP8L maximum; the service compares against the pixel limit.
     assert dimensoes(imagens.webp(imagens.vp8l(16384, 16384)), "image/webp") == (16384, 16384)
     assert dimensoes(imagens.png(largura=100_000, altura=100_000), "image/png") == (
         100_000,
@@ -130,10 +130,10 @@ def test_dimensao_zero_e_recusada(conteudo, tipo):
         (imagens.jpeg()[:30], "image/jpeg"),
         (imagens.webp(imagens.vp8l(10, 10))[:22], "image/webp"),
         (imagens.webp(imagens.vp8(10, 10))[:26], "image/webp"),
-        # Sem SOFn antes do início da imagem, e WEBP sem chunk de imagem.
+        # No SOFn before the start of the image, and WEBP without an image chunk.
         (b"\xff\xd8" + imagens.APP0_JFIF + imagens.INICIO_DA_IMAGEM_JPEG, "image/jpeg"),
         (imagens.webp(imagens.EXIF_WEBP), "image/webp"),
-        # IHDR fora do primeiro lugar.
+        # IHDR not in first place.
         (b"\x89PNG\r\n\x1a\n" + imagens.TEXTO_PNG + imagens.ihdr(1, 1), "image/png"),
     ],
 )

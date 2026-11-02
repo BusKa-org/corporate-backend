@@ -95,13 +95,10 @@ def create_app(
     app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(hours=settings.JWT_EXPIRES_HOURS)
     app.config["DEBUG"] = settings.DEBUG
 
-    # O flask_restx captura as exceções levantadas dentro dos Resources e
-    # responde 500 genérico por conta própria; ele só delega para os
-    # @app.errorhandler registrados abaixo quando PROPAGATE_EXCEPTIONS é
-    # verdadeiro. Sem isso o valor cai para DEBUG or TESTING, ou seja, todo
-    # erro de negócio (400, 401, 403, 404) virava 500 em produção.
-    # As exceções inesperadas continuam cobertas pelo handler de Exception,
-    # que devolve o 500 no formato padrão sem vazar traceback.
+    # flask_restx catches exceptions raised inside Resources and answers a generic
+    # 500 itself; it only delegates to the @app.errorhandler handlers below when
+    # PROPAGATE_EXCEPTIONS is true. Without this, every business error (400, 401,
+    # 403, 404) became a 500 in production.
     app.config["PROPAGATE_EXCEPTIONS"] = True
 
     app.config["MAIL_SERVER"] = settings.MAIL_SERVER
@@ -138,13 +135,12 @@ def create_app(
     app.config["RATELIMIT_SENSITIVE"] = settings.RATELIMIT_SENSITIVE
     app.config["RATELIMIT_REALTIME"] = settings.RATELIMIT_REALTIME
     app.config["RATELIMIT_HEADERS_ENABLED"] = True
-    # Redis fora do ar não derruba a API: cada worker passa a contar em memória
-    # (com aviso no log) e volta para o Redis quando ele responder.
+    # Redis being down does not take the API down: each worker counts in memory
+    # (with a log warning) and goes back to Redis when it responds.
     app.config["RATELIMIT_IN_MEMORY_FALLBACK_ENABLED"] = True
     app.config["RATELIMIT_SWALLOW_ERRORS"] = True
     app.config["RATELIMIT_STORAGE_OPTIONS"] = {"socket_connect_timeout": 1, "socket_timeout": 1}
 
-    # Maximum request size (16MB)
     app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024
 
     # Test harness and embedding hosts inject config here. Must run before
@@ -154,9 +150,7 @@ def create_app(
     if config_overrides:
         app.config.update(config_overrides)
 
-    # ==========================================
-    # Logging Configuration
-    # ==========================================
+    # Logging
     setup_logging(app)
     setup_request_id_middleware(app)
 
@@ -168,17 +162,15 @@ def create_app(
         },
     )
 
-    # ==========================================
-    # CORS Configuration
-    # ==========================================
+    # CORS
     CORS(
         app,
         origins=settings.CORS_ORIGINS,
         supports_credentials=True,
         allow_headers=["Content-Type", "Authorization"],
         methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        max_age=86400,  # Cache preflight for 24 hours
-        # Sem isso o navegador esconde do front quanto falta para o 429 passar.
+        max_age=86400,
+        # Without this the browser hides from the frontend how long until the 429 clears.
         expose_headers=[
             "Retry-After",
             "X-RateLimit-Limit",
@@ -191,19 +183,14 @@ def create_app(
     jwt.init_app(app)
     limiter.init_app(app)
 
-    # ==========================================
-    # Scheduler Configuration
-    # ==========================================
+    # Scheduler
     scheduler.init_app(app)
 
     init_scheduler(app, scheduler)
 
-    # ==========================================
-    # Security Headers
-    # ==========================================
+    # Security headers
     setup_security_headers(app)
 
-    # Check production security
     if not settings.DEBUG:
         security_warnings = check_production_security(app)
         if security_warnings:
@@ -246,7 +233,6 @@ Inclua o header: `Authorization: Bearer <seu_token>`
         contact="BusKá Team",
     )
 
-    # API v1 routes
     api.add_namespace(auth_ns, path="/v1/auth")
     api.add_namespace(user_ns, path="/v1/users")
     api.add_namespace(consentimento_ns, path="/v1/consentimento")
@@ -269,26 +255,20 @@ Inclua o header: `Authorization: Bearer <seu_token>`
     for register in (_discover_plugins() if plugins is None else plugins):
         register(app, api)
 
-    # ==========================================
-    # Error Handlers
-    # ==========================================
+    # Error handlers
 
     register_jwt_handlers(jwt)
     register_error_handlers(app)
     register_api_error_handlers(api)
 
-    # ==========================================
-    # OpenAPI Export Endpoint
-    # ==========================================
+    # OpenAPI export endpoint
 
     @app.route("/openapi.json")
     def openapi_spec() -> Any:
         """Export OpenAPI specification as JSON."""
         return jsonify(api.__schema__)
 
-    # ==========================================
-    # CLI Commands
-    # ==========================================
+    # CLI commands
 
     @app.cli.command("export-openapi")
     def export_openapi() -> None:
@@ -300,9 +280,7 @@ Inclua o header: `Authorization: Bearer <seu_token>`
                 json.dump(spec, f, indent=2, ensure_ascii=False)
             print(f"[*] OpenAPI spec exported to {output_path}")
 
-    # ==========================================
-    # Health / Readiness Endpoints
-    # ==========================================
+    # Health / readiness endpoints
 
     @app.get("/health")
     def health() -> tuple[Response, int]:
@@ -320,7 +298,6 @@ Inclua o header: `Authorization: Bearer <seu_token>`
     def ready() -> tuple[Response, int]:
         """Readiness probe — server can handle requests (DB reachable)."""
         try:
-            # Minimal DB check (safe + fast)
             from sqlalchemy import text
 
             db.session.execute(text("SELECT 1"))

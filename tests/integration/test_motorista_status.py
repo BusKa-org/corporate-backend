@@ -254,7 +254,7 @@ def test_viagem_ativa_apagada_ou_cancelada_le_ativo_sem_escrever(
 ):
     assert _dados_motorista(gestor, motorista.user.id)["status_motorista"] == "EM_ROTA"
 
-    # Correção manual de dado: a viagem ativa é cancelada direto no banco
+    # Manual data fix: the active trip is cancelled directly in the database
     viagem_futura_iniciada_com_motorista.status = StatusViagem.CANCELADA
     _db.session.commit()
 
@@ -266,7 +266,7 @@ def test_viagem_ativa_apagada_ou_cancelada_le_ativo_sem_escrever(
     assert r.get_json()["items"][0]["status_motorista"] == "ATIVO"
     assert _escritas(comandos) == []
 
-    # ... ou apagada
+    # ... or deleted
     _db.session.delete(viagem_futura_iniciada_com_motorista)
     _db.session.commit()
     assert _dados_motorista(gestor, motorista.user.id)["status_motorista"] == "ATIVO"
@@ -381,7 +381,7 @@ def test_dois_inicios_simultaneos_so_um_passa(
     status_codes: list[int] = []
 
     def iniciar(viagem_id):
-        # Cada thread tem seu cliente, contexto e sessão (conexão) próprios
+        # Each thread has its own client, context and session (connection)
         cliente = app.test_client()
         barreira.wait()
         r = cliente.put(

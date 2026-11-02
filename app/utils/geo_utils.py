@@ -4,7 +4,7 @@ import math
 
 
 def calcular_distancia_metros(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """Calcula a distância em metros entre duas coordenadas geográficas (Fórmula de Haversine)."""
+    """Distance in meters between two geographic coordinates (Haversine formula)."""
     R = 6371000
     phi1, phi2 = math.radians(float(lat1)), math.radians(float(lat2))
     delta_phi = math.radians(float(lat2) - float(lat1))

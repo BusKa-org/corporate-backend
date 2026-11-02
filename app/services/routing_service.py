@@ -28,18 +28,8 @@ def get_route(
 ) -> dict[str, Any]:
     """Fetch a driving route from OSRM and return a simplified polyline.
 
-    Returns:
-        {
-            "coordinates": [{"latitude": float, "longitude": float}, ...],
-            "distance_meters": float | None,
-            "duration_seconds": float | None,
-        }
-
-    Raises:
-        ValidationError: coordinates are out of the valid geographic range.
-        AppError (503):  OSRM is unreachable or timed out.
-        AppError (502):  OSRM returned an unexpected HTTP error.
-        AppError (404):  OSRM found no route between the given points.
+    Raises ValidationError for out-of-range coordinates, and AppError with 503
+    (OSRM unreachable), 502 (unexpected HTTP error) or 404 (no route found).
     """
     _validate_coordinates(origin_lat, origin_lng, dest_lat, dest_lng)
 
@@ -87,11 +77,6 @@ def get_route(
         "distance_meters": route.get("distance"),
         "duration_seconds": route.get("duration"),
     }
-
-
-# ---------------------------------------------------------------------------
-# Internal helpers
-# ---------------------------------------------------------------------------
 
 
 def _validate_coordinates(

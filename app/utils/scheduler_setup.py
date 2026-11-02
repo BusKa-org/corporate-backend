@@ -11,15 +11,13 @@ from app.tasks.viagem_tasks import job_alertar_prazo_inicio, job_fechar_buffers_
 
 
 def init_scheduler(app: Flask, scheduler: APScheduler):
-    """Inicializa e registra todas as tarefas de background."""
+    """Initialize and register all background tasks."""
 
-    # Opt-in explícito, e única condição. Só o processo dedicado
-    # (app.scheduler_main) liga essa variável; os workers do gunicorn e a suíte
-    # de testes ficam sem scheduler.
-    #
-    # A checagem anterior dependia de app.debug e de WERKZEUG_RUN_MAIN para
-    # driblar o reloader do servidor de desenvolvimento. Sob o gunicorn, onde
-    # WERKZEUG_RUN_MAIN nunca existe, ela desligava todos os jobs em produção.
+    # Explicit opt-in, and the only condition. Only the dedicated process
+    # (app.scheduler_main) sets this variable; gunicorn workers and the test suite
+    # run without a scheduler. The previous check relied on app.debug and
+    # WERKZEUG_RUN_MAIN, which never exists under gunicorn, so it disabled every
+    # job in production.
     if os.getenv("RUN_SCHEDULER", "").lower() not in ("1", "true"):
         app.logger.info("RUN_SCHEDULER desligado: nenhum job registrado neste processo.")
         return

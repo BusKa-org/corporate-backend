@@ -1,4 +1,4 @@
-"""Testes unitários para as tarefas de notificação em background."""
+"""Unit tests for the background notification tasks."""
 
 from unittest.mock import MagicMock, patch
 
@@ -6,7 +6,7 @@ from app.tasks.notificacao_tasks import verificar_viagens_24h
 
 
 def test_verificar_viagens_24h(app):
-    """Testa se a task de 24h roda sem erros e aciona o serviço de notificações."""
+    """Checks the 24h task runs without errors and calls the notification service."""
     with app.app_context():
 
         with (
@@ -36,7 +36,7 @@ def test_verificar_viagens_24h(app):
 
 
 def test_verificar_viagens_10min(app):
-    """Testa se a task de 10 minutos roda sem erros e aciona o serviço de notificações."""
+    """Checks the 10-minute task runs without errors and calls the notification service."""
     with app.app_context():
         from app.tasks.notificacao_tasks import verificar_viagens_10min
 

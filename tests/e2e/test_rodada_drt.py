@@ -1,11 +1,11 @@
-"""A viagem sob demanda de ponta a ponta, pela API — RF-09 a RF-19.
+"""The on-demand trip end to end, through the API (RF-09 to RF-19).
 
-Cada plano testou o seu pedaço. Estes testes cobrem o que nenhum deles podia
-cobrir sozinho: a viagem inteira atravessando consentimento, janela, buffer,
-capacidade, fechamento do buffer e embarque, sempre por HTTP e com JWT de verdade.
+Each plan tested its own piece. These tests cover what none of them could alone:
+the whole trip across consent, window, buffer, capacity, buffer close and
+boarding, always over HTTP and with a real JWT.
 
-O relógio é a única coisa manipulada (fixture `relogio`): esperar o buffer
-expirar de verdade tornaria a suíte lenta sem provar nada a mais.
+The clock is the only thing faked (`relogio` fixture): actually waiting for the
+buffer to expire would make the suite slow without proving anything more.
 """
 
 import io
@@ -34,8 +34,9 @@ def _ator(client, app, usuario):
 
 @pytest.fixture()
 def van(_db, onibus):
-    """Capacidade fixa: a fábrica sorteia, e um sorteio baixo negaria os
-    trajetos que se cruzam por lotação em vez de por defeito."""
+    """Fixed capacity: the factory picks a random one, and a low pick would deny the
+    crossing routes because the vehicle is full instead of because of a bug.
+    """
     onibus.capacidade = CAPACIDADE_VEICULO
     _db.session.commit()
     return onibus
@@ -43,7 +44,7 @@ def van(_db, onibus):
 
 @pytest.fixture()
 def passageiros(client, app, _db, organizacao):
-    """Alunos já com o termo aceito — o aceite em si é testado no plano 5."""
+    """Students who already accepted the terms; acceptance itself is tested in plan 5."""
     turma = [AlunoFactory(organizacao_id=organizacao.id) for _ in range(4)]
     _db.session.add_all(turma)
     _db.session.commit()
@@ -63,7 +64,7 @@ def condutor(client, app, motorista):
 
 @pytest.fixture()
 def operacao(circuito, janela, relogio):
-    """Rota sob demanda com circuito de 4 pontos, numa segunda às 10h dentro da janela."""
+    """On-demand route with a 4-stop circuit, on a Monday at 10:00 inside the window."""
     return circuito
 
 
@@ -72,7 +73,7 @@ def _trajeto(origem, destino):
 
 
 def _qr_do_app(credencial, relogio):
-    """O que o app do aluno faz sem rede: o código TOTP do passo corrente."""
+    """What the student app does offline: the TOTP code for the current step."""
     contador = int(relogio.agora.timestamp()) // credencial["passo_segundos"]
     codigo = credencial_embarque_service.gerar_codigo(
         bytes.fromhex(credencial["segredo"]), contador, credencial["digitos"]
@@ -81,7 +82,7 @@ def _qr_do_app(credencial, relogio):
 
 
 def _expirar_buffer(relogio):
-    """Passa o relógio do fim do buffer (5 min na rota) e roda o job."""
+    """Move the clock past the buffer end (5 min on the route) and run the job."""
     relogio.avancar(minutes=6)
     return buffer_service.fechar_buffers_expirados()
 
@@ -100,52 +101,52 @@ def test_rodada_completa_da_solicitacao_ao_embarque(
     tmp_path,
     monkeypatch,
 ):
-    """RF-10 -> RF-17: chamar o veículo, abrir o buffer, declarar, embarcar."""
+    """RF-10 -> RF-17: call the vehicle, open the buffer, declare, board."""
     p1, p2, p3, p4 = pontos_circuito
     ana, bruno, carla, _ = passageiros
 
-    # RF-10 — a primeira solicitação não despacha o veículo, só avisa o motorista.
+    # RF-10: the first request does not dispatch the vehicle, it only notifies the driver.
     r = ana.post(f"/v1/rotas/{operacao.id}/solicitacoes")
     assert r.status_code == 201, r.get_data(as_text=True)
     viagem_id = r.get_json()["viagem_id"]
     assert r.get_json()["viagem"]["status"] == StatusViagem.SOLICITADA.value
     assert Notificacao.query.filter_by(usuario_id=motorista.user.id).count() == 1
 
-    # RF-10 fluxo secundário 1 — o segundo entra na mesma viagem, sem re-notificar.
+    # RF-10 secondary flow 1: the second joins the same trip, without re-notifying.
     r = bruno.post(f"/v1/rotas/{operacao.id}/solicitacoes")
     assert r.status_code == 201
     assert r.get_json()["viagem_id"] == viagem_id
     assert Notificacao.query.filter_by(usuario_id=motorista.user.id).count() == 1
 
-    # RF-11 — o motorista abre a janela de buffer.
+    # RF-11: the driver opens the buffer window.
     r = condutor.post(f"/v1/viagens/{viagem_id}/iniciar-percurso")
     assert r.status_code == 200, r.get_data(as_text=True)
     assert r.get_json()["status"] == StatusViagem.BUFFER_ABERTO.value
 
-    # RF-12 — quem está sem push enxerga a viagem e a contagem regressiva.
+    # RF-12: those without push see the trip and the countdown.
     ativa = carla.get(f"/v1/rotas/{operacao.id}/viagem-ativa").get_json()
     assert ativa["viagem"]["id"] == viagem_id
     assert ativa["viagem"]["segundos_restantes_buffer"] > 0
 
-    # RF-13/RF-14 — trajetos sobrepostos e disjuntos, todos cabem no veículo.
-    # A Carla só recebeu o aviso: declarar já a coloca na viagem.
+    # RF-13/RF-14: overlapping and disjoint routes, all fit in the vehicle.
+    # Carla only got the notice: declaring already puts her on the trip.
     for ator, origem, destino in ((ana, p1, p3), (bruno, p2, p4), (carla, p3, p4)):
         r = ator.post(f"/v1/viagens/{viagem_id}/declaracao", json=_trajeto(origem, destino))
         assert r.status_code == 200, r.get_data(as_text=True)
         assert r.get_json()["status"] == StatusSolicitacao.ATIVA.value
 
-    # RF-15 — o buffer vence e quem declarou vira passageiro.
+    # RF-15: the buffer expires and those who declared become passengers.
     assert _expirar_buffer(relogio) == 1
     viagem = _db.session.get(Viagem, viagem_id)
     assert viagem.status == StatusViagem.EM_ANDAMENTO
 
-    # Cada passageiro recebe a sua credencial, e ninguém vê a do outro.
+    # Each passenger gets their own credential, and no one sees another's.
     credencial_ana = ana.get(f"/v1/viagens/{viagem_id}/credencial-embarque").get_json()
     assert credencial_ana["segredo"]
     credencial_bruno = bruno.get(f"/v1/viagens/{viagem_id}/credencial-embarque").get_json()
     assert credencial_bruno["segredo"] != credencial_ana["segredo"]
 
-    # A Ana tem foto cadastrada: sem ela, o QR sozinho não a embarcaria.
+    # Ana has a photo on file: without it, the QR alone would not board her.
     monkeypatch.setitem(app.config, "FOTOS_ALUNO_DIR", str(tmp_path))
     r = ana.put(
         "/v1/alunos/me/foto",
@@ -154,22 +155,22 @@ def test_rodada_completa_da_solicitacao_ao_embarque(
     )
     assert r.status_code == 200, r.get_data(as_text=True)
 
-    # RF-16 — o roteiro do motorista sai na ordem do circuito.
+    # RF-16: the driver's itinerary follows the circuit order.
     roteiro = condutor.get(f"/v1/embarque/viagens/{viagem_id}/roteiro").get_json()
     paradas = {p["ordem"]: p for p in roteiro["pontos"]}
-    assert paradas[1]["embarcam"] == 1  # Ana em P1
-    assert paradas[2]["embarcam"] == 1  # Bruno em P2
-    assert paradas[3]["embarcam"] == 1 and paradas[3]["desembarcam"] == 1  # Carla sobe, Ana desce
-    assert paradas[4]["desembarcam"] == 2  # Bruno e Carla
+    assert paradas[1]["embarcam"] == 1  # Ana at P1
+    assert paradas[2]["embarcam"] == 1  # Bruno at P2
+    assert paradas[3]["embarcam"] == 1 and paradas[3]["desembarcam"] == 1  # Carla on, Ana off
+    assert paradas[4]["desembarcam"] == 2  # Bruno and Carla
 
-    # RF-17 — a leitura no ponto correto mostra a Ana com a foto, sem embarcá-la.
+    # RF-17: scanning at the right stop shows Ana with the photo, without boarding her.
     qr_ana = _qr_do_app(credencial_ana, relogio)
     r = condutor.post(f"/v1/embarque/viagens/{viagem_id}/checkin", json={"qr_token": qr_ana})
     assert r.status_code == 200, r.get_data(as_text=True)
     assert r.get_json()["ponto_embarque_id"] == str(p1.id)
     assert r.get_json()["sem_foto"] is False
 
-    # A foto confere e o motorista confirma: só agora o embarque é registrado.
+    # The photo matches and the driver confirms: only now is the boarding recorded.
     relogio.avancar(seconds=10)
     r = condutor.post(f"/v1/embarque/viagens/{viagem_id}/confirmacao", json={"qr_token": qr_ana})
     assert r.status_code == 200, r.get_data(as_text=True)
@@ -180,7 +181,7 @@ def test_rodada_completa_da_solicitacao_ao_embarque(
     )
     assert embarcados == 1
 
-    # A mesma credencial não embarca duas vezes.
+    # The same credential does not board twice.
     r = condutor.post(
         f"/v1/embarque/viagens/{viagem_id}/confirmacao",
         json={"qr_token": _qr_do_app(credencial_ana, relogio)},
@@ -188,7 +189,7 @@ def test_rodada_completa_da_solicitacao_ao_embarque(
     assert r.status_code == 409
     assert r.get_json()["error"]["code"] == "CREDENCIAL_JA_UTILIZADA"
 
-    # Um print do QR da Ana guardado por alguém para de valer em um minuto.
+    # A screenshot of Ana's QR kept by someone stops working within a minute.
     relogio.avancar(seconds=90)
     r = condutor.post(f"/v1/embarque/viagens/{viagem_id}/confirmacao", json={"qr_token": qr_ana})
     assert r.status_code == 409
@@ -199,7 +200,7 @@ def test_rodada_completa_da_solicitacao_ao_embarque(
 def test_buffer_sem_nenhum_trajeto_cancela_a_viagem(
     _db, operacao, van, passageiros, condutor, relogio
 ):
-    """RF-15 fluxo secundário 1: ninguém declarou trajeto, a van não sai."""
+    """RF-15 secondary flow 1: no one declared a route, the van does not leave."""
     ana = passageiros[0]
 
     viagem_id = ana.post(f"/v1/rotas/{operacao.id}/solicitacoes").get_json()["viagem_id"]
@@ -211,7 +212,7 @@ def test_buffer_sem_nenhum_trajeto_cancela_a_viagem(
     assert viagem.status == StatusViagem.CANCELADA
     assert viagem.inicio_real is None
 
-    # E o interesse solto não fica pendurado para a próxima viagem.
+    # And the loose interest is not left hanging for the next trip.
     ativas = SolicitacaoViagem.query.filter_by(
         viagem_id=viagem.id, status=StatusSolicitacao.ATIVA
     ).count()
@@ -222,7 +223,7 @@ def test_buffer_sem_nenhum_trajeto_cancela_a_viagem(
 def test_cancelar_no_buffer_devolve_a_vaga_para_quem_tinha_sido_negado(
     _db, operacao, pontos_circuito, onibus, passageiros, condutor
 ):
-    """RF-19 + RF-14: a vaga liberada volta a ser oferecível na mesma viagem."""
+    """RF-19 + RF-14: the freed seat can be offered again on the same trip."""
     onibus.capacidade = 1
     _db.session.commit()
 
@@ -234,10 +235,10 @@ def test_cancelar_no_buffer_devolve_a_vaga_para_quem_tinha_sido_negado(
 
     trajeto = _trajeto(p1, p2)
     assert ana.post(f"/v1/viagens/{viagem_id}/declaracao", json=trajeto).status_code == 200
-    # Único assento ocupado: o Bruno é recusado.
+    # Only seat taken: Bruno is denied.
     assert bruno.post(f"/v1/viagens/{viagem_id}/declaracao", json=trajeto).status_code == 409
 
-    # Ana desiste durante o buffer e a vaga volta a existir.
+    # Ana drops out during the buffer and the seat exists again.
     r = ana.delete(f"/v1/viagens/{viagem_id}/solicitacao")
     assert r.status_code == 200, r.get_data(as_text=True)
     assert r.get_json()["status"] == StatusSolicitacao.CANCELADA.value
@@ -247,7 +248,7 @@ def test_cancelar_no_buffer_devolve_a_vaga_para_quem_tinha_sido_negado(
 
 @pytest.mark.e2e
 def test_sem_consentimento_nao_solicita(client, app, _db, operacao, van, organizacao):
-    """RF-09: sem aceite do termo, o fluxo nem começa."""
+    """RF-09: without accepting the terms, the flow does not even start."""
     aluno = AlunoFactory(organizacao_id=organizacao.id)
     _db.session.add(aluno)
     _db.session.commit()

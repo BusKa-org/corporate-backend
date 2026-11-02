@@ -22,7 +22,7 @@ LOGIN = "/v1/auth/login"
 
 
 def _app_com_limite(app, **extra):
-    """App próprio com limites minúsculos; o da suíte tem o limitador desligado."""
+    """Own app with tiny limits; the suite's app has the limiter off."""
     config = {
         "TESTING": True,
         "SQLALCHEMY_DATABASE_URI": app.config["SQLALCHEMY_DATABASE_URI"],
@@ -36,8 +36,8 @@ def _app_com_limite(app, **extra):
     }
     config.update(extra)
     novo_app = create_app(config_overrides=config, plugins=[])
-    # O Limiter é global: sem isso, o teste do Redis caído deixa os seguintes em memória.
-    # O flask-limiter não tem API pública para isso; o assert falha alto se o nome mudar.
+    # The Limiter is global: without this, the Redis-down test leaves the next ones in memory.
+    # flask-limiter has no public API for this; the assert fails loudly if the name changes.
     assert hasattr(limiter, "_storage_dead")
     limiter._storage_dead = False
     return novo_app
@@ -51,7 +51,7 @@ def limitado(app):
 def _corpo_do_429(r):
     assert r.status_code == 429
     corpo = r.get_json()
-    # Um formato só: nada de "message" no topo (o flask-restx acrescenta se deixar).
+    # One shape only: no "message" at the top (flask-restx adds it if allowed).
     assert set(corpo) == {"error"}
     assert corpo["error"]["code"] == "RATE_LIMITED"
     assert corpo["error"]["details"]["limit"]
@@ -68,7 +68,7 @@ def test_limite_estourado_devolve_429_no_formato_padrao(limitado):
 
 @pytest.mark.integration
 def test_limite_padrao_devolve_o_mesmo_429(limitado):
-    # /v1/users/me não tem limite próprio: cai no RATELIMIT_DEFAULT (3 por minuto).
+    # /v1/users/me has no limit of its own: falls into RATELIMIT_DEFAULT (3 per minute).
     for _ in range(3):
         assert limitado.get("/v1/users/me").status_code == 401
 
@@ -81,13 +81,13 @@ def test_login_conta_por_email_e_nao_por_ip(limitado):
         limitado.post(
             LOGIN, json={"email": "A@x.com", "password": "e"}, environ_base={"REMOTE_ADDR": ip}
         )
-    # Mesmo e-mail (normalizado) vindo de um terceiro IP: já estourou.
+    # Same (normalized) e-mail from a third IP: already over the limit.
     bloqueado = limitado.post(
         LOGIN,
         json={"email": " a@X.com ", "password": "e"},
         environ_base={"REMOTE_ADDR": "10.0.0.3"},
     )
-    # Outro aluno atrás do mesmo IP (Wi-Fi do campus) segue entrando.
+    # Another student behind the same IP (campus Wi-Fi) still gets in.
     outro_email = limitado.post(
         LOGIN, json={"email": "b@x.com", "password": "e"}, environ_base={"REMOTE_ADDR": "10.0.0.1"}
     )
@@ -103,7 +103,7 @@ def test_aceite_conta_por_token_e_por_metodo(limitado):
     limitado.get(url)
     assert limitado.get(url).status_code == 429
 
-    # POST no mesmo caminho tem contador próprio, e outro token também.
+    # POST on the same path has its own counter, and so does another token.
     assert limitado.post(url, json={}).status_code != 429
     assert limitado.get(f"/v1/convites/aceite/{uuid.uuid4()}").status_code != 429
 
@@ -123,7 +123,7 @@ def test_preflight_do_cors_nao_conta(limitado):
         "Origin": "http://front.example",
         "Access-Control-Request-Method": "GET",
     }
-    # /v1/users/me cai no limite padrão (3 por minuto), que é checado antes da view.
+    # /v1/users/me falls into the default limit (3 per minute), checked before the view.
     for _ in range(5):
         assert limitado.options("/v1/users/me", headers=preflight).status_code == 200
 
@@ -202,7 +202,7 @@ def test_jwt_invalido_conta_pelo_ip(app):
 
 @pytest.mark.integration
 def test_token_de_conta_excluida_conta_pelo_ip(app, aluno, _db):
-    """O token revogado não pode virar 500 na chave do limitador: cai para o IP."""
+    """A revoked token must not become a 500 in the limiter key: it falls back to the IP."""
     aluno.user.status = UserStatus.DELETED
     _db.session.commit()
     with app.test_request_context(
@@ -242,7 +242,7 @@ def test_limitador_desligado_na_suite(client):
 
 @pytest.mark.integration
 def test_storage_fora_do_ar_nao_derruba_a_api(app):
-    # Porta 1 recusa conexão na hora: simula o Redis caído.
+    # Port 1 refuses connections right away: simulates Redis being down.
     cliente = _app_com_limite(app, RATELIMIT_STORAGE_URI="redis://127.0.0.1:1/0").test_client()
 
     assert cliente.post(PIN_VALIDAR, json={}).status_code == 400
@@ -263,16 +263,16 @@ def test_contagem_fica_no_redis(app, _db):
     r = cliente.post(PIN_VALIDAR, json={})
 
     assert r.status_code == 429
-    # A chave no Redis é o que faz todos os workers do gunicorn verem a mesma contagem.
+    # The Redis key is what makes all gunicorn workers see the same count.
     assert conexao.keys("LIMITS:*")
 
     token = str(uuid.uuid4())
     cliente.get(f"/v1/convites/aceite/{token}")
     cliente.post(LOGIN, json={"email": "segredo@x.com", "password": "e"})
-    # Rota anônima sem limite próprio: conta pelo IP no limite padrão.
+    # Anonymous route with no limit of its own: counts by IP on the default limit.
     cliente.get("/v1/users/me")
     chaves = conexao.keys("*")
-    # Sem estas chaves o laço abaixo passaria sem checar nada.
+    # Without these keys the loop below would pass without checking anything.
     for prefixo in (b"token:", b"email:", b"ip:"):
         assert any(prefixo in chave for chave in chaves), prefixo
     for chave in chaves:

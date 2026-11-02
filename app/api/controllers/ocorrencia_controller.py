@@ -56,7 +56,7 @@ class OcorrenciaListResource(Resource):
     @api.response(201, "Ocorrência registrada", _ocorrencia_output)
     @jwt_required()
     def post(self) -> tuple[dict[str, Any], int]:
-        """(Aluno / Motorista) Reporta um problema"""
+        """(Student / Driver) Reports a problem"""
         user_id = get_jwt_identity()
         data = request.get_json(silent=True) or {}
         ocorrencia = OcorrenciaService.criar(user_id, data)
@@ -67,7 +67,7 @@ class OcorrenciaListResource(Resource):
     @api.response(200, "Success")
     @jwt_required()
     def get(self) -> tuple[list[dict[str, Any]], int]:
-        """(Gestor) Lista ocorrências da organização"""
+        """(Manager) Lists the organization's incidents"""
         gestor_id = get_jwt_identity()
         status_filter = request.args.get("status")
         ocorrencias = OcorrenciaService.listar(gestor_id, status=status_filter)
@@ -80,7 +80,7 @@ class OcorrenciaResolverResource(Resource):
     @api.response(200, "Ocorrência resolvida", _ocorrencia_output)
     @jwt_required()
     def patch(self, ocorrencia_id: str) -> tuple[dict[str, Any], int]:
-        """(Gestor) Marca uma ocorrência como resolvida"""
+        """(Manager) Marks an incident as resolved"""
         gestor_id = get_jwt_identity()
         ocorrencia = OcorrenciaService.resolver(gestor_id, ocorrencia_id)
         return _serialize(ocorrencia), 200

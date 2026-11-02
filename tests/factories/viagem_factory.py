@@ -16,8 +16,8 @@ class ViagemFactory(factory.Factory):
     rota_id = None
     motorista_id = None
     veiculo_id = None
-    # Fixo, não sorteado: com os estados da rodada dentro do enum, sortear faria
-    # o teste passar ou falhar conforme o estado que calhasse de sair.
+    # Fixed, not random: with the round states inside the enum, a random pick would
+    # make the test pass or fail depending on which state came out.
     status = StatusViagem.AGENDADA
 
 

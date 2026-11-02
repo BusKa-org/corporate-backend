@@ -1,8 +1,8 @@
-"""Embarque por QR sob concorrência (RF-17/RF-18): ninguém embarca duas vezes.
+"""QR boarding under concurrency (RF-17/RF-18): no one boards twice.
 
-A confirmação dupla do mesmo QR já está em tests/integration/test_embarque.py.
-Aqui ficam as disputas entre caminhos diferentes: QR contra manual, QR contra
-recusa e a mesma fila offline enviada duas vezes ao mesmo tempo.
+The double confirmation of the same QR is already in tests/integration/test_embarque.py.
+Here are the races between different paths: QR vs manual, QR vs rejection and
+the same offline queue sent twice at the same time.
 """
 
 from datetime import UTC, datetime, timedelta
@@ -20,10 +20,10 @@ pytestmark = [pytest.mark.integration, pytest.mark.concurrency]
 
 @pytest.fixture()
 def rodada(_db, viagem_buffer_aberto, pontos_circuito, aluno):
-    """Viagem em andamento com o `aluno` embarcando em P1, com foto e credencial."""
+    """Trip in progress with the `aluno` boarding at P1, with photo and credential."""
     p1, p2, _, _ = pontos_circuito
     viagem = _consolidar(_db, viagem_buffer_aberto, [(aluno.user.id, p1, p2)])
-    # Emitida há uma hora, para os eventos offline caberem depois da emissão.
+    # Issued an hour ago, so the offline events fit after issuing.
     for credencial in _db.session.query(CredencialEmbarque).filter_by(viagem_id=viagem.id):
         credencial.created_at = datetime.now(UTC) - timedelta(hours=1)
     _db.session.commit()
@@ -63,7 +63,7 @@ def test_qr_e_manual_ao_mesmo_tempo_embarcam_uma_vez(app, _db, rodada, motorista
 
 
 def test_confirmar_e_recusar_o_mesmo_qr_ao_mesmo_tempo(app, _db, rodada, motorista, aluno):
-    """Vence quem travar primeiro; o outro vê o estado gravado e é recusado."""
+    """Whoever locks first wins; the other sees the saved state and is rejected."""
     qr = _qr(_db, rodada, aluno)
     confirmacao, recusa = ao_mesmo_tempo(
         app,
@@ -86,7 +86,7 @@ def test_confirmar_e_recusar_o_mesmo_qr_ao_mesmo_tempo(app, _db, rodada, motoris
 def test_mesma_fila_offline_enviada_duas_vezes_ao_mesmo_tempo(
     app, _db, rodada, motorista, aluno, pontos_circuito
 ):
-    """O app reenvia a fila quando a rede oscila; cada evento vale uma vez só."""
+    """The app resends the queue when the network flaps; each event counts only once."""
     momento = datetime.now(UTC) - timedelta(minutes=5)
     eventos = [
         {
@@ -128,7 +128,7 @@ def test_mesma_fila_offline_enviada_duas_vezes_ao_mesmo_tempo(
         assert lote["recusados"] == 0, lote["resultados"]
         assert lote["aplicados"] + lote["ja_aplicados"] == 3
     _db.session.expire_all()
-    # A recusa e o embarque manual geram uma ocorrência cada, nunca duplicada.
+    # The rejection and the manual boarding create one incident each, never duplicated.
     assert _db.session.query(Ocorrencia).filter_by(viagem_id=rodada.id).count() == 2
     assert _db.session.query(TelemetriaViagem).filter_by(viagem_id=rodada.id).count() == 1
     assert _registro(_db, rodada, aluno).embarcou is True

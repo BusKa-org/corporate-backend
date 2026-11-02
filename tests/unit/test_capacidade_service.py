@@ -1,7 +1,7 @@
-"""RF-13/RF-14/RF-19 — validação de capacidade por segmento.
+"""RF-13/RF-14/RF-19: capacity check per segment.
 
-O circuito das fixtures tem quatro pontos (P1..P4), logo três segmentos. A
-capacidade do veículo é forçada em cada teste, porque a fábrica sorteia.
+The fixtures' circuit has four stops (P1..P4), so three segments. The vehicle
+capacity is forced in each test, because the factory picks a random one.
 """
 
 from datetime import UTC, datetime, timedelta
@@ -19,7 +19,7 @@ from tests.factories.user_factory import AlunoFactory
 
 @pytest.fixture()
 def buffer_aberto(_db, viagem_buffer_aberto, onibus):
-    """Viagem com o buffer aberto e capacidade 2, para caber no teste."""
+    """Trip with the buffer open and capacity 2, to fit the test."""
     onibus.capacidade = 2
     _db.session.commit()
     return viagem_buffer_aberto
@@ -27,7 +27,7 @@ def buffer_aberto(_db, viagem_buffer_aberto, onibus):
 
 @pytest.fixture()
 def alunos(_db, organizacao):
-    """Alunos suficientes para lotar os dois assentos duas vezes."""
+    """Enough students to fill both seats twice."""
     turma = [AlunoFactory(organizacao_id=organizacao.id) for _ in range(6)]
     _db.session.add_all(turma)
     _db.session.commit()
@@ -54,8 +54,9 @@ def test_vetor_comeca_zerado_com_um_slot_por_segmento(app, _db, buffer_aberto):
 
 
 def test_assento_e_reusado_por_trajetos_disjuntos(app, _db, buffer_aberto, pontos_circuito, alunos):
-    """Com capacidade 2: P1->P2 duas vezes e P2->P3 duas vezes cabem todas,
-    porque o assento se libera no desembarque. A terceira em P1->P2 não cabe."""
+    """With capacity 2: P1->P2 twice and P2->P3 twice all fit, because the seat frees
+    up at drop-off. A third on P1->P2 does not fit.
+    """
     p1, p2, p3, _ = pontos_circuito
 
     with app.app_context():
@@ -71,7 +72,7 @@ def test_assento_e_reusado_por_trajetos_disjuntos(app, _db, buffer_aberto, ponto
 
 
 def test_pico_igual_a_capacidade_nega(app, _db, buffer_aberto, pontos_circuito, alunos):
-    """Aceita apenas se PicoTrecho < capacidade — a igualdade já nega."""
+    """Accepts only if PicoTrecho < capacity; equality already denies."""
     p1, _, _, p4 = pontos_circuito
 
     with app.app_context():
@@ -84,7 +85,7 @@ def test_pico_igual_a_capacidade_nega(app, _db, buffer_aberto, pontos_circuito, 
 
 
 def test_negacao_fica_gravada_como_negado(app, _db, buffer_aberto, pontos_circuito, alunos):
-    """RF-21 conta negações por ponto, então a linha negada tem de persistir."""
+    """RF-21 counts denials per stop, so the denied row has to persist."""
     p1, p2, _, _ = pontos_circuito
 
     with app.app_context():
@@ -125,7 +126,7 @@ def test_ponto_fora_do_circuito_e_recusado(app, _db, buffer_aberto, pontos_circu
 
 
 def test_buffer_expirado_bloqueia_declaracao(app, _db, buffer_aberto, pontos_circuito, alunos):
-    """RF-13, fluxo secundário 2: temporizador vencido encerra a rodada."""
+    """RF-13, secondary flow 2: an expired timer ends the round."""
     p1, p2, _, _ = pontos_circuito
     buffer_aberto.buffer_fim = datetime.now(UTC) - timedelta(seconds=1)
     _db.session.commit()
@@ -158,7 +159,7 @@ def test_aluno_de_outra_organizacao_e_recusado(
 
 
 def test_liberar_devolve_a_capacidade_do_trecho(app, _db, buffer_aberto, pontos_circuito, alunos):
-    """RF-19: cancelada a solicitação, quem tinha sido negado passa a caber."""
+    """RF-19: once the request is cancelled, whoever had been denied now fits."""
     p1, p2, _, _ = pontos_circuito
 
     with app.app_context():
@@ -188,7 +189,7 @@ def test_declarar_sem_solicitacao_levanta_not_found(
 def test_redeclarar_nao_concorre_com_a_propria_reserva(
     app, _db, buffer_aberto, pontos_circuito, alunos
 ):
-    """Trocar o trajeto não pode esbarrar no assento que o próprio aluno ocupa."""
+    """Changing route must not collide with the seat the student already holds."""
     p1, p2, p3, _ = pontos_circuito
 
     with app.app_context():
@@ -203,16 +204,16 @@ def test_redeclarar_nao_concorre_com_a_propria_reserva(
 def test_redeclaracao_negada_preserva_a_reserva_ja_confirmada(
     app, _db, buffer_aberto, pontos_circuito, alunos
 ):
-    """Pedir um trecho lotado não pode custar o lugar que o aluno já tinha.
+    """Asking for a full leg must not cost the seat the student already had.
 
-    Regressão: a versão original sobrescrevia a linha com NEGADO, então o
-    aluno saía da rodada por ter tentado mudar de trajeto.
+    Regression: the original version overwrote the row with NEGADO, so the student
+    left the round for trying to change route.
     """
     p1, p2, p3, p4 = pontos_circuito
 
     with app.app_context():
         reservar_trajeto(_db, buffer_aberto, alunos[0].id, p1.id, p2.id)
-        # Lota P3->P4, que o novo trajeto atravessaria.
+        # Fill P3->P4, which the new route would cross.
         reservar_trajeto(_db, buffer_aberto, alunos[1].id, p3.id, p4.id)
         reservar_trajeto(_db, buffer_aberto, alunos[2].id, p3.id, p4.id)
 
@@ -229,7 +230,7 @@ def test_redeclaracao_negada_preserva_a_reserva_ja_confirmada(
 def test_primeira_declaracao_negada_fica_registrada_como_negado(
     app, _db, buffer_aberto, pontos_circuito, alunos
 ):
-    """Quem ainda não tem lugar deixa rastro da negação — é o que o RF-21 conta."""
+    """Whoever has no seat yet leaves a trace of the denial; that is what RF-21 counts."""
     p1, p2, _, _ = pontos_circuito
 
     with app.app_context():

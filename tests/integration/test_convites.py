@@ -1,4 +1,4 @@
-"""Convites de cadastro de passageiro, pela API HTTP e pela tarefa de envio."""
+"""Passenger sign-up invites, via the HTTP API and the send task."""
 
 import re
 import threading
@@ -80,7 +80,7 @@ def _concluir(client, token, **campos):
     return client.post(f"/v1/convites/aceite/{token}", json=campos)
 
 
-# ---------- convidar ----------
+# ---------- invite ----------
 
 
 def test_convidar_so_com_email_cria_convite_pendente(gestor, _db):
@@ -126,7 +126,7 @@ def test_so_gestor_convida(aluno, motorista, client):
 def test_lote_misto_devolve_um_resultado_por_linha(
     gestor, aluno, instituicao_de_outra_organizacao, _db
 ):
-    aluno.user.cpf = CPF_B  # a fábrica grava o CPF com pontuação, o sistema guarda só dígitos
+    aluno.user.cpf = CPF_B  # the factory saves a punctuated CPF; the system keeps digits
     _db.session.commit()
     resultados = _convidar(
         gestor,
@@ -155,7 +155,7 @@ def test_lote_misto_devolve_um_resultado_por_linha(
     ]
     for linha in resultados[1:]:
         assert linha["motivo"] != ""
-    # Só a primeira linha virou convite.
+    # Only the first row became an invite.
     assert Convite.query.count() == 1
 
 
@@ -187,7 +187,7 @@ def test_convidar_de_novo_pula_convite_pendente_e_renova_o_vencido(gestor, _db):
     assert convite.expira_em > datetime.now(UTC)
 
 
-# ---------- listar, reenviar, cancelar ----------
+# ---------- list, resend, cancel ----------
 
 
 def test_listar_mostra_so_a_propria_organizacao_e_filtra_por_estado(gestor, other_gestor, _db):
@@ -251,7 +251,7 @@ def test_gestor_de_outra_organizacao_nao_mexe_no_convite(gestor, other_gestor, _
     assert _convite(_db, "zeca@org.test").estado == PENDENTE
 
 
-# ---------- concluir pelo link ----------
+# ---------- complete via link ----------
 
 
 def test_consultar_informa_o_que_falta(gestor, client, _db):
@@ -405,7 +405,7 @@ def test_concluir_com_dados_do_gestor_aceita_correcao(gestor, client, instituica
 def test_concluir_com_cpf_ou_instituicao_invalidos_nao_cria_nada(
     gestor, aluno, client, instituicao, instituicao_de_outra_organizacao, _db
 ):
-    aluno.user.cpf = CPF_A  # a fábrica grava o CPF com pontuação, o sistema guarda só dígitos
+    aluno.user.cpf = CPF_A  # the factory saves a punctuated CPF; the system keeps digits
     _db.session.commit()
     _convidar(gestor, [{"email": "duda@org.test"}])
     token = _convite(_db, "duda@org.test").token
@@ -432,7 +432,7 @@ def test_concluir_com_cpf_ou_instituicao_invalidos_nao_cria_nada(
     assert _convite(_db, "duda@org.test").estado == PENDENTE
 
 
-# ---------- tarefa de envio ----------
+# ---------- send task ----------
 
 
 @pytest.fixture()
@@ -452,7 +452,7 @@ def emails_enviados(monkeypatch):
         enviados.append({"to": to, "texto": body_plain})
 
     monkeypatch.setattr(convite_service, "send_email", enviar)
-    # O PIN sai numa thread; aqui sai na hora, para o teste ler o e-mail logo depois do pedido.
+    # The PIN goes out in a thread; here it is sent inline so the test can read the e-mail.
     monkeypatch.setattr(
         convite_service, "_envios_de_pin", SimpleNamespace(submit=lambda fn, *args: fn(*args))
     )
@@ -474,7 +474,7 @@ def test_tarefa_envia_os_pendentes_com_os_links(gestor, email_configurado, email
     assert convite.enviado_em is not None
 
     enviar_convites_pendentes()
-    assert len(emails_enviados) == 1  # não reenvia quem já saiu
+    assert len(emails_enviados) == 1  # does not resend those already sent
 
 
 def test_tarefa_ignora_vencido_cancelado_e_concluido(
@@ -532,7 +532,7 @@ def test_tarefa_sem_email_configurado_mantem_a_fila(gestor, app, monkeypatch, em
     assert _convite(_db, "g@org.test").envio_estado == ENVIO_PENDENTE
 
 
-# ---------- PIN para quem digita o e-mail no app ----------
+# ---------- PIN for those who type the e-mail in the app ----------
 
 
 def _pedir_pin(client, email):
@@ -626,7 +626,7 @@ def test_pin_e_invalidado_depois_de_cinco_erros(
 
     assert _validar_pin(client, "forca@org.test", pin).status_code == 400
 
-    # Um PIN novo, depois do intervalo, funciona.
+    # A new PIN, after the interval, works.
     _liberar_novo_pin(_db, "forca@org.test")
     _pedir_pin(client, "forca@org.test")
     novo_pin = _pin_do_ultimo_email(emails_enviados)
@@ -661,7 +661,7 @@ def test_reenviar_o_convite_invalida_o_pin_anterior(
 
 
 def _errar_um_pin_inteiro(client, _db, email, emails_enviados):
-    """Pede um PIN novo e erra as 5 tentativas dele."""
+    """Request a new PIN and get all 5 of its attempts wrong."""
     _liberar_novo_pin(_db, email)
     _pedir_pin(client, email)
     pin = _pin_do_ultimo_email(emails_enviados)
@@ -691,14 +691,14 @@ def test_erros_somados_de_varios_pins_pausam_o_pin_do_convite(
     pausa = convite.pin_bloqueado_ate - datetime.now(UTC)
     assert timedelta(minutes=59) < pausa <= timedelta(minutes=60)
 
-    # Pedir de novo não manda nada, e a resposta é a mesma de sempre.
+    # Asking again sends nothing, and the response is the same as always.
     _liberar_novo_pin(_db, "lento@org.test")
     enviados_antes = len(emails_enviados)
     resposta = _pedir_pin(client, "lento@org.test")
     assert resposta.status_code == 200
     assert len(emails_enviados) == enviados_antes
 
-    # Nem um PIN certo gravado no convite passa.
+    # Not even a correct PIN saved on the invite gets through.
     convite = _convite(_db, "lento@org.test")
     convite.pin_hash = convite_service._hash_do_pin(convite, "12345678")
     convite.pin_expira_em = datetime.now(UTC) + timedelta(minutes=10)
@@ -708,7 +708,7 @@ def test_erros_somados_de_varios_pins_pausam_o_pin_do_convite(
     assert resposta.status_code == 400
     assert resposta.get_json()["error"]["message"] == "PIN inválido ou expirado"
 
-    # Passada a pausa, o PIN volta a funcionar e os erros recomeçam do zero.
+    # Once the lock is over, the PIN works again and the errors restart from zero.
     convite = _convite(_db, "lento@org.test")
     convite.pin_bloqueado_ate = datetime.now(UTC) - timedelta(seconds=1)
     _db.session.commit()
@@ -746,7 +746,7 @@ def test_reenvio_pelo_gestor_libera_o_pin_bloqueado(
 def test_pedido_de_pin_nunca_envia_o_e_mail_dentro_da_requisicao(
     gestor, client, app, monkeypatch, email_configurado, _db
 ):
-    """Enviar na requisição deixava o e-mail habilitado mais lento que o desconhecido."""
+    """Sending within the request made an enabled e-mail slower than an unknown one."""
     threads_que_enviaram = []
     monkeypatch.setattr(
         convite_service,

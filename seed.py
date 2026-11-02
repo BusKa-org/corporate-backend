@@ -1,16 +1,14 @@
-"""Dados de desenvolvimento do MeBusKá Corporativo.
+"""Development data for MeBusKá Corporate.
 
-Monta uma operação genérica e completa: uma organização, instituições
-atendidas, o circuito de pontos ordenados, um veículo, janelas de
-disponibilidade e algumas rodadas encerradas para o dashboard (RF-21) ter série
-histórica.
+Builds a generic, complete operation: one organization, served institutions,
+the circuit of ordered stops, one vehicle, availability windows and a few
+finished rounds so the dashboard (RF-21) has a history.
 
-**Nada aqui é de nenhum cliente.** Nomes, siglas, coordenadas e capacidade são
-valores de demonstração. Os dados reais de cada implantação — instituições,
-circuito, veículo — moram no repositório de deploy do cliente, que semeia por
-cima deste produto. Ver `docs/plugins.md` e `ARQUITETURA_REPOSITORIOS.md`.
+Nothing here belongs to any client: names, acronyms, coordinates and capacity
+are demo values. Each deployment's real data lives in the client's deploy
+repository. See `docs/plugins.md` and `ARQUITETURA_REPOSITORIOS.md`.
 
-Idempotente: rodar de novo não duplica nada.
+Idempotent: running it again duplicates nothing.
 
     make seed
 """
@@ -46,7 +44,7 @@ SENHA_DEV = "buska123"
 ORG_SIGLA = "DEMO"
 CAPACIDADE_DEMO = 20
 
-# Coordenadas arbitrárias, só para os pontos não ficarem sobrepostos no mapa.
+# Arbitrary coordinates, just so the stops do not overlap on the map.
 CIRCUITO = [
     ("Ponto 1 — Sede", -7.2100, -35.9100),
     ("Ponto 2 — Campus Norte", -7.2160, -35.9080),
@@ -99,8 +97,8 @@ def _instituicoes(org: Organizacao, pontos: list[Ponto]) -> dict[str, Instituica
             nome=nome,
             sigla=sigla,
             tipo=tipo,
-            # MANUAL, não EMEC/INEP: registros curados, não importados de
-            # catálogo. O código externo é a própria sigla, que é estável.
+            # MANUAL, not EMEC/INEP: curated records, not imported from a catalog. The
+            # external code is the acronym itself, which is stable.
             fonte="MANUAL",
             codigo_externo=sigla,
             uf="PB",
@@ -162,8 +160,8 @@ def _alunos(org: Organizacao, insts: dict[str, Instituicao], senha: str) -> list
         criados.append(aluno)
     db.session.flush()
 
-    # Consentimento vigente para todos — sem ele o RF-10 barra a
-    # solicitação e o ambiente de desenvolvimento não sai do lugar.
+    # Current consent for everyone: without it RF-10 blocks the request and the
+    # dev environment goes nowhere.
     for aluno in criados:
         db.session.add(Consentimento(usuario_id=aluno.id, versao=VERSAO_TERMO_VIGENTE, acao=ACEITE))
     db.session.flush()
@@ -199,7 +197,7 @@ def _frota_e_circuito(org, motorista, pontos) -> tuple[Onibus, Rota]:
 
 
 def _janelas(org, rota, motorista, veiculo) -> None:
-    """Manhã e tarde, de segunda a sexta."""
+    """Morning and afternoon, Monday to Friday."""
     uteis = (DiaDaSemana.SEG, DiaDaSemana.TER, DiaDaSemana.QUA, DiaDaSemana.QUI, DiaDaSemana.SEX)
     for dia in uteis:
         for inicio, fim in ((time(7, 0), time(12, 0)), (time(13, 0), time(18, 0))):
@@ -216,10 +214,10 @@ def _janelas(org, rota, motorista, veiculo) -> None:
 
 
 def _historico(org, rota, motorista, veiculo, pontos, alunos) -> int:
-    """Rodadas encerradas nos últimos dias, para o RF-21 ter série histórica.
+    """Rounds finished in the last few days, so RF-21 has a history.
 
-    Inclui negações de propósito: o estrangulamento por ponto é o indicador que
-    o gestor olha primeiro, e ele nasce vazio sem isto.
+    Includes denials on purpose: the per-stop bottleneck is the indicator the
+    manager looks at first, and it starts empty without this.
     """
     ativos = [a for a in alunos if a.status == UserStatus.ACTIVE]
     rodadas = 0
@@ -250,8 +248,8 @@ def _historico(org, rota, motorista, veiculo, pontos, alunos) -> int:
                 )
             )
 
-        # A cada duas rodadas, o primeiro da lista é recusado no gargalo em vez
-        # de embarcar, então não aparece também como passageiro.
+        # Every other round, the first in the list is denied at the bottleneck instead
+        # of boarding, so they do not also show up as a passenger.
         houve_negacao = dias_atras % 2 == 0 and bool(ativos)
         confirmados = ativos[1:] if houve_negacao else ativos
 
@@ -279,7 +277,7 @@ def _historico(org, rota, motorista, veiculo, pontos, alunos) -> int:
                 )
             )
 
-        # Sempre no mesmo ponto, para o estrangulamento aparecer no relatório.
+        # Always the same stop, so the bottleneck shows up in the report.
         if houve_negacao:
             db.session.add(
                 SolicitacaoViagem(

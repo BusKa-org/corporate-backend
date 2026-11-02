@@ -9,19 +9,7 @@ from app.utils.security import SecurityConfig
 
 
 def validate_uuid(value: str, field_name: str = "ID") -> uuid.UUID:
-    """
-    Validate UUID format.
-
-    Args:
-        value: UUID string to validate
-        field_name: Name of the field for error messages
-
-    Returns:
-        uuid.UUID object
-
-    Raises:
-        ValidationError: If the UUID format is invalid
-    """
+    """Validate UUID format and return a uuid.UUID. Raises ValidationError if invalid."""
     try:
         return uuid.UUID(value, version=4)
     except (ValueError, AttributeError, TypeError):
@@ -29,19 +17,7 @@ def validate_uuid(value: str, field_name: str = "ID") -> uuid.UUID:
 
 
 def validate_cpf(cpf: str) -> str:
-    """
-    Validate Brazilian CPF (Cadastro de Pessoas Físicas).
-
-    Args:
-        cpf: CPF string to validate (can include dots and dashes)
-
-    Returns:
-        Cleaned CPF string (digits only)
-
-    Raises:
-        ValidationError: If CPF format or checksum is invalid
-    """
-    # Remove formatting characters
+    """Validate a Brazilian CPF and return it as digits only."""
     raw_cpf = re.sub(r"[^\d]", "", cpf)
 
     if len(raw_cpf) != 11:
@@ -50,7 +26,6 @@ def validate_cpf(cpf: str) -> str:
     if raw_cpf == raw_cpf[0] * 11:
         raise ValidationError("CPF inválido")
 
-    # Validate checksum digits
     def calculate_digit(cpf_partial: str, weight_start: int) -> int:
         """Calculate CPF checksum digit."""
         total = sum(int(cpf_partial[i]) * (weight_start - i) for i in range(len(cpf_partial)))
@@ -69,18 +44,7 @@ def validate_cpf(cpf: str) -> str:
 
 
 def validate_email(email: str) -> str:
-    """
-    Validate email format.
-
-    Args:
-        email: Email string to validate
-
-    Returns:
-        Lowercased email string
-
-    Raises:
-        ValidationError: If email format is invalid
-    """
+    """Validate e-mail format and return it lowercased."""
     email = email.strip().lower()
 
     pattern = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
@@ -106,18 +70,7 @@ def validate_email(email: str) -> str:
 
 
 def validate_phone(phone: str) -> str:
-    """
-    Validate Brazilian phone number.
-
-    Args:
-        phone: Phone number string (can include formatting)
-
-    Returns:
-        Cleaned phone string (digits only)
-
-    Raises:
-        ValidationError: If phone format is invalid
-    """
+    """Validate a Brazilian phone number and return it as digits only."""
     raw_phone = re.sub(r"[^\d]", "", phone)
 
     if len(raw_phone) not in [10, 11]:
@@ -131,18 +84,7 @@ def validate_phone(phone: str) -> str:
 
 
 def validate_cnh(cnh: str) -> str:
-    """
-    Validate Brazilian CNH (driver's license) format.
-
-    Args:
-        cnh: CNH string to validate
-
-    Returns:
-        Cleaned CNH string (digits only)
-
-    Raises:
-        ValidationError: If CNH format is invalid
-    """
+    """Validate a Brazilian CNH (driver's license) and return it as digits only."""
     raw_cnh = re.sub(r"[^\d]", "", cnh)
 
     if len(raw_cnh) != 11:
@@ -155,20 +97,7 @@ def validate_cnh(cnh: str) -> str:
 
 
 def validate_pagination(page: Any, per_page: Any, max_per_page: int = 100) -> tuple[int, int]:
-    """
-    Validate pagination parameters.
-
-    Args:
-        page: Page number
-        per_page: Items per page
-        max_per_page: Maximum allowed items per page
-
-    Returns:
-        Tuple of (page, per_page) as integers
-
-    Raises:
-        ValidationError: If pagination parameters are invalid
-    """
+    """Validate pagination parameters and return (page, per_page) as integers."""
     try:
         page_int = int(page) if page else 1
         per_page_int = int(per_page) if per_page else 20
@@ -188,19 +117,7 @@ def validate_pagination(page: Any, per_page: Any, max_per_page: int = 100) -> tu
 
 
 def validate_coordinates(latitude: float, longitude: float) -> tuple[float, float]:
-    """
-    Validate geographic coordinates.
-
-    Args:
-        latitude: Latitude value
-        longitude: Longitude value
-
-    Returns:
-        Tuple of (latitude, longitude)
-
-    Raises:
-        ValidationError: If coordinates are out of valid range
-    """
+    """Validate geographic coordinates and return (latitude, longitude)."""
     try:
         lat = float(latitude)
         lon = float(longitude)
@@ -217,19 +134,7 @@ def validate_coordinates(latitude: float, longitude: float) -> tuple[float, floa
 
 
 def validate_password(password: str, field_name: str = "Senha") -> str:
-    """
-    Validate password meets minimum requirements.
-
-    Args:
-        password: Password to validate
-        field_name: Field name for error messages (default: "Senha")
-
-    Returns:
-        Stripped password string
-
-    Raises:
-        ValidationError: If password doesn't meet requirements
-    """
+    """Validate that a password meets the minimum requirements and return it stripped."""
     password = password.strip()
 
     if len(password) < SecurityConfig.MIN_PASSWORD_LENGTH:
@@ -241,25 +146,12 @@ def validate_password(password: str, field_name: str = "Senha") -> str:
 
 
 def sanitize_string(value: str, max_length: int | None = None) -> str:
-    """
-    Sanitize string input by removing dangerous characters.
-
-    Args:
-        value: String to sanitize
-        max_length: Maximum allowed length
-
-    Returns:
-        Sanitized string
-
-    Raises:
-        ValidationError: If string exceeds max_length
-    """
+    """Remove control characters from a string and enforce max_length."""
     if not isinstance(value, str):
         raise ValidationError("Valor deve ser uma string")
 
     sanitized = value.strip()
 
-    # Remove null bytes and other control characters
     sanitized = re.sub(r"[\x00-\x1f\x7f]", "", sanitized)
 
     if max_length and len(sanitized) > max_length:

@@ -1,4 +1,4 @@
-"""RF-11 (iniciar percurso), RF-12 (broadcast do buffer) e os jobs do scheduler."""
+"""RF-11 (start route), RF-12 (buffer broadcast) and the scheduler jobs."""
 
 import uuid
 from datetime import timedelta
@@ -33,7 +33,7 @@ def _novo_aluno(_db, organizacao_id, consentimento=True, **campos):
     return u
 
 
-# --- RF-11: iniciar percurso -------------------------------------------------
+# --- RF-11: start route ------------------------------------------------------
 
 
 def test_outro_motorista_recebe_403(_db, viagem_solicitada, organizacao, client, app):
@@ -113,7 +113,7 @@ def test_broadcast_so_para_alunos_aptos_da_org(
     assert "5 minuto" in Notificacao.query.filter_by(usuario_id=aluno.user.id).one().mensagem
 
 
-# --- Job: fechar buffers expirados --------------------------------------------
+# --- Job: close expired buffers ------------------------------------------------
 
 
 def _abrir_buffer(_db, viagem, buffer_fim):
@@ -140,7 +140,7 @@ def test_buffer_expirado_vira_em_andamento(
     assert _notificacoes(motorista.user.id) == 1
     assert _notificacoes(aluno.user.id) == 1
 
-    # RF-15: quem declarou vira passageiro com credencial e o roteiro é materializado.
+    # RF-15: those who declared become passengers with a credential; the itinerary is materialized.
     passageiro = _db.session.get(AlunosConfirmados, (viagem.id, aluno.user.id))
     assert passageiro.confirmacao is True
     assert passageiro.ponto_embarque_id == pontos_circuito[0].id
@@ -151,7 +151,7 @@ def test_buffer_expirado_vira_em_andamento(
 def test_buffer_expirado_sem_trajeto_declarado_cancela_a_viagem(
     _db, viagem_solicitada, motorista, aluno, relogio
 ):
-    """RF-15, fluxo secundário 1: sem trajeto aceito, o veículo volta a ficar ocioso."""
+    """RF-15, secondary flow 1: no route accepted, the vehicle goes back to idle."""
     _abrir_buffer(_db, viagem_solicitada, relogio.agora + timedelta(minutes=5))
     relogio.avancar(minutes=6)
 
@@ -177,7 +177,7 @@ def test_buffer_nao_expirado_fica_intacto(_db, viagem_solicitada, relogio):
     assert viagem.inicio_real is None
 
 
-# --- Job: alerta de prazo de início ------------------------------------------
+# --- Job: start deadline alert ------------------------------------------------
 
 
 def test_prazo_alerta_gestor_uma_vez(_db, viagem_solicitada, gestor, other_gestor, relogio):
@@ -229,7 +229,7 @@ def _em_rota(_db, viagem, pontos, relogio):
 def test_motorista_de_viagem_sob_demanda_em_rota_fica_em_rota(
     _db, viagem_solicitada, circuito, pontos_circuito, motorista, relogio
 ):
-    """PR #16 calcula o estado do motorista pela viagem EM_ANDAMENTO, também a sob demanda."""
+    """PR #16 computes the driver state from the EM_ANDAMENTO trip, including on-demand ones."""
     _em_rota(_db, viagem_solicitada, pontos_circuito, relogio)
 
     estado = viagens_service.status_motorista(motorista.user, relogio.agora)

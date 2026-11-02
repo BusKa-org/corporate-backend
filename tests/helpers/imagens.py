@@ -1,4 +1,4 @@
-"""Imagens mínimas, montadas byte a byte, para testar a remoção de metadados."""
+"""Minimal images, built byte by byte, to test metadata removal."""
 
 import struct
 import zlib
@@ -8,7 +8,7 @@ def segmento_jpeg(marcador: int, corpo: bytes) -> bytes:
     return bytes([0xFF, marcador]) + struct.pack(">H", len(corpo) + 2) + corpo
 
 
-# Dados comprimidos com FF 00 (byte FF escapado) e FF D0 (restart), que não são marcadores.
+# Compressed data with FF 00 (escaped FF byte) and FF D0 (restart), which are not markers.
 DADOS_DA_IMAGEM_JPEG = b"\x12\x34\xff\x00\x56\xff\xd0\x78"
 APP0_JFIF = segmento_jpeg(0xE0, b"JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00")
 APP1_EXIF = segmento_jpeg(0xE1, b"Exif\x00\x00GPS-LAT-LONG")
@@ -17,7 +17,7 @@ INICIO_DA_IMAGEM_JPEG = segmento_jpeg(0xDA, b"\x01\x01\x00\x00\x3f\x00")
 
 
 def quadro_jpeg(largura: int, altura: int) -> bytes:
-    # SOF0: precisão, altura, largura, 1 componente.
+    # SOF0: precision, height, width, 1 component.
     return segmento_jpeg(0xC0, b"\x08" + struct.pack(">HH", altura, largura) + b"\x01\x01\x11\x00")
 
 
@@ -62,7 +62,7 @@ def chunk_webp(tipo: bytes, dados: bytes) -> bytes:
     return tipo + struct.pack("<I", len(dados)) + dados + preenchimento
 
 
-# Flags 0x0C: EXIF e XMP presentes. Os outros 9 bytes são reservado e dimensões.
+# Flags 0x0C: EXIF and XMP present. The other 9 bytes are reserved and dimensions.
 VP8X_COM_METADADOS = chunk_webp(b"VP8X", b"\x0c" + b"\x00" * 9)
 VP8X_SEM_METADADOS = chunk_webp(b"VP8X", b"\x00" + b"\x00" * 9)
 VP8L = chunk_webp(b"VP8L", b"\x2f\x00\x00\x00\x00")

@@ -1,4 +1,4 @@
-"""RF-15 a RF-18 — validação e serialização do embarque por credencial."""
+"""Credential boarding validation and serialization (RF-15 to RF-18)."""
 
 from marshmallow import fields
 from marshmallow.validate import Length, OneOf, Range
@@ -12,12 +12,12 @@ from app.services.embarque_service import MOTIVOS_RECUSA, TIPOS_EVENTO
 
 
 class QrRequestSchema(BaseSchema):
-    """POST /embarque/viagens/<id>/checkin e /confirmacao
+    """POST /embarque/viagens/<id>/checkin and /confirmacao
 
-    Sem `ocorrido_em`: online vale o relógio do servidor.
+    No `ocorrido_em`: online, the server clock applies.
     """
 
-    # `<credencial_id>.<codigo>`: 36 do UUID, o ponto e até 8 dígitos.
+    # `<credencial_id>.<codigo>`: 36 for the UUID, the dot and up to 8 digits.
     qr_token = fields.String(required=True, validate=Length(min=1, max=64))
 
 
@@ -41,7 +41,7 @@ class AvancarPontoRequestSchema(BaseSchema):
 
 
 class EventoOfflineSchema(BaseSchema):
-    """Um evento da fila local do app do motorista (RF-18, §2.3.2)."""
+    """One event from the driver app's local queue (RF-18, §2.3.2)."""
 
     evento_id = fields.String(required=True, validate=Length(min=1, max=64))
     tipo = fields.String(required=True, validate=OneOf(TIPOS_EVENTO))

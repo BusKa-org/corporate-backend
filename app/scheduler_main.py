@@ -1,8 +1,8 @@
-"""Entrypoint do container de scheduler: roda os jobs de background, sem HTTP.
+"""Scheduler container entrypoint: runs the background jobs, without HTTP.
 
-A API sobe com 4 workers do gunicorn; se cada um iniciasse o próprio scheduler,
-as notificações sairiam duplicadas. Por isso os jobs vivem aqui, em um processo
-só, e os workers da API sobem com RUN_SCHEDULER desligado.
+The API runs 4 gunicorn workers; if each started its own scheduler, the
+notifications would go out duplicated. So the jobs live here, in a single
+process, and the API workers start with RUN_SCHEDULER off.
 """
 
 import threading
@@ -15,11 +15,11 @@ app = create_app()
 if __name__ == "__main__":
     jobs = scheduler.get_jobs()
 
-    # Falhar alto. Um scheduler mal configurado ficando ocioso em silêncio foi
-    # exatamente o defeito que derrubou a geração de viagens em produção.
+    # Fail loudly. A misconfigured scheduler sitting idle in silence was exactly
+    # the defect that broke trip generation in production.
     if not jobs:
         raise SystemExit("Nenhum job registrado. RUN_SCHEDULER está ligado?")
 
     app.logger.info("Scheduler up with %d jobs: %s", len(jobs), [job.id for job in jobs])
 
-    threading.Event().wait()  # O APScheduler roda na própria thread; só bloqueia aqui.
+    threading.Event().wait()  # APScheduler runs in its own thread; this only blocks.

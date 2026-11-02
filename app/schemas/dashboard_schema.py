@@ -1,8 +1,8 @@
-"""RF-21 — validação do período consultado no painel do gestor.
+"""RF-21: validation of the period queried in the manager dashboard.
 
-Só o filtro de entrada precisa de schema: os indicadores já saem do serviço
-como dicionários de tipos primitivos, prontos para o `jsonify`, e um schema de
-dump seria uma segunda cópia do contrato Swagger sem ganho nenhum.
+Only the input filter needs a schema: the indicators already leave the service
+as dicts of primitive types, ready for `jsonify`, and a dump schema would be a
+second copy of the Swagger contract.
 """
 
 from marshmallow import ValidationError, fields, validates_schema
@@ -11,8 +11,9 @@ from app.schemas.common import BaseSchema
 
 
 class PeriodoRelatorioQuerySchema(BaseSchema):
-    """Período de análise. Ambos os limites são inclusivos e comparados como
-    data civil — `Viagem.data` é `DATE`, então não há fuso envolvido."""
+    """Analysis period. Both bounds are inclusive and compared as calendar dates;
+    `Viagem.data` is a `DATE`, so no time zone is involved.
+    """
 
     inicio = fields.Date(required=True)
     fim = fields.Date(required=True)

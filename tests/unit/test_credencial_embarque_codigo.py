@@ -1,4 +1,4 @@
-"""Código rotativo do QR de embarque (RF-15): TOTP da RFC 6238 com HMAC-SHA1."""
+"""Rotating boarding QR code (RF-15): RFC 6238 TOTP with HMAC-SHA1."""
 
 import uuid
 from datetime import UTC, datetime
@@ -9,7 +9,7 @@ from flask import Flask
 from app.models.credencial_embarque import CredencialEmbarque
 from app.services import credencial_embarque_service as servico
 
-# Apêndice B da RFC 6238, coluna SHA1: o segredo é o ASCII "12345678901234567890".
+# RFC 6238 Appendix B, SHA1 column: the secret is the ASCII "12345678901234567890".
 SEGREDO_RFC = b"12345678901234567890"
 VETORES_RFC = [
     (59, "94287082"),

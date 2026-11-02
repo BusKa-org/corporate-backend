@@ -1,4 +1,4 @@
-"""Cadastro e conta sob concorrência: convite, PIN, exclusão, foto e troca de senha."""
+"""Sign-up and account under concurrency: invite, PIN, deletion, photo and password change."""
 
 import io
 import os
@@ -57,7 +57,7 @@ def convite(_db, organizacao, gestor):
     return c
 
 
-# ---------- convite ----------
+# ---------- invite ----------
 
 
 def test_aceite_duplo_do_convite_cria_uma_conta_so(app, _db, convite):
@@ -85,7 +85,7 @@ def _validar_pin(app, email, pin):
 
 
 def test_palpites_de_pin_em_paralelo_nao_furam_o_limite_de_tentativas(app, _db, convite):
-    """Dez palpites errados de uma vez contam dez tentativas, e o PIN morre na quinta."""
+    """Ten wrong guesses at once count as ten attempts, and the PIN dies at the fifth."""
     _com_pin(_db, convite, "12345678")
 
     tarefas = []
@@ -98,12 +98,12 @@ def test_palpites_de_pin_em_paralelo_nao_furam_o_limite_de_tentativas(app, _db, 
     recarregado = _db.session.get(Convite, convite.id)
     assert recarregado.pin_hash is None
     assert recarregado.pin_erros_total == 5
-    # E o PIN certo também não vale mais.
+    # And the right PIN no longer works either.
     assert _validar_pin(app, convite.email, "12345678")().status_code == 400
 
 
 def test_palpites_em_paralelo_contam_cada_um_no_total_do_convite(app, _db, convite, monkeypatch):
-    """Faltando 2 erros para o limite do convite, dez palpites juntos param exatamente nele."""
+    """With 2 errors left before the invite limit, ten guesses together stop exactly at it."""
     monkeypatch.setitem(app.config, "CONVITE_PIN_MAX_ERROS_TOTAL", 20)
     convite.pin_erros_total = 18
     _com_pin(_db, convite, "12345678")
@@ -158,7 +158,7 @@ def test_dois_pedidos_de_pin_juntos_mandam_um_e_mail_com_pin_valido(app, _db, co
     assert _validar_pin(app, convite.email, pin)().status_code == 200
 
 
-# ---------- exclusão de conta (LGPD) ----------
+# ---------- account deletion (LGPD) ----------
 
 
 def test_exclusao_dupla_da_conta_anonimiza_uma_vez(app, _db, aluno):
@@ -173,7 +173,7 @@ def test_exclusao_dupla_da_conta_anonimiza_uma_vez(app, _db, aluno):
 
     codigos = status_de(respostas)
     assert codigos[0] == 200
-    # A segunda vê a conta já excluída (credenciais não conferem) ou esbarra na retenção.
+    # The second sees the account already deleted (credentials do not match) or hits the retention.
     assert codigos[1] in (401, 409)
     _db.session.expire_all()
     retencao = _db.session.get(RetencaoLegal, aluno.user.id)
@@ -197,8 +197,8 @@ def test_exclusao_contra_solicitacao_nao_deixa_conta_excluida_com_solicitacao_at
 
     respostas = ao_mesmo_tempo(app, [excluir, solicitar])
 
-    # Qualquer ordem vale (exclusão antes: 403 na solicitação; solicitação antes: a exclusão
-    # cancela ou pede para tentar de novo), desde que nenhuma dê 500.
+    # Any order is fine (deletion first: 403 on the request; request first: the deletion
+    # cancels or asks to retry), as long as none gives a 500.
     for codigo in status_de(respostas):
         assert codigo in (200, 201, 403, 409)
     _db.session.expire_all()
@@ -235,7 +235,7 @@ def test_exclusao_contra_declaracao_nao_deixa_conta_excluida_com_lugar(
 
     exclusao, declaracao = ao_mesmo_tempo(app, [excluir, declarar])
 
-    # Declaração antes: a exclusão devolve o trecho. Depois: 401 do token ou 403 do serviço.
+    # Declaration first: the deletion gives the leg back. After: 401 (token) or 403 (service).
     assert exclusao.status_code == 200, exclusao.get_data(as_text=True)
     assert declaracao.status_code in (200, 401, 403), declaracao.get_data(as_text=True)
     _db.session.expire_all()
@@ -248,11 +248,11 @@ def test_exclusao_contra_declaracao_nao_deixa_conta_excluida_com_lugar(
     assert ativas == 0
 
 
-# ---------- foto ----------
+# ---------- photo ----------
 
 
 def test_envios_simultaneos_de_foto_deixam_um_arquivo_so(app, _db, aluno, tmp_path, monkeypatch):
-    """PNG e JPEG ao mesmo tempo: sem lock, cada envio apagava o arquivo do outro."""
+    """PNG and JPEG at the same time: without a lock, each upload deleted the other's file."""
     monkeypatch.setitem(app.config, "FOTOS_ALUNO_DIR", str(tmp_path))
 
     def enviar(conteudo, nome):
@@ -263,7 +263,7 @@ def test_envios_simultaneos_de_foto_deixam_um_arquivo_so(app, _db, aluno, tmp_pa
             headers=aluno.headers,
         )
 
-    # Várias rodadas: a janela entre gravar e apagar a outra extensão é curta.
+    # Several rounds: the window between saving and deleting the other extension is short.
     for _ in range(10):
         respostas = ao_mesmo_tempo(
             app, [enviar(imagens.png(), "foto.png"), enviar(imagens.jpeg(), "foto.jpg")]
@@ -273,7 +273,7 @@ def test_envios_simultaneos_de_foto_deixam_um_arquivo_so(app, _db, aluno, tmp_pa
         assert len(arquivos) == 1, arquivos
 
 
-# ---------- troca de senha pelo link ----------
+# ---------- password change via link ----------
 
 
 def test_link_de_troca_de_senha_usado_duas_vezes_ao_mesmo_tempo(app, _db, aluno):
@@ -299,7 +299,7 @@ def test_link_de_troca_de_senha_usado_duas_vezes_ao_mesmo_tempo(app, _db, aluno)
     assert _db.session.get(User, aluno.user.id) is not None
 
 
-# ---------- janela de disponibilidade ----------
+# ---------- availability window ----------
 
 
 def test_janelas_sobrepostas_criadas_ao_mesmo_tempo(app, _db, gestor, onibus, motorista):

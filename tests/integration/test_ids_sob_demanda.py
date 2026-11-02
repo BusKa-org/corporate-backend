@@ -1,4 +1,4 @@
-"""Ids malformados nos endpoints sob demanda respondem 400, não 500."""
+"""Malformed ids on the on-demand endpoints answer 400, not 500."""
 
 import pytest
 
