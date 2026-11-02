@@ -38,15 +38,14 @@ def _chave_do_cliente() -> str:
 
 
 def _corpo() -> Mapping[str, Any]:
-    """Corpo JSON ou formulário, sem quebrar e sem consumir o corpo da view.
+    """Corpo JSON, sem quebrar e sem consumir o corpo da view.
 
-    get_json(silent=True) fica em cache no Flask, e o form também, então a view
-    lê o mesmo corpo depois.
+    get_json(silent=True) fica em cache no Flask, então a view lê o mesmo corpo depois.
     """
     dados = request.get_json(silent=True)
     if isinstance(dados, dict):
         return dados
-    return request.form
+    return {}
 
 
 def _email_do_corpo() -> str | None:
@@ -60,12 +59,10 @@ def _email_do_corpo() -> str | None:
 
 
 def _token_da_requisicao() -> str | None:
-    """Token do convite (na URL) ou do reset de senha (query string ou corpo)."""
+    """Token do convite (na URL) ou do reset de senha (corpo JSON)."""
     token = None
     if request.view_args:
         token = request.view_args.get("token")
-    if not token:
-        token = request.args.get("token")
     if not token:
         token = _corpo().get("token")
     if not isinstance(token, str):

@@ -401,7 +401,7 @@ Counting key depends on the route:
   anyway. Known trade-off: anyone can use up a victim's e-mail bucket and block
   that one user's login for up to a minute.
 - `POST /v1/auth/reset-password`: the body's e-mail if it has one, otherwise
-  the reset `token` (JSON or form). `GET`/`POST /v1/convites/aceite/<token>`: the token. No token: one shared
+  the reset `token` from the JSON body. `GET`/`POST /v1/convites/aceite/<token>`: the token. No token: one shared
   `sem-token` bucket.
 - E-mails, tokens and IPs are stored in the key as a keyed hash
   (HMAC-SHA256 with `JWT_SECRET_KEY`, first 32 hex chars), never in clear
