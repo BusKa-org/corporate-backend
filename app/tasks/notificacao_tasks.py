@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 def verificar_viagens_24h(app):
-    """Job: Notifica alunos 24 horas antes da viagem"""
+    """Job: notifies students 24 hours before the trip"""
     with app.app_context():
         agora = datetime.now()
         amanha_inicio = agora + timedelta(hours=23, minutes=50)
@@ -50,7 +50,7 @@ def verificar_viagens_24h(app):
 
 
 def verificar_viagens_10min(app):
-    """Job: Notifica o motorista 10 min antes com a lista de universidades"""
+    """Job: notifies the driver 10 min before with the list of universities"""
     with app.app_context():
         agora = datetime.now()
 

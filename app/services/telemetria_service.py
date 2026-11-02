@@ -1,14 +1,11 @@
-"""RF-22 — ingestão e consulta da telemetria da bateria do veículo elétrico.
+"""Electric vehicle battery telemetry ingestion and queries (RF-22).
 
-Requisito *desejável* e condicionado à existência de interface de dados no
-veículo (CAN bus / OBD-II). O adaptador que fala com o veículo mora no
-repositório de deploy do cliente (`mebuska-deploy`); aqui existe apenas o
-endpoint autenticado que recebe os lotes e as consultas do gestor.
+A *desirable* requirement, conditional on the vehicle having a data interface
+(CAN bus / OBD-II). The adapter that talks to the vehicle lives in the client's
+deploy repository (`mebuska-deploy`); here there is only the authenticated
+endpoint that receives the batches, plus the manager's queries.
 
-Cliente embarcado: acumula as leituras localmente e faz
-``POST /v1/telemetria/ingestao`` com ``{"veiculo_id": ..., "amostras": [...]}``
-usando o mesmo JWT dos demais endpoints. Reenviar o lote inteiro após falha de
-rede é seguro (ver `ingerir`).
+Resending a whole batch after a network failure is safe (see `ingerir`).
 """
 
 import logging
@@ -39,18 +36,17 @@ def _veiculo_da_organizacao(user: User, veiculo_id: Any) -> Onibus:
 
 
 def ingerir(user_id: str, veiculo_id: Any, amostras: list[dict[str, Any]]) -> dict[str, int]:
-    """Armazena um lote de amostras de um veículo.
+    """Store a batch of samples from one vehicle.
 
-    Idempotente por ``(veiculo_id, timestamp)``: o lote reenviado após uma falha
-    de rede traz exatamente os mesmos carimbos de tempo, gerados pelo relógio do
-    leitor embarcado, então basta descartar os que já estão gravados. A chave é
-    suficiente porque há um único leitor por veículo emitindo em série — dois
-    valores distintos para o mesmo instante e o mesmo veículo não existem.
+    Idempotent per ``(veiculo_id, timestamp)``: a batch resent after a network
+    failure carries exactly the same timestamps, from the onboard reader's clock,
+    so the ones already saved are dropped. The key is enough because there is a
+    single reader per vehicle emitting serially.
 
-    A garantia é do banco: ``UNIQUE (veiculo_id, timestamp)`` mais um
-    ``ON CONFLICT DO NOTHING`` na gravação. A filtragem por consulta que vem
-    antes é só para evitar trabalho no caso comum — sozinha ela não cobriria
-    dois lotes idênticos chegando ao mesmo tempo.
+    The database is the guarantee: ``UNIQUE (veiculo_id, timestamp)`` plus
+    ``ON CONFLICT DO NOTHING`` on insert. The query-based filter before it only
+    saves work in the common case; alone it would not cover two identical batches
+    arriving at the same time.
     """
     user = db.session.get(User, user_id)
     if not user:
@@ -60,7 +56,7 @@ def ingerir(user_id: str, veiculo_id: Any, amostras: list[dict[str, Any]]) -> di
 
     veiculo = _veiculo_da_organizacao(user, veiculo_id)
 
-    # Dedup dentro do próprio lote antes de olhar o banco.
+    # Dedupe within the batch itself before looking at the database.
     por_timestamp: dict[datetime, dict[str, Any]] = {}
     for amostra in amostras:
         por_timestamp[amostra["timestamp"]] = amostra
@@ -87,10 +83,9 @@ def ingerir(user_id: str, veiculo_id: Any, amostras: list[dict[str, Any]]) -> di
         return {"recebidas": len(amostras), "armazenadas": 0, "duplicadas": len(amostras)}
 
     try:
-        # ON CONFLICT sobre a chave natural: a filtragem acima já evita o
-        # trabalho no caso comum, e isto fecha a janela em que dois lotes
-        # idênticos concorrentes passam pela consulta antes de qualquer um
-        # gravar. `armazenadas` vem do RETURNING, não da contagem otimista.
+        # ON CONFLICT on the natural key closes the window where two identical concurrent
+        # batches pass the query above before either saves. `armazenadas` comes from
+        # RETURNING, not from the optimistic count.
         inseridos = db.session.execute(
             pg_insert(TelemetriaVeiculo)
             .values(
@@ -127,7 +122,7 @@ def ingerir(user_id: str, veiculo_id: Any, amostras: list[dict[str, Any]]) -> di
 
 
 def ultimo_por_veiculo(gestor_id: str) -> list[TelemetriaVeiculo]:
-    """(Gestor) Leitura mais recente de cada veículo da organização."""
+    """(Manager) Latest reading of each vehicle in the organization."""
     gestor = _get_gestor_or_403(gestor_id, "Apenas gestores podem consultar telemetria")
 
     return (
@@ -146,7 +141,7 @@ def serie(
     inicio: datetime | None = None,
     fim: datetime | None = None,
 ) -> list[TelemetriaVeiculo]:
-    """(Gestor) Série temporal do período, limites inclusivos."""
+    """(Manager) Time series for the period, inclusive bounds."""
     gestor = _get_gestor_or_403(gestor_id, "Apenas gestores podem consultar telemetria")
 
     q = (
@@ -167,11 +162,11 @@ def serie(
 def consumo_por_viagem(
     gestor_id: str, inicio: datetime | None = None, fim: datetime | None = None
 ) -> list[dict[str, Any]]:
-    """(Gestor) Agrega os indicadores energéticos por viagem.
+    """(Manager) Aggregates the energy indicators per trip.
 
-    Só entram amostras com `viagem_id` — as de fora de operação não pertencem a
-    viagem alguma. Sai um registro por viagem para que o dashboard (RF-21)
-    consiga cruzar consumo com ocupação sem reprocessar a série inteira.
+    Only samples with `viagem_id` count; out-of-service ones belong to no trip.
+    One record per trip, so the dashboard (RF-21) can cross consumption with
+    occupancy without reprocessing the whole series.
     """
     gestor = _get_gestor_or_403(gestor_id, "Apenas gestores podem consultar telemetria")
 
@@ -182,8 +177,8 @@ def consumo_por_viagem(
             func.count().label("amostras"),
             func.min(TelemetriaVeiculo.timestamp).label("inicio"),
             func.max(TelemetriaVeiculo.timestamp).label("fim"),
-            # `consumo_kwh` é lido como incremento por amostra; o odômetro é
-            # cumulativo, então a quilometragem é a diferença entre extremos.
+            # `consumo_kwh` is read as a per-sample increment; the odometer is cumulative,
+            # so the mileage is the difference between the extremes.
             func.sum(TelemetriaVeiculo.consumo_kwh).label("consumo_kwh"),
             (
                 func.max(TelemetriaVeiculo.odometro_km) - func.min(TelemetriaVeiculo.odometro_km)

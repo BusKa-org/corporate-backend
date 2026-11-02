@@ -7,9 +7,9 @@ logger = logging.getLogger(__name__)
 
 
 def enviar_convites_pendentes():
-    """Job: envia os e-mails de convite que estão na fila."""
-    # Sem `args=[app]`: o jobstore compartilhado serializa o job com pickle, e o objeto
-    # Flask não serializa. O app vem do próprio agendador.
+    """Job: sends the queued invite e-mails."""
+    # No `args=[app]`: the shared jobstore pickles the job, and the Flask object is
+    # not picklable. The app comes from the scheduler itself.
     app = scheduler.app
     if not app:
         logger.error("Erro fatal: Instância do Flask (app) não encontrada no Scheduler.")

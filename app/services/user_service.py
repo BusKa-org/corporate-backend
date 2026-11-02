@@ -24,7 +24,6 @@ from app.utils import audit_logger, validate_cpf, validate_email, validate_passw
 logger = logging.getLogger(__name__)
 
 
-# Helper functions
 def _require_active(user: User) -> None:
     if user.status != UserStatus.ACTIVE:
         raise ForbiddenError("Cadastro precisa ser finalizado antes de usar o app")
@@ -66,7 +65,7 @@ def _preencher_status_motoristas(users: list[User]) -> None:
 def get_all_users(current_user_id: str) -> list[User]:
     """List all users in the same organizacao (gestor only)."""
     gestor = _get_gestor_or_403(current_user_id, "Apenas gestores podem listar usuários")
-    # with_polymorphic carrega as colunas de cada subtipo na mesma query (sem N+1)
+    # with_polymorphic loads each subtype's columns in the same query (no N+1)
     todos = with_polymorphic(User, "*")
     users = db.session.query(todos).filter(todos.organizacao_id == gestor.organizacao_id).all()
     _preencher_status_motoristas(users)
@@ -80,24 +79,20 @@ def get_user_by_id(user_id: str, current_user_id: str | None = None) -> User:
     """
     user = _get_user_or_404(user_id)
 
-    # Skip authorization for internal use
     if current_user_id is None:
         _preencher_status_motoristas([user])
         return user
 
     current_user = _get_user_or_404(current_user_id)
 
-    # Allow self-access
     if str(user_id) == str(current_user_id):
         _preencher_status_motoristas([user])
         return user
 
-    # Allow gestor access within same organizacao
     if current_user.role == UserRole.GESTOR and user.organizacao_id == current_user.organizacao_id:
         _preencher_status_motoristas([user])
         return user
 
-    # Log unauthorized access attempt
     audit_logger.log_security_event(
         event_type="unauthorized_user_access",
         severity="medium",
@@ -261,7 +256,6 @@ def change_password(user_id: str, data: dict[str, Any]) -> None:
     if new_password == current_password:
         raise ValidationError("Nova senha deve ser diferente da senha atual")
 
-    # Verify current password and log failed attempts
     if not check_password_hash(user.senha_hash, current_password):
         audit_logger.log_security_event(
             event_type="failed_password_change",
@@ -275,7 +269,6 @@ def change_password(user_id: str, data: dict[str, Any]) -> None:
         user.senha_hash = generate_password_hash(new_password)
         db.session.commit()
 
-        # Log successful password change
         audit_logger.log_user_action(
             action="change_password",
             user_id=user_id,
@@ -292,7 +285,7 @@ def change_password(user_id: str, data: dict[str, Any]) -> None:
 def get_motoristas_by_municipio(gestor_id: str):
     gestor = _get_user_or_404(gestor_id)
 
-    # Consulta Motorista direto: via User, as colunas de motorista vinham uma query por linha
+    # Query Motorista directly: through User, the driver columns came one query per row
     motoristas = (
         db.session.query(Motorista).filter(Motorista.organizacao_id == gestor.organizacao_id).all()
     )
