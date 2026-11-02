@@ -38,3 +38,23 @@ def test_create_instituicao_sem_latitude_retorna_400(gestor):
     del payload["endereco"]["latitude"]
     r = gestor.client.post("/v1/instituicoes/", json=payload)
     assert r.status_code == 400
+
+
+@pytest.mark.integration
+def test_create_instituicao_cnpj_duplicado_retorna_409(gestor):
+    primeira = gestor.client.post("/v1/instituicoes/", json=_payload("ESCOLA_PUBLICA"))
+    assert primeira.status_code == 201
+
+    segunda = gestor.client.post("/v1/instituicoes/", json=_payload("ESCOLA_PUBLICA"))
+    assert segunda.status_code == 409
+
+
+@pytest.mark.integration
+def test_create_instituicao_cnpj_de_outra_organizacao_retorna_409(gestor, other_gestor):
+    primeira = gestor.client.post("/v1/instituicoes/", json=_payload("ESCOLA_PUBLICA"))
+    assert primeira.status_code == 201
+
+    segunda = other_gestor.client.post("/v1/instituicoes/", json=_payload("ESCOLA_PUBLICA"))
+    assert segunda.status_code == 409
+    # The raw database error must not reach the client.
+    assert "IntegrityError" not in segunda.get_data(as_text=True)

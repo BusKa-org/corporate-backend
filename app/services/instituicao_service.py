@@ -4,8 +4,15 @@ import logging
 from typing import Any
 
 from sqlalchemy import or_
+from sqlalchemy.exc import IntegrityError
 
-from app.core.exceptions import AppError, ForbiddenError, NotFoundError, ValidationError
+from app.core.exceptions import (
+    AppError,
+    ConflictError,
+    ForbiddenError,
+    NotFoundError,
+    ValidationError,
+)
 from app.models.base import db
 from app.models.enum import TipoInstituicao, UserRole
 from app.models.geo import Endereco, Instituicao, Ponto
@@ -19,7 +26,7 @@ def create_instituicao(gestor_id: str, data: dict[str, Any]) -> Instituicao:
     """
     Create a new institution (gestor only).
 
-    Raises: ForbiddenError, ValidationError, AppError
+    Raises: ForbiddenError, ValidationError, ConflictError, AppError
     """
     user = db.session.get(User, gestor_id)
     if not user or user.role != UserRole.GESTOR:
@@ -37,6 +44,10 @@ def create_instituicao(gestor_id: str, data: dict[str, Any]) -> Instituicao:
     if not organizacao or not organizacao.estado:
         raise ValidationError("Organização sem UF cadastrada")
 
+    existente = Instituicao.query.filter_by(organizacao_id=user.organizacao_id, cnpj=cnpj).first()
+    if existente:
+        raise ConflictError("Já existe uma instituição com este CNPJ", field="cnpj")
+
     try:
         novo_ponto = Ponto(
             organizacao_id=user.organizacao_id,
@@ -50,9 +61,9 @@ def create_instituicao(gestor_id: str, data: dict[str, Any]) -> Instituicao:
         nova_inst = Instituicao(
             nome=nome,
             cnpj=cnpj,
-            # O schema valida o NOME do enum (ex.: "INSTITUTO_FEDERAL"), não o valor.
+            # The schema validates enum NAMES (e.g. "INSTITUTO_FEDERAL"), not values.
             tipo=TipoInstituicao[tipo_str],
-            # Cadastro feito pelo gestor, não importado de EMEC/INEP (igual ao seed).
+            # Entered by a gestor, not imported from EMEC/INEP (same as seed.py).
             fonte="MANUAL",
             codigo_externo=cnpj,
             uf=organizacao.estado,
@@ -74,9 +85,18 @@ def create_instituicao(gestor_id: str, data: dict[str, Any]) -> Instituicao:
         db.session.commit()
         return nova_inst
 
-    except Exception as e:
+    except AppError:
         db.session.rollback()
-        raise AppError(f"Erro ao salvar instituição: {str(e)}", 500)
+        raise
+    except IntegrityError:
+        # (fonte, codigo_externo) is unique across all organizations, and
+        # codigo_externo is the CNPJ, so another organization may already use it.
+        db.session.rollback()
+        raise ConflictError("Já existe uma instituição com este CNPJ", field="cnpj")
+    except Exception:
+        db.session.rollback()
+        logger.exception("Error saving institution")
+        raise AppError("Erro ao salvar instituição", 500)
 
 
 def list_all(gestor_id: str) -> list[Instituicao]:
