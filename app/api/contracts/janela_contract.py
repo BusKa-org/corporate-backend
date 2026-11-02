@@ -1,4 +1,4 @@
-"""Janela de disponibilidade endpoint documentation models (RF-05)."""
+"""Availability window endpoint documentation models (RF-05)."""
 
 from flask_restx import fields
 

@@ -38,9 +38,7 @@ def register_models(api):
         },
     )
 
-    # ==========================================
-    # RF-21 — indicadores agregados do período
-    # ==========================================
+    # RF-21: aggregated indicators for the period
 
     viagem_por_status = api.model(
         "IndicadorViagensPorStatus",

@@ -1,8 +1,8 @@
-"""RF-15 a RF-18 — credencial de embarque, roteiro do motorista e sincronização.
+"""Boarding credential, driver itinerary and offline sync (RF-15 to RF-18).
 
-O embarque por QR tem dois passos (RF-17): `checkin` confere a credencial e
-devolve o passageiro com a foto; o motorista então `confirmacao` ou `recusa`.
-`validacao`, o passo único antigo, responde 410 para o app desatualizado.
+QR boarding has two steps (RF-17): `checkin` checks the credential and returns
+the passenger with the photo; the driver then calls `confirmacao` or `recusa`.
+`validacao`, the old single step, answers 410 for outdated apps.
 """
 
 from typing import Any
@@ -61,7 +61,7 @@ class RoteiroResource(Resource):
     @api.response(200, "Success", models["roteiro_response"])
     @jwt_required()
     def get(self, viagem_id: str) -> tuple[dict[str, Any], int]:
-        """Roteiro consolidado do motorista, com embarques e desembarques (RF-16)"""
+        """Driver's consolidated itinerary, with pickups and drop-offs (RF-16)"""
         return (
             roteiro_response_schema.dump(embarque_service.roteiro(get_jwt_identity(), viagem_id)),
             200,
@@ -76,7 +76,7 @@ class AvancarPontoResource(Resource):
     @jwt_required()
     @limite_tempo_real
     def post(self, viagem_id: str) -> tuple[dict[str, Any], int]:
-        """Conclui a parada corrente e segue para a próxima (RF-16)"""
+        """Completes the current stop and moves to the next one (RF-16)"""
         payload = avancar_request_schema.load(_body())
         roteiro = embarque_service.avancar_ponto(
             get_jwt_identity(), viagem_id, payload["ocorrido_em"]
@@ -89,7 +89,7 @@ class ValidacaoDescontinuadaResource(Resource):
     @api.doc("validar_embarque_descontinuado")
     @api.response(410, "ENDPOINT_DESCONTINUADO: use /checkin e depois /confirmacao")
     def post(self, viagem_id: str) -> tuple[dict[str, Any], int]:
-        """Descontinuado: embarcava na leitura, sem conferir a foto (RF-17)"""
+        """Deprecated: boarded on scan, without checking the photo (RF-17)"""
         embarque_service.endpoint_descontinuado()
         return {}, 410
 
@@ -104,7 +104,7 @@ class CheckinResource(Resource):
     @jwt_required()
     @limite_tempo_real
     def post(self, viagem_id: str) -> tuple[dict[str, Any], int]:
-        """Confere o QR lido e devolve o passageiro com a foto, sem embarcar (RF-17)"""
+        """Checks the scanned QR and returns the passenger photo, without boarding (RF-17)"""
         payload = qr_request_schema.load(_body())
         resultado = embarque_service.checkin_embarque(
             get_jwt_identity(), viagem_id, payload["qr_token"]
@@ -122,7 +122,7 @@ class ConfirmacaoResource(Resource):
     @jwt_required()
     @limite_tempo_real
     def post(self, viagem_id: str) -> tuple[dict[str, Any], int]:
-        """A foto confere: registra o embarque e consome a credencial (RF-17)"""
+        """Photo matches: records the boarding and consumes the credential (RF-17)"""
         payload = qr_request_schema.load(_body())
         resultado = embarque_service.confirmar_embarque(
             get_jwt_identity(), viagem_id, payload["qr_token"]
@@ -140,7 +140,7 @@ class RecusaResource(Resource):
     @jwt_required()
     @limite_tempo_real
     def post(self, viagem_id: str) -> tuple[dict[str, Any], int]:
-        """A foto não confere: não embarca, recusa o QR e abre ocorrência (RF-17)"""
+        """Photo does not match: no boarding, rejects the QR and opens an incident (RF-17)"""
         payload = recusar_request_schema.load(_body())
         resultado = embarque_service.recusar_embarque(
             get_jwt_identity(),
@@ -160,7 +160,7 @@ class EmbarqueManualResource(Resource):
     @jwt_required()
     @limite_tempo_real
     def post(self, viagem_id: str) -> tuple[dict[str, Any], int]:
-        """Fallback manual: motorista acha o aluno na lista do ponto (RF-17)"""
+        """Manual fallback: driver finds the student in the stop's list (RF-17)"""
         payload = manual_request_schema.load(_body())
         resultado = embarque_service.confirmar_manual(
             get_jwt_identity(), viagem_id, payload["aluno_id"]
@@ -176,7 +176,7 @@ class SincronizacaoResource(Resource):
     @jwt_required()
     @limite_tempo_real
     def post(self, viagem_id: str) -> tuple[dict[str, Any], int]:
-        """Aplica em lote a fila de eventos registrados sem conexão (RF-18)"""
+        """Applies in batch the queue of events recorded offline (RF-18)"""
         payload = sincronizacao_request_schema.load(_body())
         resultado = embarque_service.sincronizar(get_jwt_identity(), viagem_id, payload["eventos"])
         return sincronizacao_response_schema.dump(resultado), 200

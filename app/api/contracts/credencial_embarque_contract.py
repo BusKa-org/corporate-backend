@@ -1,4 +1,4 @@
-"""Credencial de embarque endpoint documentation models."""
+"""Boarding credential endpoint documentation models."""
 
 from flask_restx import fields
 

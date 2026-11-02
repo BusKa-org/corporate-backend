@@ -1,4 +1,4 @@
-"""Boarding endpoint documentation models (RF-15 a RF-18)."""
+"""Boarding endpoint documentation models (RF-15 to RF-18)."""
 
 from flask_restx import fields
 
