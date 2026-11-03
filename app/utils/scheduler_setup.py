@@ -5,7 +5,12 @@ from flask import Flask
 from flask_apscheduler import APScheduler
 
 from app.tasks.convite_tasks import enviar_convites_pendentes
-from app.tasks.notificacao_tasks import verificar_viagens_10min, verificar_viagens_24h
+from app.tasks.notificacao_tasks import (
+    INTERVALO_JOB_10MIN_MINUTOS,
+    INTERVALO_JOB_24H_MINUTOS,
+    verificar_viagens_10min,
+    verificar_viagens_24h,
+)
 from app.tasks.retencao_tasks import job_anonimizar_retencoes
 from app.tasks.viagem_tasks import job_alertar_prazo_inicio, job_fechar_buffers_expirados
 
@@ -27,7 +32,7 @@ def init_scheduler(app: Flask, scheduler: APScheduler):
         func=verificar_viagens_24h,
         args=[app],
         trigger="interval",
-        minutes=60,
+        minutes=INTERVALO_JOB_24H_MINUTOS,
         replace_existing=True,
     )
 
@@ -36,7 +41,7 @@ def init_scheduler(app: Flask, scheduler: APScheduler):
         func=verificar_viagens_10min,
         args=[app],
         trigger="interval",
-        minutes=10,
+        minutes=INTERVALO_JOB_10MIN_MINUTOS,
         replace_existing=True,
     )
 
