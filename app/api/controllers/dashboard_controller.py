@@ -17,8 +17,10 @@ from app.services.dashboard_service import (
 
 api = Namespace("dashboard", description="Métricas e Relatórios para o Gestor")
 
+# API contracts (Swagger documentation)
 models = dashboard_contract.register_models(api)
 
+# Validation schemas (Marshmallow)
 periodo_query_schema = PeriodoRelatorioQuerySchema()
 
 relatorio_parser = reqparse.RequestParser()

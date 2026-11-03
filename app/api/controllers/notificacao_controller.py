@@ -7,6 +7,7 @@ from app.services.notificacao_service import NotificacaoService
 
 api = Namespace("notificacoes", description="Avisos e comunicados")
 
+# API contracts (Swagger documentation)
 notificacao_input_model = get_notificacao_input_model(api)
 
 

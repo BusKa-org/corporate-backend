@@ -166,10 +166,10 @@ def test_chave_do_email_nao_consome_o_corpo(app):
 @pytest.mark.integration
 def test_reset_de_senha_conta_pelo_token_sem_email(app):
     with app.test_request_context(
-        "/v1/auth/reset-password", method="POST", data={"token": "abc", "new_password": "x"}
+        "/v1/auth/reset-password", method="POST", json={"token": "abc", "new_password": "x"}
     ):
         assert _chave_por_email_ou_token() == f"token:{_hash('abc')}"
-        assert request.form["new_password"] == "x"
+        assert request.get_json()["new_password"] == "x"
 
 
 @pytest.mark.integration

@@ -1,10 +1,12 @@
 """Authentication service - login and registration."""
 
+import html
 import logging
 import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from flask import current_app
 from flask_jwt_extended import create_access_token
 from werkzeug.security import check_password_hash, generate_password_hash
 
@@ -267,7 +269,7 @@ def register_user(data: dict[str, Any]) -> User:
         raise AppError(f"Erro ao registrar usuário: {str(e)}", 500)
 
 
-def request_password_reset(email_raw: str, base_url: str) -> None:
+def request_password_reset(email_raw: str) -> None:
     """
     Send password recovery email with link if the user exists.
     Always returns without error (does not reveal if email exists).
@@ -289,7 +291,8 @@ def request_password_reset(email_raw: str, base_url: str) -> None:
     db.session.add(reset_record)
     db.session.commit()
 
-    link = f"{base_url.rstrip('/')}/v1/auth/reset-password?token={token}"
+    frontend_url = current_app.config.get("FRONTEND_URL", "http://localhost:8081")
+    link = f"{frontend_url.rstrip('/')}/redefinir-senha?token={token}"
     subject = "Recuperação de senha - BusKá"
     body_plain = (
         f"Olá, {user.nome}.\n\n"
@@ -299,7 +302,7 @@ def request_password_reset(email_raw: str, base_url: str) -> None:
         "Equipe BusKá"
     )
     body_html = (
-        f"<p>Olá, {user.nome}.</p>"
+        f"<p>Olá, {html.escape(user.nome)}.</p>"
         "<p>Você solicitou a recuperação de senha no BusKá.</p>"
         f'<p><a href="{link}">Redefinir senha</a> (válido por 1 hora)</p>'
         "<p>Se não foi você, ignore este e-mail.</p>"

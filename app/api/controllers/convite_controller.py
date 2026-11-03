@@ -21,6 +21,7 @@ from app.services import convite_service
 
 api = Namespace("convites", description="Convites de cadastro de passageiros")
 
+# Validation schemas (Marshmallow)
 convites_create_schema = ConvitesCreateRequestSchema()
 convite_list_query_schema = ConviteListQuerySchema()
 convite_aceite_schema = ConviteAceiteRequestSchema()
