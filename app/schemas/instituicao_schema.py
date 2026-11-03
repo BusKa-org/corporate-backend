@@ -1,27 +1,21 @@
 from marshmallow import fields, validate
 
+from app.models.enum import TipoInstituicao
 from app.schemas.common import BaseSchema
-from app.schemas.endereco_schema import EnderecoResponseSchema
+from app.schemas.endereco_schema import EnderecoInputSchema, EnderecoResponseSchema
+from app.schemas.validators import validate_cnpj
 
 
 class InstituicaoCreateRequestSchema(BaseSchema):
-    nome = fields.String(required=True)
-    cnpj = fields.String(required=True)
-    tipo = fields.String(
+    nome = fields.String(required=True, validate=validate.Length(min=1, max=200))
+    # Loads as digits only, so "12.345.678/0001-99" and "12345678000199" match.
+    cnpj = fields.Function(deserialize=validate_cnpj, required=True)
+    tipo = fields.Enum(
+        TipoInstituicao,
         required=True,
-        validate=validate.OneOf(
-            [
-                "INSTITUTO_FEDERAL",
-                "UNIVERSIDADE_PUBLICA",
-                "UNIVERSIDADE_PRIVADA",
-                "ESCOLA_PUBLICA",
-                "ESCOLA_PRIVADA",
-                "ESCOLA_COMUNITARIA",
-            ]
-        ),
         metadata={"description": "Tipo da instituição conforme modelo"},
     )
-    endereco = fields.Nested(EnderecoResponseSchema, required=True)
+    endereco = fields.Nested(EnderecoInputSchema, required=True)
 
 
 class InstituicaoResponseSchema(BaseSchema):

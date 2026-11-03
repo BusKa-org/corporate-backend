@@ -25,7 +25,7 @@ class NotificacaoListResource(Resource):
                 "titulo": n.titulo,
                 "mensagem": n.mensagem,
                 "enviada": n.enviada,
-                "data_envio": str(n.data_envio),
+                "data_envio": n.data_envio.isoformat() if n.data_envio else None,
             }
             for n in notificacoes
         ], 200

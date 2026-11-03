@@ -149,9 +149,9 @@ class MotoristaResource(Resource):
 @api.route("/motoristas")
 class MotoristaCreateResource(Resource):
     @api.doc("list_motoristas", responses={200: "Success", 403: "Forbidden - not a gestor"})
-    @api.marshal_list_with(models["user_list_response"], code=200)
+    @api.marshal_with(models["user_list_response"], code=200)
     @jwt_required()
-    def get(self) -> tuple[list[dict[str, Any]], int]:
+    def get(self) -> tuple[dict[str, Any], int]:
         """Lists drivers in the Manager's organization"""
         current_user_id = get_jwt_identity()
         motoristas = user_service.get_motoristas_by_municipio(current_user_id)

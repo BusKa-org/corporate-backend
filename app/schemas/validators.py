@@ -65,6 +65,20 @@ def validate_cpf(value: str, field_name: str = "CPF") -> str:
     return raw_cpf
 
 
+def validate_cnpj(value: str, field_name: str = "CNPJ") -> str:
+    """Validate a Brazilian CNPJ length and return it as digits only."""
+    if not isinstance(value, str) or not value:
+        raise MarshmallowValidationError(f"{field_name} não pode ser vazio")
+
+    raw_cnpj = re.sub(r"[^\d]", "", value)
+
+    # shortcut: length only, no check digits; add them if invalid CNPJs show up
+    if len(raw_cnpj) != 14:
+        raise MarshmallowValidationError(f"{field_name} deve conter 14 dígitos")
+
+    return raw_cnpj
+
+
 def validate_optional_phone(value: str | None, field_name: str = "Telefone") -> str | None:
     """Validate an optional Brazilian phone number and return it as digits only."""
     if not value:

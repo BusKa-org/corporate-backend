@@ -247,7 +247,6 @@ Inclua o header: `Authorization: Bearer <seu_token>`
     api.add_namespace(alunos_ns, path="/v1/alunos")
     api.add_namespace(ocorrencias_ns, path="/v1/ocorrencias")
     api.add_namespace(dashboard_ns, path="/v1/dashboard")
-    api.add_namespace(consentimento_ns, path="/v1/consentimento")
     api.add_namespace(embarque_ns, path="/v1/embarque")
     api.add_namespace(telemetria_ns, path="/v1/telemetria")
 

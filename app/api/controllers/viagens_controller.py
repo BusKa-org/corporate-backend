@@ -260,7 +260,7 @@ class ViagemLocalizacaoResource(Resource):
 class ViagemLocalizacaoAluno(Resource):
     """Endpoint for students to broadcast their real-time location during an active trip."""
 
-    @api.doc("atualizar_localizacao_aluno", security="Bearer Auth")
+    @api.doc("atualizar_localizacao_aluno", security="Bearer")
     @api.expect(models["localizacao_request"])
     @jwt_required()
     @limite_tempo_real

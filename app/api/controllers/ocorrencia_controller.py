@@ -46,7 +46,7 @@ def _serialize(o) -> dict[str, Any]:
         "tipo": o.tipo.value,
         "descricao": o.descricao,
         "status": o.status.value,
-        "created_at": str(o.created_at),
+        "created_at": o.created_at.isoformat() if o.created_at else None,
     }
 
 
