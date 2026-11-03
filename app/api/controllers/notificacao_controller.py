@@ -2,18 +2,23 @@ from flask import request
 from flask_jwt_extended import get_jwt_identity, jwt_required
 from flask_restx import Namespace, Resource
 
-from app.api.contracts.notificacao_contract import get_notificacao_input_model
+from app.api.contracts.notificacao_contract import (
+    get_notificacao_input_model,
+    get_notificacao_response_model,
+)
 from app.services.notificacao_service import NotificacaoService
 
 api = Namespace("notificacoes", description="Avisos e comunicados")
 
 # API contracts (Swagger documentation)
 notificacao_input_model = get_notificacao_input_model(api)
+notificacao_response_model = get_notificacao_response_model(api)
 
 
 @api.route("/")
 class NotificacaoListResource(Resource):
     @api.doc("listar_minhas_notificacoes")
+    @api.response(200, "Success", [notificacao_response_model])
     @jwt_required()
     def get(self):
         """Lists the logged-in user's notifications"""

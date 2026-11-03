@@ -23,6 +23,8 @@ plugin contract itself, see [`plugins.md`](plugins.md).
 ```
 app/
 ├── __init__.py          # Flask app factory: extensions, product namespaces, plugin discovery
+├── extensions.py        # Scheduler and rate limiter (Flask-Limiter)
+├── scheduler_main.py    # Entry point of the separate scheduler process
 ├── core/
 │   ├── config.py         # Environment settings
 │   ├── exceptions.py     # Typed exception classes
@@ -30,15 +32,19 @@ app/
 │   └── transaction.py    # Transaction helper
 ├── models/
 │   ├── base.py            # SQLAlchemy db instance
-│   ├── enum.py            # Shared-core enums (DiaDaSemana, StatusViagem, UserRole, ...)
-│   ├── organizacao.py      # Organizacao (tenant) — shared core
-│   ├── user.py             # User, Motorista, Gestor — shared core
-│   ├── aluno.py            # Aluno — BusKá-only, subclasses User
-│   ├── geo.py               # Ponto, Endereco (PostGIS) — shared core
-│   ├── instituicao.py       # Instituicao, TipoInstituicao — BusKá-only
+│   ├── enum.py            # Enums (DiaDaSemana, StatusViagem, UserRole, TipoInstituicao, ...)
+│   ├── organizacao.py      # Organizacao (tenant)
+│   ├── user.py             # User, Motorista, Gestor, Aluno
+│   ├── geo.py               # Ponto, Endereco (PostGIS), Instituicao
 │   ├── rota.py               # Rota, RotaPonto, HorarioRota, DiasOperacao, RotaAluno
-│   ├── viagem.py              # Viagem, ViagemPonto, AlunosConfirmados, TelemetriaViagem
-│   ├── onibus.py               # Onibus (vehicle)
+│   ├── viagem.py              # Viagem, SolicitacaoViagem, ViagemPonto, AlunosConfirmados, TelemetriaViagem
+│   ├── onibus.py               # Onibus (vehicle), JanelaDisponibilidade
+│   ├── credencial_embarque.py  # CredencialEmbarque (QR boarding)
+│   ├── telemetria.py           # TelemetriaVeiculo (battery)
+│   ├── consentimento.py        # Consentimento (LGPD)
+│   ├── retencao_legal.py       # RetencaoLegal (data kept after account deletion)
+│   ├── convite.py              # Convite (passenger invitations)
+│   ├── ocorrencia.py           # Ocorrencia
 │   ├── notificacao.py          # Notificacao
 │   └── password_reset.py        # PasswordResetToken
 ├── schemas/
@@ -46,17 +52,22 @@ app/
 ├── services/
 │   └── *_service.py      # Business logic layer
 ├── api/
+│   ├── contracts/
+│   │   └── *_contract.py    # Flask-RESTX models for Swagger (documentation only)
 │   └── controllers/
 │       └── *_controller.py  # Flask-RESTX endpoints
+├── tasks/
+│   └── *_tasks.py        # Scheduler jobs
 └── utils/
 ```
 
-`aluno.py` and `instituicao.py` were split out of `user.py` and `geo.py`
-respectively: they are BusKá-specific (school transport), not something
-PaqTcPB or a future corporate client needs. See
+`Aluno` (in `user.py`) and `Instituicao` (in `geo.py`) are BusKá-specific
+(school transport), not something PaqTcPB or a future corporate client needs,
+but they still live in the shared files: the split into their own modules has
+not been done. See
 [`../ARQUITETURA_REPOSITORIOS.md`](../ARQUITETURA_REPOSITORIOS.md) section 2
-for the ownership rule this split follows, and section 5 for the test that
-decides what belongs in a shared core versus a product module.
+for the ownership rule, and section 5 for the test that decides what belongs
+in a shared core versus a product module.
 
 ## Architecture Pattern
 
@@ -90,9 +101,7 @@ User (usuario)
 └── Aluno (aluno)         — BusKá-only: student, subscribes to routes
 ```
 
-Joined-table inheritance on `usuario_id`. `Aluno` staying a `User` subclass
-is a file-organization split, not a data-model change — see the docstring on
-`app/models/aluno.py`.
+Joined-table inheritance on `usuario_id`.
 
 ## Extending this product
 
@@ -132,7 +141,7 @@ handlers:
 raise NotFoundError("Usuário não encontrado")
 
 # Global handler returns
-{"error": "Usuário não encontrado"}, 404
+{"error": {"code": "NOT_FOUND", "message": "Usuário não encontrado"}}, 404
 ```
 
 Available exceptions: `NotFoundError` (404), `ValidationError` (400),
@@ -147,10 +156,10 @@ trigger.
 ## Running Locally
 
 ```bash
-make run      # start the database + dev server
-make initdb   # create schema and apply migrations
-make seed     # populate seed data
-make bdcon    # connect to the database via psql
+make run        # start the database + dev server
+make db-create  # create schema and apply migrations
+make seed       # populate seed data
+make db-shell   # connect to the database via psql
 ```
 
 ## Environment Variables
@@ -162,5 +171,7 @@ make bdcon    # connect to the database via psql
 | `DB_HOST` | Database host | No (default: localhost) |
 | `DB_PORT` | Database port | No (default: 5432) |
 | `DB_NAME` | Database name | No (default: buska_db) |
-| `JWT_SECRET_KEY` | Secret for JWT signing | Yes |
+| `JWT_SECRET_KEY` | Secret for JWT signing | Yes, in production |
 | `JWT_EXPIRES_HOURS` | Token expiration | No (default: 2) |
+
+The full list, with defaults, is in `.env.example` and `app/core/config.py`.

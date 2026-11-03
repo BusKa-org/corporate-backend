@@ -32,7 +32,7 @@ _ocorrencia_output = api.model(
         "tipo": fields.String,
         "descricao": fields.String,
         "status": fields.String,
-        "created_at": fields.String,
+        "created_at": fields.String(description="ISO 8601 ou null"),
     },
 )
 
@@ -65,7 +65,7 @@ class OcorrenciaListResource(Resource):
 
     @api.doc("listar_ocorrencias")
     @api.param("status", "Filter by status (ABERTA, RESOLVIDA)", _in="query")
-    @api.response(200, "Success")
+    @api.response(200, "Success", [_ocorrencia_output])
     @jwt_required()
     def get(self) -> tuple[list[dict[str, Any]], int]:
         """(Manager) Lists the organization's incidents"""

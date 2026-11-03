@@ -102,9 +102,9 @@ Each produces working, testable software on its own. See
 |---|---|---|---|
 | 2. Trip lifecycle | `SOLICITADA→BUFFER_ABERTO→EM_ANDAMENTO→FINALIZADA` ("ociosa" = no active trip), vehicle availability windows, ride request, buffer timer, broadcast, cancellation | RF-05, 10, 11, 12, 19 | **Done** (PR #7, replaced dev's first version) |
 | 3. Capacity engine | Segment load vector, `PicoTrecho` validation, origin/destination declaration, ordered circuit stops | RF-04, 13, 14 | **Done** |
-| 4. Boarding | Dynamic QR credential, driver itinerary, validation with manual fallback, offline sync | RF-15, 16, 17, 18 | **Done** (photo descoped) |
+| 4. Boarding | Dynamic QR credential, driver itinerary, validation with manual fallback, offline sync | RF-15, 16, 17, 18 | **Done** (photo check added later, PR #29) |
 | 5. LGPD | Versioned consent capture, account deletion with history anonymisation | RF-09, 20 | **Done** |
-| 6. Institution signup | Signup bound to an institution with manager approval | RF-02 | **Done** |
+| 6. Institution signup | Signup bound to an institution with manager approval | RF-02 | **Done**, later replaced by invitations (`/v1/convites`, no self-signup) |
 | 7. Dashboard | IPK, denials per stop, per-segment timing, exportable period reports | RF-21 | **Done** |
 | 8. Telemetry | Ingestion endpoint, time-series storage | RF-22 | **Done** |
 | 9. Frontend | Student app, driver app (offline-first), manager dashboard | RF-07, 18, all UI | Separate repo |
@@ -272,8 +272,8 @@ rather than being undefined, so `default` was skipped.
 
 ## Repository state
 
-`main` carries the foundation as 13 commits, tagged `0.1.0`. Nothing is pushed —
-`origin` is still empty.
+The foundation was tagged `0.1.0`. The repo now lives at
+`BusKa-org/corporate-backend`, with `dev` as the integration branch.
 
 History is bisect-clean: every commit builds and passes its suite. The rename
 was originally split across two commits, the first of which did not run

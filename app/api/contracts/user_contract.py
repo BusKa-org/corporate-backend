@@ -16,7 +16,9 @@ def register_models(api):
             "telefone": fields.String(description="Telefone"),
             "cpf": fields.String(description="CPF"),
             "role": fields.String(description="Perfil (ALUNO, MOTORISTA, GESTOR)"),
-            "status": fields.String(description="Status (PENDING_SIGNUP, ACTIVE, DISABLED)"),
+            "status": fields.String(
+                description="Status (PENDING_SIGNUP, PENDING_APPROVAL, ACTIVE, DISABLED, DELETED)"
+            ),
             "signup_completed_at": fields.DateTime(description="Data de conclusão do cadastro"),
             "municipio_nome": fields.String(description="Nome do município (organização)"),
             "municipio_uf": fields.String(description="UF do município"),
@@ -32,6 +34,18 @@ def register_models(api):
             ),
             "descanso_ate": fields.DateTime(
                 description="Fim do descanso obrigatório (só quando EM_DESCANSO_OBRIGATORIO)"
+            ),
+        },
+    )
+
+    # Clone, not a new field on UserResponse: /users/motoristas marshals with
+    # UserResponse, so a new field there would also show up in that response.
+    user_me_response = api.clone(
+        "UserMeResponse",
+        user_response,
+        {
+            "consentimento_pendente": fields.Boolean(
+                description="true quando o usuário ainda não aceitou a versão vigente do termo"
             ),
         },
     )
@@ -53,7 +67,6 @@ def register_models(api):
             "cpf": fields.String(required=True, description="CPF"),
             "telefone": fields.String(description="Telefone"),
             "cnh": fields.String(required=True, description="CNH"),
-            "salario": fields.Float(description="Salário"),
             "horario_inicio": fields.String(description="Início do horário de trabalho (HH:MM)"),
             "horario_fim": fields.String(description="Fim do horário de trabalho (HH:MM)"),
             "dias_trabalho": fields.List(fields.String, description="Dias de trabalho (SEG..DOM)"),
@@ -69,6 +82,14 @@ def register_models(api):
             "horario_inicio": fields.String(description="Início do horário de trabalho (HH:MM)"),
             "horario_fim": fields.String(description="Fim do horário de trabalho (HH:MM)"),
             "dias_trabalho": fields.List(fields.String, description="Dias de trabalho (SEG..DOM)"),
+        },
+    )
+
+    excluir_conta_request = api.model(
+        "ExcluirContaRequest",
+        {
+            "email": fields.String(required=True, description="E-mail da conta"),
+            "senha": fields.String(required=True, description="Senha atual"),
         },
     )
 
@@ -116,6 +137,8 @@ def register_models(api):
     return {
         "fcm_token_request": fcm_token_request,
         "user_response": user_response,
+        "user_me_response": user_me_response,
+        "excluir_conta_request": excluir_conta_request,
         "user_list_response": user_list_response,
         "motorista_create_request": motorista_create_request,
         "motorista_update_request": motorista_update_request,

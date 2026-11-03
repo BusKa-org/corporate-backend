@@ -223,7 +223,7 @@ class ViagemAcaoResource(Resource):
 @api.route("/<string:id>/cancelar")
 class ViagemCancelarResource(Resource):
     @api.doc("cancelar_viagem")
-    @api.response(200, "Trip cancelled successfully")
+    @api.response(200, "Trip cancelled successfully", models["viagem_cancelar_response"])
     @jwt_required()
     def put(self, id: str) -> tuple[dict[str, Any], int]:
         """Cancels a scheduled trip and notifies students (Manager)"""
@@ -236,6 +236,7 @@ class ViagemCancelarResource(Resource):
 class ViagemLocalizacaoResource(Resource):
     @api.doc("atualizar_localizacao_onibus")
     @api.expect(models["localizacao_request"])
+    @api.response(200, "Success", models["localizacao_motorista_response"])
     @jwt_required()
     @limite_tempo_real
     def post(self, id):
@@ -247,6 +248,7 @@ class ViagemLocalizacaoResource(Resource):
         return result, 200
 
     @api.doc("obter_localizacao_onibus")
+    @api.response(200, "Success", models["localizacao_onibus_response"])
     @jwt_required()
     @limite_tempo_real
     def get(self, id):
@@ -262,6 +264,7 @@ class ViagemLocalizacaoAluno(Resource):
 
     @api.doc("atualizar_localizacao_aluno", security="Bearer")
     @api.expect(models["localizacao_request"])
+    @api.response(200, "Success", models["localizacao_aluno_response"])
     @jwt_required()
     @limite_tempo_real
     def post(self, viagem_id: str):
