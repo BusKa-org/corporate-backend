@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 
 def obter_progresso_viagem(gestor_id: str, viagem_id: str) -> list[dict]:
-    """Retorna os pontos pelos quais o motorista já passou, em ordem cronológica."""
+    """Return the stops the driver has already passed, in chronological order."""
 
     gestor = _get_gestor_or_403(gestor_id, "Apenas gestores podem auditar o trajeto de viagens")
 
@@ -60,7 +60,7 @@ def obter_progresso_viagem(gestor_id: str, viagem_id: str) -> list[dict]:
 
 
 def relatorio_periodo_gestor(gestor_id: str, data_inicio: str, data_fim: str) -> dict:
-    """Gera inteligência de negócio agregada para o painel web do Gestor."""
+    """Build aggregated business intelligence for the Manager's web dashboard."""
     gestor = _get_gestor_or_403(
         gestor_id, "Apenas gestores podem visualizar relatórios operacionais"
     )
@@ -133,7 +133,7 @@ def relatorio_periodo_gestor(gestor_id: str, data_inicio: str, data_fim: str) ->
 
 
 def obter_telemetria_viagem(gestor_id: str, viagem_id: str) -> list[dict]:
-    """Retorna o rastro de GPS (telemetria) de uma viagem em ordem cronológica."""
+    """Return a trip's GPS trail (telemetry) in chronological order."""
 
     gestor = _get_gestor_or_403(gestor_id, "Apenas gestores podem auditar a telemetria de viagens")
 
@@ -162,32 +162,27 @@ def obter_telemetria_viagem(gestor_id: str, viagem_id: str) -> list[dict]:
     ]
 
 
-# ==========================================
-# RF-21 — indicadores agregados e anonimizados do período
-# ==========================================
+# RF-21: aggregated, anonymized indicators for the period.
 #
-# Decisões que valem para todos os indicadores abaixo:
+# Decisions that apply to all indicators below:
 #
-# * **Escopo de rota.** Uma viagem chega ao circuito por dois caminhos: a
-#   rodada sob demanda aponta direto para `rota_id`, a viagem programada
-#   herdada chega por `horario_rota_id`. O painel cobre os dois — o gestor do
-#   A operação corrente é DRT, mas a mesma base ainda guarda viagens programadas e um
-#   relatório que as ignorasse subnotificaria o período sem avisar.
-# * **Período.** `Viagem.data` é um `DATE`; os dois limites são inclusivos e a
-#   comparação é de data civil, sem fuso envolvido.
-# * **Anonimização (RF-20).** Nada aqui toca `Aluno`/`User`: as linhas de
-#   `alunos_confirmados` de contas excluídas continuam contando, e nenhuma
-#   consulta junta de volta com identidade. As únicas entidades nomeadas nas
-#   respostas são pontos de embarque.
+# * Route scope. A trip reaches the circuit two ways: the on-demand round points
+#   straight to `rota_id`, the inherited scheduled trip via `horario_rota_id`.
+#   The dashboard covers both: the current operation is DRT, but the same base
+#   still holds scheduled trips, and a report ignoring them would under-report.
+# * Period. `Viagem.data` is a `DATE`; both bounds are inclusive, compared as
+#   calendar dates, with no time zone involved.
+# * Anonymization (RF-20). Nothing here touches `Aluno`/`User`: `alunos_confirmados`
+#   rows of deleted accounts still count, and no query joins back to identity.
+#   The only named entities in the responses are boarding stops.
 
-# Só viagens que de fato rodaram entram em ocupação e IPK. Uma viagem
-# CANCELADA não é operação: contá-la afundaria a ocupação média e sugeriria
-# uma frota superdimensionada.
+# Only trips that actually ran count for occupancy and IPK. A CANCELADA trip is
+# not operation: counting it would sink average occupancy and suggest an oversized fleet.
 _STATUS_OPERADAS = (StatusViagem.EM_ANDAMENTO, StatusViagem.FINALIZADA)
 
 
 def _viagens_periodo(organizacao_id: Any, inicio: date, fim: date, operadas: bool = False) -> Any:
-    """Subconsulta com as viagens da organização no período (limites inclusivos)."""
+    """Subquery with the organization's trips in the period (inclusive bounds)."""
     q: Select = (
         select(
             Viagem.id.label("id"),
@@ -210,7 +205,7 @@ def _viagens_periodo(organizacao_id: Any, inicio: date, fim: date, operadas: boo
 
 
 def _embarques_por_viagem() -> Any:
-    """Subconsulta: quantos alunos efetivamente embarcaram em cada viagem."""
+    """Subquery: how many students actually boarded each trip."""
     return (
         select(
             AlunosConfirmados.viagem_id.label("viagem_id"),
@@ -223,7 +218,7 @@ def _embarques_por_viagem() -> Any:
 
 
 def _num(valor: Any) -> float | None:
-    """Converte Numeric/Decimal do Postgres em float, preservando o nulo."""
+    """Convert Postgres Numeric/Decimal to float, keeping nulls."""
     if valor is None:
         return None
     return float(valor) if isinstance(valor, (Decimal, int, float)) else None
@@ -239,11 +234,11 @@ def _viagens_por_status(viagens: Any) -> list[dict]:
 
 
 def _negacoes_por_ponto(viagens: Any) -> list[dict]:
-    """Estrangulamentos: onde a demanda passou da capacidade (RF-14).
+    """Bottlenecks: where demand exceeded capacity (RF-14).
 
-    Negações sem ponto de embarque declarado ficam de fora — não há como
-    atribuí-las a um ponto, e por construção não deveriam existir, já que a
-    recusa só acontece depois da declaração de origem/destino (RF-13).
+    Denials without a declared boarding stop are left out: they cannot be assigned
+    to a stop, and by construction they should not exist, since denial only happens
+    after origin/destination is declared (RF-13).
     """
     total = func.count().label("negacoes")
     linhas = db.session.execute(
@@ -262,11 +257,10 @@ def _negacoes_por_ponto(viagens: Any) -> list[dict]:
 
 
 def _tempo_medio_por_trecho(viagens: Any) -> list[dict]:
-    """Tempo médio entre pontos consecutivos do circuito.
+    """Average time between consecutive circuit stops.
 
-    Os trechos saem do par (ordem, ordem+1) de `viagem_ponto`, que é a mesma
-    ordenação de `rota_ponto`. Só entram trechos em que os dois pontos têm
-    chegada real registrada.
+    Legs come from the (ordem, ordem+1) pair of `viagem_ponto`, which has the same
+    ordering as `rota_ponto`. Only legs where both stops have an actual arrival count.
     """
     origem = aliased(ViagemPonto)
     destino = aliased(ViagemPonto)
@@ -312,21 +306,19 @@ def _tempo_medio_por_trecho(viagens: Any) -> list[dict]:
 
 
 def _ocupacao_e_ipk(operadas: Any) -> tuple[dict, dict]:
-    """Ocupação média contra `Onibus.capacidade` e IPK (passageiros por km).
+    """Average occupancy against `Onibus.capacidade`, and IPK (passengers per km).
 
-    `km_real` é anulável e continua vazio na maioria das viagens. As viagens
-    sem quilometragem são **excluídas** do IPK — numerador e denominador — e
-    contadas à parte em `viagens_sem_km`. Tratar o nulo como zero inflaria o
-    denominador com zeros ou o numerador com passageiros sem km, e um IPK
-    subestimado leva a decisão de frota errada. Sem nenhuma viagem com km, o
-    IPK vem `null`, não `0`.
+    `km_real` is nullable and still empty on most trips. Trips without mileage are
+    excluded from IPK (numerator and denominator) and counted separately in
+    `viagens_sem_km`. Treating null as zero would skew IPK and lead to the wrong
+    fleet decision. With no trip having km, IPK is `null`, not `0`.
     """
     emb = _embarques_por_viagem()
     passageiros = func.coalesce(emb.c.passageiros, 0)
     capacidade = Onibus.capacidade
     com_km = and_(operadas.c.km_real.isnot(None), operadas.c.km_real > 0)
-    # Viagem sem veículo atribuído (ou com capacidade zerada) não entra na
-    # ocupação: não há denominador. O `case` a mantém no IPK mesmo assim.
+    # A trip with no vehicle assigned (or zero capacity) is left out of occupancy:
+    # there is no denominator. The `case` still keeps it in IPK.
     com_capacidade = and_(capacidade.isnot(None), capacidade > 0)
 
     linha = db.session.execute(
@@ -378,7 +370,7 @@ def _ocupacao_e_ipk(operadas: Any) -> tuple[dict, dict]:
 
 
 def _periodo_sugerido(organizacao_id: Any) -> dict | None:
-    """Intervalo em que a organização de fato tem viagens, para sugerir ao gestor."""
+    """Range in which the organization actually has trips, to suggest to the manager."""
     linha = db.session.execute(
         select(func.min(Viagem.data), func.max(Viagem.data))
         .select_from(Viagem)
@@ -392,10 +384,10 @@ def _periodo_sugerido(organizacao_id: Any) -> dict | None:
 
 
 def indicadores_periodo(gestor_id: str, inicio: date, fim: date) -> dict:
-    """RF-21 — painel agregado do gestor para o período selecionado.
+    """RF-21: the manager's aggregated dashboard for the selected period.
 
-    Tudo é calculado no banco; nenhuma linha de viagem ou de aluno sobe para o
-    Python. A resposta não contém nome, e-mail, CPF nem id de usuário.
+    Everything is computed in the database; no trip or student row reaches Python.
+    The response has no name, e-mail, CPF or user id.
     """
     gestor = _get_gestor_or_403(
         gestor_id, "Apenas gestores podem visualizar indicadores operacionais"
@@ -441,12 +433,11 @@ def indicadores_periodo(gestor_id: str, inicio: date, fim: date) -> dict:
 
 
 def exportar_indicadores_csv(gestor_id: str, inicio: date, fim: date) -> str:
-    """Exporta o relatório do período em CSV (RF-21, passo 4 do fluxo principal).
+    """Export the period report as CSV (RF-21, step 4 of the main flow).
 
-    CSV pela biblioteca padrão: o relatório é tabular, o destino é planilha, e
-    nem PDF nem XLSX acrescentam informação — só uma dependência. Cada
-    indicador vira um bloco com seu próprio cabeçalho, formato que Excel,
-    LibreOffice e pandas leem sem tratamento.
+    CSV via the standard library: the report is tabular, the target is a
+    spreadsheet, and PDF or XLSX would add only a dependency. Each indicator
+    becomes a block with its own header, which Excel, LibreOffice and pandas read as is.
     """
     dados = indicadores_periodo(gestor_id, inicio, fim)
 

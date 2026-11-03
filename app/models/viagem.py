@@ -21,7 +21,7 @@ class Viagem(db.Model):
     horario_rota_id = db.Column(
         UUID(as_uuid=True), db.ForeignKey("horario_rota.id", ondelete="SET NULL"), nullable=True
     )
-    # Viagem sob demanda não tem horario_rota, então a rota fica aqui também.
+    # On-demand trips have no horario_rota, so the route is stored here too.
     rota_id = db.Column(
         UUID(as_uuid=True), db.ForeignKey("rota.id", ondelete="SET NULL"), nullable=True, index=True
     )
@@ -53,7 +53,7 @@ class Viagem(db.Model):
     aviso_10min_enviado = db.Column(db.Boolean, default=False, nullable=False)
 
     buffer_fim = db.Column(db.DateTime(timezone=True), nullable=True)
-    # Gestor avisado de que o motorista não iniciou dentro do prazo (RF-11, fluxo secundário).
+    # Manager alerted that the driver did not start within the deadline (RF-11, secondary flow).
     aviso_prazo_enviado = db.Column(
         db.Boolean, default=False, server_default="false", nullable=False
     )
@@ -85,10 +85,11 @@ class Viagem(db.Model):
 
 
 class SolicitacaoViagem(db.Model):
-    """Interesse de um aluno numa viagem sob demanda (RF-10, RF-19).
+    """A student's interest in an on-demand trip (RF-10, RF-19).
 
-    Durante o buffer o aluno declara origem e destino (RF-13); a capacidade decide
-    se o trajeto cabe (RF-14). No fim do buffer quem declarou vira AlunosConfirmados.
+    During the buffer the student declares origin and destination (RF-13); the
+    capacity check decides whether the route fits (RF-14). When the buffer ends,
+    those who declared become AlunosConfirmados.
     """
 
     __tablename__ = "solicitacao_viagem"
@@ -132,9 +133,7 @@ class SolicitacaoViagem(db.Model):
 
 
 class ViagemPonto(db.Model):
-    """
-    Controla o progresso da viagem ponto a ponto.
-    """
+    """Tracks the trip's progress stop by stop."""
 
     __tablename__ = "viagem_ponto"
 
@@ -158,8 +157,9 @@ class ViagemPonto(db.Model):
 
 
 class AlunosConfirmados(db.Model):
-    """Passageiro de uma viagem: quem confirmou presença na viagem fixa, ou quem
-    teve o trajeto aceito na sob demanda (criado no fim do buffer)."""
+    """A trip passenger: who confirmed presence on a fixed trip, or whose route was
+    accepted on an on-demand one (created when the buffer ends).
+    """
 
     __tablename__ = "alunos_confirmados"
 

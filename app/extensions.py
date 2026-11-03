@@ -13,34 +13,33 @@ from flask_limiter.util import get_remote_address
 
 scheduler = APScheduler()
 
-# Tamanho máximo de um e-mail (RFC 5321); acima disso não vira chave no Redis.
+# Max e-mail length (RFC 5321); longer values never become a Redis key.
 _EMAIL_MAX = 254
 _TOKEN_MAX = 512
 
 
 def _chave_do_cliente() -> str:
-    """Conta por usuário quando há um JWT válido; senão, pelo IP de conexão.
+    """Counts per user when there is a valid JWT; otherwise by connection IP.
 
-    O IP só sobra para rotas sem JWT e sem e-mail/token (o limite padrão das
-    anônimas). Sem ProxyFix no app, o X-Forwarded-For não é confiável e fica de fora.
+    Without ProxyFix in the app, X-Forwarded-For is not trusted and is ignored.
     """
     try:
         verify_jwt_in_request(optional=True)
         identidade = get_jwt_identity()
     except Exception:
-        # Token expirado ou inválido: a rota responde 401 depois; aqui só conta pelo IP.
+        # Expired or invalid token: the route answers 401 later; here we just count by IP.
         identidade = None
 
     if identidade:
         return f"user:{identidade}"
-    # IP também é dado pessoal (LGPD): entra na chave só como HMAC.
+    # IP is personal data too (LGPD): it only enters the key as an HMAC.
     return f"ip:{_hash(get_remote_address())}"
 
 
 def _corpo() -> Mapping[str, Any]:
-    """Corpo JSON, sem quebrar e sem consumir o corpo da view.
+    """JSON body, without failing and without consuming the view's body.
 
-    get_json(silent=True) fica em cache no Flask, então a view lê o mesmo corpo depois.
+    Flask caches get_json(silent=True), so the view reads the same body later.
     """
     dados = request.get_json(silent=True)
     if isinstance(dados, dict):
@@ -59,7 +58,7 @@ def _email_do_corpo() -> str | None:
 
 
 def _token_da_requisicao() -> str | None:
-    """Token do convite (na URL) ou do reset de senha (corpo JSON)."""
+    """Invite token (in the URL) or password reset token (JSON body)."""
     token = None
     if request.view_args:
         token = request.view_args.get("token")
@@ -74,19 +73,19 @@ def _token_da_requisicao() -> str | None:
 
 
 def _hash(valor: str) -> str:
-    """Token, e-mail e IP não podem aparecer em claro nas chaves do Redis.
+    """Token, e-mail and IP must not appear in clear text in the Redis keys.
 
-    HMAC com segredo do app: um SHA-256 puro de e-mail se reverte por dicionário.
-    Reusa o JWT_SECRET_KEY (o único segredo do app); trocar o segredo só zera
-    os contadores, que duram um minuto.
+    HMAC with the app secret: a plain SHA-256 of an e-mail can be reversed by dictionary.
+    Reuses JWT_SECRET_KEY; rotating it only resets the counters, which last a minute.
     """
     chave = current_app.config["JWT_SECRET_KEY"].encode()
     return hmac.new(chave, valor.encode(), hashlib.sha256).hexdigest()[:32]
 
 
 def _chave_por_email() -> str:
-    """Conta por e-mail: Wi-Fi do campus e NAT da operadora põem muitos alunos no
-    mesmo IP. Sem e-mail válido, todos caem num balde só (vão falhar na validação)."""
+    """Counts per e-mail: campus Wi-Fi and carrier NAT put many students on the
+    same IP. Without a valid e-mail, all fall into one bucket (they fail validation).
+    """
     email = _email_do_corpo()
     if email is None:
         return "sem-email"
@@ -108,7 +107,7 @@ def _chave_por_email_ou_token() -> str:
 
 
 def _limite(chave: str):
-    """Lê o limite do config do app em cada requisição, e não na importação."""
+    """Reads the limit from the app config on each request, not at import time."""
 
     def ler() -> str:
         return current_app.config[chave]
@@ -116,7 +115,7 @@ def _limite(chave: str):
     return ler
 
 
-# per_method: GET e POST no mesmo caminho contam cada um no seu contador.
+# per_method: GET and POST on the same path each have their own counter.
 limiter = Limiter(
     key_func=_chave_do_cliente,
     default_limits=[_limite("RATELIMIT_DEFAULT")],
@@ -135,22 +134,22 @@ limite_sensivel_por_email = limiter.limit(
 limite_sensivel_por_email_ou_token = limiter.limit(
     _limite("RATELIMIT_SENSITIVE"), key_func=_chave_por_email_ou_token, per_method=True
 )
-# Rotas autenticadas: conta pela identidade do JWT.
+# Authenticated routes: count by JWT identity.
 limite_sensivel = limiter.limit(_limite("RATELIMIT_SENSITIVE"), per_method=True)
 limite_tempo_real = limiter.limit(_limite("RATELIMIT_REALTIME"), per_method=True)
 
 
-# Sondas de liveness/readiness batem a cada poucos segundos e não podem levar 429.
+# Liveness/readiness probes hit every few seconds and must never get a 429.
 _ROTAS_ISENTAS = {"health", "ready"}
 
 
 @limiter.request_filter
 def _fora_do_limite() -> bool:
-    # O Limiter é global: ler o flag do app deixa a suíte desligada mesmo que outro
-    # create_app() do mesmo processo tenha ligado o limitador.
+    # The Limiter is global: reading the app flag keeps the suite disabled even if
+    # another create_app() in the same process enabled the limiter.
     if not current_app.config.get("RATELIMIT_ENABLED", True):
         return True
-    # Preflight do CORS não conta: o navegador manda um antes de cada chamada.
+    # CORS preflight does not count: the browser sends one before every call.
     if request.method == "OPTIONS":
         return True
     return request.endpoint in _ROTAS_ISENTAS

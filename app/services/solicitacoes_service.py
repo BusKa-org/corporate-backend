@@ -1,4 +1,4 @@
-"""Solicitação de viagem sob demanda (RF-10) e cancelamento (RF-19)."""
+"""On-demand trip request (RF-10) and cancellation (RF-19)."""
 
 from sqlalchemy import select
 
@@ -42,8 +42,7 @@ def _mensagem_fora_da_janela(onibus_id, agora_local) -> str:
 
 
 def solicitar_viagem(user_id: str, rota_id: str) -> SolicitacaoViagem:
-    """
-    Registra o aluno como interessado na rodada da rota sob demanda.
+    """Register the student as interested in the on-demand route's round.
 
     Raises: ForbiddenError, NotFoundError, ValidationError, ConflictError
     """
@@ -65,11 +64,11 @@ def solicitar_viagem(user_id: str, rota_id: str) -> SolicitacaoViagem:
     veiculo_id = rota.veiculo_padrao_id
 
     with transactional():
-        # Serializa as primeiras solicitações concorrentes: só uma cria a viagem.
+        # Serializes the first concurrent requests: only one creates the trip.
         db.session.execute(
             select(Onibus.id).where(Onibus.id == veiculo_id).with_for_update(key_share=True)
         )
-        # E as do mesmo aluno em rotas de veículos diferentes: só uma fica ativa.
+        # And those of the same student on routes of different vehicles: only one stays active.
         db.session.execute(
             select(User.id).where(User.id == aluno.usuario_id).with_for_update(key_share=True)
         )
@@ -143,8 +142,7 @@ def solicitar_viagem(user_id: str, rota_id: str) -> SolicitacaoViagem:
 
 
 def cancelar_solicitacao(user_id: str, viagem_id: str) -> SolicitacaoViagem:
-    """
-    Cancela a solicitação ativa do aluno na viagem. Depois do início vira desistência.
+    """Cancel the student's active request on the trip. After the start it becomes a dropout.
 
     Raises: ForbiddenError, NotFoundError, ValidationError
     """
@@ -160,10 +158,10 @@ def cancelar_solicitacao(user_id: str, viagem_id: str) -> SolicitacaoViagem:
 
 
 def travar_viagem(viagem: Viagem) -> Viagem:
-    """Trava veículo e viagem e devolve a viagem relida.
+    """Lock vehicle and trip and return the re-read trip.
 
-    Mesma ordem de locks da solicitação (veículo, depois viagem): quem entra na
-    rodada, o início do percurso e o fechamento do buffer esperam o cancelamento.
+    Same lock order as the request (vehicle, then trip): joining the round, starting
+    the route and closing the buffer all wait for the cancellation.
     """
     if viagem.veiculo_id:
         db.session.execute(
@@ -179,7 +177,7 @@ def travar_viagem(viagem: Viagem) -> Viagem:
 
 
 def cancelar_na_viagem_travada(aluno: Aluno, viagem: Viagem) -> SolicitacaoViagem:
-    """Regras do cancelamento (RF-19), sem commit. A viagem precisa vir de `travar_viagem`."""
+    """Cancellation rules (RF-19), without commit. The trip must come from `travar_viagem`."""
     solicitacao = (
         db.session.query(SolicitacaoViagem)
         .filter_by(
@@ -201,9 +199,9 @@ def cancelar_na_viagem_travada(aluno: Aluno, viagem: Viagem) -> SolicitacaoViage
     solicitacao.cancelada_em = tempo.agora_utc()
 
     if viagem.status == StatusViagem.EM_ANDAMENTO:
-        # Lugar não é reaberto: o veículo já saiu contando com o passageiro.
+        # The seat is not reopened: the vehicle already left counting on the passenger.
         solicitacao.status = StatusSolicitacao.DESISTENCIA
-        # Sai da lista de embarque do motorista (RF-16/RF-17).
+        # Leaves the driver's boarding list (RF-16/RF-17).
         passageiro = db.session.get(AlunosConfirmados, (viagem.id, aluno.usuario_id))
         if passageiro:
             passageiro.confirmacao = False
@@ -220,7 +218,7 @@ def cancelar_na_viagem_travada(aluno: Aluno, viagem: Viagem) -> SolicitacaoViage
             f"Não é possível cancelar a solicitação de uma viagem com status {viagem.status.name}"
         )
 
-    # O vetor de carga só conta solicitações ATIVA: cancelar já devolve o trecho (RF-14).
+    # The load vector only counts ATIVA requests: cancelling already gives the leg back (RF-14).
     solicitacao.status = StatusSolicitacao.CANCELADA
     db.session.flush()
 
@@ -243,10 +241,9 @@ def cancelar_na_viagem_travada(aluno: Aluno, viagem: Viagem) -> SolicitacaoViage
 
 
 def declarar_trajeto(user_id: str, viagem_id: str, data: dict) -> SolicitacaoViagem:
-    """
-    RF-13: o aluno declara origem e destino durante o buffer; a capacidade decide (RF-14).
-    Quem recebeu o aviso do buffer sem ter solicitado entra na viagem aqui mesmo.
+    """RF-13: the student declares origin and destination in the buffer; capacity decides (RF-14).
 
+    Whoever got the buffer notice without having requested joins the trip right here.
     Raises: ForbiddenError, NotFoundError, ValidationError, ConflictError
     """
     aluno = _buscar_aluno(user_id)
@@ -272,10 +269,9 @@ def declarar_trajeto(user_id: str, viagem_id: str, data: dict) -> SolicitacaoVia
 
 
 def buscar_rodada_ativa(user_id: str, rota_id: str) -> dict:
-    """
-    Rodada ativa da rota sob demanda, para quem abre o app sem ter recebido o push
-    (RF-12, fluxo secundário). Sem rodada, devolve viagem None e as janelas de hoje.
+    """Active round of the on-demand route, for users who missed the push (RF-12, secondary flow).
 
+    Without a round, returns viagem None and today's windows.
     Raises: ForbiddenError, NotFoundError, ValidationError
     """
     user = db.session.get(User, user_id)
@@ -301,7 +297,7 @@ def buscar_rodada_ativa(user_id: str, rota_id: str) -> dict:
     resultado["janelas_hoje"] = janelas_service.listar_janelas_do_dia(rota.veiculo_padrao_id, dia)
 
     viagem = viagens_service.buscar_viagem_ativa_do_veiculo(rota.veiculo_padrao_id)
-    # Veículo ocupado com outra rota: para esta rota não há rodada.
+    # Vehicle busy with another route: this route has no round.
     if viagem is None or viagem.rota_id != rota.id:
         return resultado
 

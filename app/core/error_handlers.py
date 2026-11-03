@@ -15,7 +15,7 @@ from app.models.user import User
 
 logger = logging.getLogger(__name__)
 
-# Os mesmos status que o login recusa: um token não pode fazer o que um login novo não faria.
+# Same statuses the login rejects: a token cannot do what a fresh login would not.
 STATUS_SEM_ACESSO = (UserStatus.DELETED, UserStatus.DISABLED, UserStatus.PENDING_APPROVAL)
 
 
@@ -45,21 +45,22 @@ def _error_payload(*, code: str, message: str, details: Any | None = None) -> di
 
 
 def _handle_rate_limited(err: RateLimitExceeded) -> tuple[dict[str, Any], int]:
-    # O Flask-Limiter acrescenta o Retry-After depois, no after_request.
+    # Flask-Limiter adds Retry-After later, in after_request.
     payload = _error_payload(
         code="RATE_LIMITED",
         message="Muitas requisições. Tente novamente em instantes.",
         details={"limit": err.description},
     )
-    # O flask-restx usa err.data como corpo quando existe e põe um "message" no topo
-    # do dict devolvido; a cópia deixa err.data intacto e o 429 num formato só.
+    # flask-restx uses err.data as the body when present and puts a "message" at the
+    # top of the returned dict; the copy keeps err.data intact and the 429 in one shape.
     err.data = payload  # type: ignore[attr-defined, unused-ignore]
     return dict(payload), 429
 
 
 def register_api_error_handlers(api: Api) -> None:
-    """O flask_restx responde sozinho as HTTPException levantadas dentro dos
-    Resources, então o 429 dos limites por rota precisa ser registrado nele também."""
+    """flask_restx answers HTTPExceptions raised inside Resources itself, so the
+    per-route 429 must be registered on it too.
+    """
     api.errorhandler(RateLimitExceeded)(_handle_rate_limited)
 
 
@@ -197,7 +198,7 @@ def register_jwt_handlers(jwt: JWTManager) -> None:
 
     @jwt.token_in_blocklist_loader
     def conta_sem_acesso(jwt_header, jwt_payload) -> bool:
-        # Uma busca por chave primária por requisição autenticada.
+        # One primary-key lookup per authenticated request.
         user = db.session.get(User, jwt_payload["sub"])
         if user is None:
             return True

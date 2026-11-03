@@ -1,4 +1,4 @@
-"""GET /v1/rotas/<id>/viagem-ativa (RF-12, fluxo secundário)."""
+"""GET /v1/rotas/<id>/viagem-ativa (RF-12, secondary flow)."""
 
 from datetime import timedelta
 

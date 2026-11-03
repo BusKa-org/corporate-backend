@@ -1,4 +1,4 @@
-"""Ocorrência (issue reporting) service."""
+"""Incident (ocorrencia) reporting service."""
 
 import logging
 from typing import Any
@@ -18,10 +18,7 @@ class OcorrenciaService:
 
     @staticmethod
     def criar(user_id: str, dados: dict[str, Any]) -> Ocorrencia:
-        """
-        Aluno ou Motorista reporta um problema.
-        Automatically notifies the gestor of the organizacao.
-        """
+        """Student or Driver reports a problem; the organization's manager is notified."""
         user = db.session.get(User, user_id)
         if not user or user.role not in (UserRole.ALUNO, UserRole.MOTORISTA):
             raise ForbiddenError("Apenas alunos e motoristas podem reportar ocorrências.")
@@ -53,7 +50,6 @@ class OcorrenciaService:
             db.session.add(ocorrencia)
             db.session.flush()
 
-            # Notify the gestor of this organizacao
             OcorrenciaService._notificar_gestores(user, ocorrencia)
 
             db.session.commit()
@@ -96,7 +92,7 @@ class OcorrenciaService:
 
     @staticmethod
     def listar(gestor_id: str, status: str | None = None) -> list[Ocorrencia]:
-        """Gestor lista ocorrências da sua organização."""
+        """Manager lists their organization's incidents."""
         from app.services.user_service import _get_gestor_or_403
 
         gestor = _get_gestor_or_403(gestor_id, "Apenas gestores podem listar ocorrências.")
@@ -116,7 +112,7 @@ class OcorrenciaService:
 
     @staticmethod
     def resolver(gestor_id: str, ocorrencia_id: str) -> Ocorrencia:
-        """Gestor marca uma ocorrência como resolvida."""
+        """Manager marks an incident as resolved."""
         from app.services.user_service import _get_gestor_or_403
 
         _get_gestor_or_403(gestor_id, "Apenas gestores podem resolver ocorrências.")

@@ -1,4 +1,4 @@
-"""Solicitação de viagem sob demanda (RF-10) e cancelamento (RF-19), pela API HTTP."""
+"""On-demand trip request (RF-10) and cancellation (RF-19), via the HTTP API."""
 
 from datetime import UTC, datetime, time
 
@@ -43,11 +43,11 @@ def _notificacoes(usuario_id):
 
 
 def _local(hora, minuto=0):
-    # Segunda 2026-11-02 no fuso padrão (UTC-3).
+    # Monday 2026-11-02 in the default time zone (UTC-3).
     return datetime(2026, 11, 2, hora + 3, minuto, tzinfo=UTC)
 
 
-# RF-10: janela de disponibilidade
+# RF-10: availability window
 
 
 def test_antes_da_janela_rejeita_listando_horarios(_db, aluno, rota_sob_demanda, janela, relogio):
@@ -82,7 +82,7 @@ def test_depois_da_janela_rejeita(aluno, rota_sob_demanda, janela, relogio):
 
 
 def test_sem_janela_no_dia_rejeita(aluno, rota_sob_demanda, janela, relogio):
-    relogio.ajustar(datetime(2026, 11, 3, 13, 0, tzinfo=UTC))  # terça 10:00
+    relogio.ajustar(datetime(2026, 11, 3, 13, 0, tzinfo=UTC))  # Tuesday 10:00
 
     r = _solicitar(aluno, rota_sob_demanda)
 
@@ -106,7 +106,7 @@ def test_exatamente_no_fim_da_janela_rejeita(aluno, rota_sob_demanda, janela, re
     assert r.status_code == 400
 
 
-# RF-10: validações da rota e do usuário
+# RF-10: route and user validations
 
 
 def test_rota_fixa_rejeita(aluno, rota, janela, relogio):
@@ -164,7 +164,7 @@ def test_sem_consentimento_rejeita(_db, aluno, rota_sob_demanda, janela, relogio
     assert SolicitacaoViagem.query.count() == 0
 
 
-# RF-10: rodada
+# RF-10: round
 
 
 def test_primeira_solicitacao_cria_viagem_e_notifica_motorista(
@@ -262,7 +262,7 @@ def test_veiculo_atendendo_outra_rota_conflita(
     assert r.status_code == 409
 
 
-# RF-19: cancelamento
+# RF-19: cancellation
 
 
 def test_cancela_em_solicitada_com_outro_interessado_mantem_viagem(

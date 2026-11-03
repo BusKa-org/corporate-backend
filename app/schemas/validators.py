@@ -1,6 +1,5 @@
 """Input validation utilities for enhanced security."""
 
-# app/schemas/validators.py
 import re
 import uuid
 from typing import Any
@@ -11,16 +10,7 @@ from app.utils.security import SecurityConfig
 
 
 def validate_optional_string(value: str | None, field_name: str = "Texto") -> str | None:
-    """
-    Validate string.
-
-    Args:
-        value: String to validate
-        field_name: Name of the field for error messages
-
-    Returns:
-        string
-    """
+    """Validate an optional string."""
     if value is None:
         return None
     if not isinstance(value, str):
@@ -29,19 +19,7 @@ def validate_optional_string(value: str | None, field_name: str = "Texto") -> st
 
 
 def validate_uuid4(value: str, field_name: str = "ID") -> str:
-    """
-    Validate UUID4 format.
-
-    Args:
-        value: UUID4 string to validate
-        field_name: Name of the field for error messages
-
-    Returns:
-        string UUID4
-
-    Raises:
-        ValidationError: If the UUID4 format is invalid
-    """
+    """Validate UUID4 format. Raises ValidationError if invalid."""
     try:
         uuid.UUID(value, version=4)
         return value
@@ -50,12 +28,7 @@ def validate_uuid4(value: str, field_name: str = "ID") -> str:
 
 
 def validate_optional_cpf(value: str | None, field_name: str = "CPF") -> str | None:
-    """
-    Validate Brazilian CPF (Cadastro de Pessoas Físicas).
-
-    Args:
-        value: CPF string to validate (can include dots and dashes)
-    """
+    """Validate an optional Brazilian CPF (dots and dashes allowed)."""
     if not value:
         return None
 
@@ -63,22 +36,10 @@ def validate_optional_cpf(value: str | None, field_name: str = "CPF") -> str | N
 
 
 def validate_cpf(value: str, field_name: str = "CPF") -> str:
-    """
-    Validate Brazilian CPF (Cadastro de Pessoas Físicas).
-
-    Args:
-        value: CPF string to validate (can include dots and dashes)
-
-    Returns:
-        Cleaned CPF string (digits only)
-
-    Raises:
-        ValidationError: If CPF format or checksum is invalid
-    """
+    """Validate a Brazilian CPF and return it as digits only."""
     if not value:
         raise MarshmallowValidationError(f"{field_name} não pode ser vazio")
 
-    # Remove formatting characters
     raw_cpf = re.sub(r"[^\d]", "", value)
 
     if len(raw_cpf) != 11:
@@ -87,7 +48,6 @@ def validate_cpf(value: str, field_name: str = "CPF") -> str:
     if raw_cpf == raw_cpf[0] * 11:
         raise MarshmallowValidationError(f"{field_name} inválido (todos os dígitos são iguais)")
 
-    # Validate checksum digits
     def calculate_digit(cpf_partial: str, weight_start: int) -> int:
         """Calculate CPF checksum digit."""
         total = sum(int(cpf_partial[i]) * (weight_start - i) for i in range(len(cpf_partial)))
@@ -106,18 +66,7 @@ def validate_cpf(value: str, field_name: str = "CPF") -> str:
 
 
 def validate_optional_phone(value: str | None, field_name: str = "Telefone") -> str | None:
-    """
-    Validate Brazilian phone number.
-
-    Args:
-        value: Phone number string (can include formatting)
-
-    Returns:
-        Cleaned phone string (digits only)
-
-    Raises:
-        MarshmallowValidationError: If phone format is invalid
-    """
+    """Validate an optional Brazilian phone number and return it as digits only."""
     if not value:
         return None
 
@@ -125,18 +74,7 @@ def validate_optional_phone(value: str | None, field_name: str = "Telefone") -> 
 
 
 def validate_phone(value: str, field_name: str = "Telefone") -> str:
-    """
-    Validate Brazilian phone number.
-
-    Args:
-        value: Phone number string (can include formatting)
-
-    Returns:
-        Cleaned phone string (digits only)
-
-    Raises:
-        MarshmallowValidationError: If phone format is invalid
-    """
+    """Validate a Brazilian phone number and return it as digits only."""
     raw_phone = re.sub(r"[^\d]", "", value)
 
     if len(raw_phone) not in [10, 11]:
@@ -150,18 +88,7 @@ def validate_phone(value: str, field_name: str = "Telefone") -> str:
 
 
 def validate_cnh(value: str, field_name: str = "CNH") -> str:
-    """
-    Validate Brazilian CNH (driver's license) format.
-
-    Args:
-        value: CNH string to validate
-
-    Returns:
-        Cleaned CNH string (digits only)
-
-    Raises:
-        MarshmallowValidationError: If CNH format is invalid
-    """
+    """Validate a Brazilian CNH (driver's license) and return it as digits only."""
     raw_cnh = re.sub(r"[^\d]", "", value)
 
     if len(raw_cnh) != 11:
@@ -174,20 +101,7 @@ def validate_cnh(value: str, field_name: str = "CNH") -> str:
 
 
 def validate_pagination(page: Any, per_page: Any, max_per_page: int = 100) -> tuple[int, int]:
-    """
-    Validate pagination parameters.
-
-    Args:
-        page: Page number (default: 1)
-        per_page: Items per page
-        max_per_page: Maximum allowed items per page
-
-    Returns:
-        Tuple of (page, per_page) as integers
-
-    Raises:
-        MarshmallowValidationError: If pagination parameters are invalid
-    """
+    """Validate pagination parameters and return (page, per_page) as integers."""
     try:
         page_int = int(page) if page else 1
         per_page_int = int(per_page) if per_page else 20
@@ -209,19 +123,7 @@ def validate_pagination(page: Any, per_page: Any, max_per_page: int = 100) -> tu
 def validate_coordinates(
     latitude: float, longitude: float, field_name: str = "Coordenadas"
 ) -> tuple[float, float]:
-    """
-    Validate geographic coordinates.
-
-    Args:
-        latitude: Latitude value (default: 0)
-        longitude: Longitude value (default: 0)
-
-    Returns:
-        Tuple of (latitude, longitude)
-
-    Raises:
-        MarshmallowValidationError: If coordinates are out of valid range
-    """
+    """Validate geographic coordinates and return (latitude, longitude)."""
     try:
         lat = float(latitude)
         lon = float(longitude)
@@ -238,19 +140,7 @@ def validate_coordinates(
 
 
 def validate_password(value: str, field_name: str = "Senha") -> str:
-    """
-    Validate password meets minimum requirements.
-
-    Args:
-        value: Password to validate
-        field_name: Field name for error messages (default: "Senha")
-
-    Returns:
-        Stripped password string
-
-    Raises:
-        MarshmallowValidationError: If password doesn't meet requirements
-    """
+    """Validate that a password meets the minimum requirements and return it stripped."""
     value = value.strip()
 
     if len(value) < SecurityConfig.MIN_PASSWORD_LENGTH:
@@ -264,26 +154,12 @@ def validate_password(value: str, field_name: str = "Senha") -> str:
 def validate_sanitize_string(
     value: str, max_length: int | None = None, field_name: str = "Texto"
 ) -> str:
-    """
-    Sanitize string input by removing dangerous characters.
-
-    Args:
-        value: String to sanitize
-        max_length: Maximum allowed length (default: None)
-        field_name: Field name for error messages (default: "Texto")
-
-    Returns:
-        Sanitized string
-
-    Raises:
-        MarshmallowValidationError: If string exceeds max_length
-    """
+    """Remove control characters from a string and enforce max_length."""
     if not isinstance(value, str):
         raise MarshmallowValidationError(f"{field_name} deve ser uma string")
 
     sanitized = value.strip()
 
-    # Remove null bytes and other control characters
     sanitized = re.sub(r"[\x00-\x1f\x7f]", "", sanitized)
 
     if max_length and len(sanitized) > max_length:

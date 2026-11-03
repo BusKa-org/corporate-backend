@@ -25,8 +25,7 @@ logger = logging.getLogger(__name__)
 
 PARAMETROS_SOB_DEMANDA = ("buffer_minutos", "prazo_inicio_minutos")
 
-# RF-04, fluxo secundário 1: enquanto uma viagem que usa o ponto estiver de pé,
-# a alteração espera.
+# RF-04, secondary flow 1: while a trip using the stop is active, the change waits.
 STATUS_VIAGEM_ATIVA = (
     StatusViagem.SOLICITADA,
     StatusViagem.BUFFER_ABERTO,
@@ -35,8 +34,9 @@ STATUS_VIAGEM_ATIVA = (
 
 
 def _existe_viagem_ativa(rota_ids: list) -> bool:
-    """Viagem ativa em qualquer das rotas, tanto a rodada sob demanda
-    (`Viagem.rota_id`) quanto a viagem programada (via grade de horários)."""
+    """Active trip on any of the routes, both the on-demand round (`Viagem.rota_id`)
+    and the scheduled trip (via the timetable).
+    """
     if not rota_ids:
         return False
 
@@ -53,7 +53,7 @@ def _existe_viagem_ativa(rota_ids: list) -> bool:
 
 
 def garantir_rota_sem_viagem_ativa(rota_id: str) -> None:
-    """RF-04: bloqueia mexer na sequência de pontos de um circuito em uso."""
+    """RF-04: blocks changing the stop sequence of a circuit in use."""
     if _existe_viagem_ativa([rota_id]):
         raise ConflictError(
             "Há viagens ativas usando esta rota; aguarde a finalização para alterar os pontos"
@@ -61,7 +61,7 @@ def garantir_rota_sem_viagem_ativa(rota_id: str) -> None:
 
 
 def garantir_ponto_sem_viagem_ativa(ponto_id: str) -> None:
-    """RF-04: bloqueia editar ou remover um ponto usado por viagem ativa."""
+    """RF-04: blocks editing or removing a stop used by an active trip."""
     rota_ids = [
         row[0] for row in db.session.query(RotaPonto.rota_id).filter_by(ponto_id=ponto_id).all()
     ]
@@ -72,25 +72,14 @@ def garantir_ponto_sem_viagem_ativa(ponto_id: str) -> None:
 
 
 def _renumerar_pontos(rota_id: str) -> None:
-    """Mantém `RotaPonto.ordem` como 1..n sem buracos após adição/remoção."""
+    """Keeps `RotaPonto.ordem` as 1..n with no gaps after add/remove."""
     pontos = RotaPonto.query.filter_by(rota_id=rota_id).order_by(RotaPonto.ordem).all()
     for posicao, rp in enumerate(pontos, start=1):
         rp.ordem = posicao
 
 
 def list_all_rotas(user_id: str) -> list[Rota]:
-    """
-    List all routes for user's organizacao.
-
-    Args:
-        user_id: ID of the user requesting the list
-
-    Returns:
-        List of Rota objects
-
-    Raises:
-        NotFoundError: If user not found
-    """
+    """List all routes for the user's organizacao. Raises NotFoundError if the user is not found."""
     validate_uuid(user_id, "User ID")
     user = db.session.get(User, user_id)
     if not user:
@@ -253,12 +242,11 @@ def add_ponto(gestor_id: str, rota_id: str, data: dict[str, Any]) -> None:
         RotaPonto.query.filter_by(rota_id=rota.id).delete()
         db.session.flush()
 
-        # A ordem enviada é uma preferência: o que persiste é a sequência
-        # 1..n sem buracos que o RF-14 usa para numerar os segmentos.
+        # The order sent is a preference: what persists is the gap-free 1..n sequence
+        # RF-14 uses to number the segments.
         for ordem, p in enumerate(sorted(pontos, key=lambda x: x.get("ordem", 0)), start=1):
             ponto_id = p.get("ponto_id")
 
-            # Case 1: Link existing point by ID
             if ponto_id:
                 existing_ponto = db.session.get(Ponto, ponto_id)
                 if not existing_ponto:
@@ -271,7 +259,6 @@ def add_ponto(gestor_id: str, rota_id: str, data: dict[str, Any]) -> None:
                 novo_rota_ponto = RotaPonto(rota_id=rota.id, ponto_id=ponto_id, ordem=ordem)
                 db.session.add(novo_rota_ponto)
 
-            # Case 2: Create new point with coordinates
             else:
                 nome_p = p.get("nome")
                 lat = p.get("latitude")
@@ -292,7 +279,7 @@ def add_ponto(gestor_id: str, rota_id: str, data: dict[str, Any]) -> None:
                 novo_rota_ponto = RotaPonto(rota_id=rota.id, ponto_id=ponto.id, ordem=ordem)
                 db.session.add(novo_rota_ponto)
 
-        # Fecha os buracos deixados pelos pontos ignorados acima.
+        # Close the gaps left by the stops skipped above.
         _renumerar_pontos(rota.id)
 
         db.session.commit()
@@ -304,7 +291,7 @@ def add_ponto(gestor_id: str, rota_id: str, data: dict[str, Any]) -> None:
 
 
 def remover_ponto(gestor_id: str, rota_id: str, ponto_id: str) -> None:
-    """RF-04: remove um ponto do circuito e renumera a sequência restante.
+    """RF-04: removes a stop from the circuit and renumbers the remaining sequence.
 
     Raises: ForbiddenError, NotFoundError, ConflictError
     """
@@ -432,21 +419,9 @@ def get_by_id(user_id: str, rota_id: str) -> Rota:
 
 
 def update_rota(user_id: str, rota_id: str, data: dict[str, Any]) -> Rota:
-    """
-    Update route name, driver, or vehicle.
+    """Update route name, driver, or vehicle.
 
-    Args:
-        user_id: ID of the gestor updating the route
-        rota_id: ID of the route to update
-        data: Dictionary with fields to update
-
-    Returns:
-        Updated Rota object
-
-    Raises:
-        ForbiddenError: If user is not a gestor or resource ownership violation
-        NotFoundError: If user or route not found
-        AppError: If database operation fails
+    Raises: ForbiddenError, NotFoundError, AppError
     """
     validate_uuid(user_id, "User ID")
     validate_uuid(rota_id, "Rota ID")
@@ -460,7 +435,6 @@ def update_rota(user_id: str, rota_id: str, data: dict[str, Any]) -> Rota:
     if not rota:
         raise NotFoundError("Rota não encontrada")
 
-    # Resource ownership validation
     if rota.organizacao_id != user.organizacao_id:
         audit_logger.log_security_event(
             event_type="unauthorized_route_update",
@@ -524,17 +498,9 @@ def update_rota(user_id: str, rota_id: str, data: dict[str, Any]) -> Rota:
 
 
 def delete_rota(user_id: str, rota_id: str) -> None:
-    """
-    Delete a route.
+    """Delete a route.
 
-    Args:
-        user_id: ID of the gestor deleting the route
-        rota_id: ID of the route to delete
-
-    Raises:
-        ForbiddenError: If user is not a gestor or resource ownership violation
-        NotFoundError: If user or route not found
-        AppError: If database operation fails
+    Raises: ForbiddenError, NotFoundError, AppError
     """
     validate_uuid(user_id, "User ID")
     validate_uuid(rota_id, "Rota ID")
@@ -548,7 +514,6 @@ def delete_rota(user_id: str, rota_id: str) -> None:
     if not rota:
         raise NotFoundError("Rota não encontrada")
 
-    # Resource ownership validation
     if rota.organizacao_id != user.organizacao_id:
         audit_logger.log_security_event(
             event_type="unauthorized_route_deletion",
@@ -566,7 +531,6 @@ def delete_rota(user_id: str, rota_id: str) -> None:
         raise ForbiddenError("Acesso negado")
 
     try:
-        # Store route name for audit log
         rota_nome = rota.nome
 
         db.session.delete(rota)

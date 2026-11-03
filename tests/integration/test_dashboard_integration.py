@@ -1,4 +1,4 @@
-"""Testes de integração para o Dashboard do Gestor."""
+"""Integration tests for the Manager dashboard."""
 
 from datetime import date, datetime, time, timedelta
 
@@ -18,9 +18,8 @@ from app.services.dashboard_service import (
 
 
 def test_dashboard_relatorio_e_progresso_viagem(app, _db, organizacao):
-    """
-    Simula uma viagem completa com embarques e faltas para validar
-    os cálculos matemáticos e a ordenação de progresso do dashboard.
+    """Simulate a full trip with boardings and no-shows to check the dashboard
+    math and progress ordering.
     """
     with app.app_context():
         hoje = date.today()
@@ -146,7 +145,7 @@ def test_dashboard_relatorio_e_progresso_viagem(app, _db, organizacao):
 
 
 def test_dashboard_protecao_seguranca_gestor(app, _db, organizacao):
-    """Garante que apenas Gestores podem acessar os dados do dashboard."""
+    """Ensures only Managers can access the dashboard data."""
     with app.app_context():
         motorista = Motorista(
             organizacao_id=organizacao.id,
@@ -169,9 +168,8 @@ def test_dashboard_protecao_seguranca_gestor(app, _db, organizacao):
 
 
 def test_dashboard_trajeto_real_telemetria(app, _db, organizacao):
-    """
-    Simula o envio de coordenadas GPS pelo motorista e valida se o gestor
-    recebe o trajeto ordenado cronologicamente para plotar no mapa.
+    """Simulate GPS coordinates sent by the driver and check the manager gets the
+    route in chronological order to plot on the map.
     """
     with app.app_context():
         gestor = Gestor(

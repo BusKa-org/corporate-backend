@@ -1,4 +1,4 @@
-"""RF-22 — regras de negócio da telemetria da bateria."""
+"""RF-22: battery telemetry business rules."""
 
 from datetime import UTC, datetime, timedelta
 
@@ -16,7 +16,7 @@ def _amostra(minuto: int, **campos):
 
 
 def test_ingerir_deduplica_dentro_do_proprio_lote(app, _db, motorista, onibus):
-    """Um lote com o mesmo carimbo repetido grava uma linha só."""
+    """A batch with the same timestamp repeated saves a single row."""
     with app.app_context():
         resultado = telemetria_service.ingerir(
             str(motorista.user.id),

@@ -93,7 +93,6 @@ def update_ponto(user_id: str, ponto_id: str, data: dict[str, Any]) -> Ponto:
     garantir_ponto_sem_viagem_ativa(ponto_id)
 
     try:
-        # Update simple fields
         for field in ("apelido", "latitude", "longitude"):
             if field in data:
                 setattr(ponto, field, data[field])

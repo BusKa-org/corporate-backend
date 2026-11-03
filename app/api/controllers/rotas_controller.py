@@ -211,7 +211,7 @@ class RotaSolicitacoesResource(Resource):
     @jwt_required()
     @exige_consentimento
     def post(self, id: str) -> tuple[dict[str, Any], int]:
-        """(Aluno) Solicita o veículo da rota sob demanda dentro da janela de disponibilidade."""
+        """(Student) Requests the on-demand route's vehicle within the availability window."""
         user_id = get_jwt_identity()
         solicitacao = solicitacoes_service.solicitar_viagem(user_id, id)
         return solicitacao_response_schema.dump(solicitacao), 201
@@ -223,7 +223,7 @@ class RotaViagemAtivaResource(Resource):
     @api.response(200, "Success", solicitacao_models["rodada_ativa_response"])
     @jwt_required()
     def get(self, id: str) -> tuple[dict[str, Any], int]:
-        """Rodada ativa da rota sob demanda (viagem null quando ociosa) e as janelas de hoje."""
+        """Active round of the on-demand route (viagem null when idle) and today's windows."""
         user_id = get_jwt_identity()
         rodada = solicitacoes_service.buscar_rodada_ativa(user_id, id)
         return rodada_ativa_response_schema.dump(rodada), 200

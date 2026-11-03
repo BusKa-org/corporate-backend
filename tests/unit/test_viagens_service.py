@@ -13,13 +13,13 @@ def test_atualizar_localizacao_dispara_notificacao(app):
             patch("app.services.viagens_service.NotificacaoService") as mock_notif,
         ):
 
-            # 1. Arrange: Setup do Motorista e Viagem
+            # Arrange: driver and trip
             mock_user = MagicMock(role=UserRole.MOTORISTA)
             mock_viagem = MagicMock(status=StatusViagem.EM_ANDAMENTO)
             mock_viagem.id = "123e4567-e89b-12d3-a456-426614174000"
             mock_db.session.get.side_effect = [mock_user, mock_viagem]
 
-            # 2. Arrange: Setup do Ponto (Forçamos o aviso_aproximacao_enviado como FALSE)
+            # Arrange: stop (aviso_aproximacao_enviado forced to FALSE)
             mock_ponto_geo = MagicMock(latitude=-23.5, longitude=-46.6, apelido="Ponto Teste")
             mock_ponto_geo.id = "p-UUID"
 

@@ -1,4 +1,4 @@
-"""Testes para o cálculo de quilometragem e finalização de viagens."""
+"""Tests for the mileage calculation and trip completion."""
 
 from datetime import UTC, date, datetime, time, timedelta
 
@@ -10,9 +10,8 @@ from app.services.viagens_service import controlar_viagem
 
 
 def test_finalizar_viagem_calcula_km_real_pela_telemetria(app, _db, organizacao):
-    """
-    Simula uma viagem com pontos de telemetria reais e verifica se a
-    ação FINALIZAR calcula corretamente a distância total em km.
+    """Simulate a trip with real telemetry points and check that the FINALIZAR action
+    computes the total distance in km.
     """
     with app.app_context():
         motorista = Motorista(
@@ -79,12 +78,10 @@ def test_finalizar_viagem_calcula_km_real_pela_telemetria(app, _db, organizacao)
 
 
 def test_finalizar_viagem_sem_telemetria_retorna_zero(app, _db, organizacao):
-    """
-    Garante que se a viagem for finalizada, mas o telemóvel do motorista
-    não enviou nenhum ponto (ou enviou apenas 1), o sistema não quebra e o KM fica zero.
+    """If the trip is finished but the driver's phone sent no points (or only one),
+    the system does not break and the km stays zero.
     """
     with app.app_context():
-        # Setup simplificado
         motorista = Motorista(
             organizacao_id=organizacao.id,
             nome="Mot Sem GPS",
@@ -115,6 +112,5 @@ def test_finalizar_viagem_sem_telemetria_retorna_zero(app, _db, organizacao):
         viagem_atualizada = controlar_viagem(
             viagem_id=str(viagem.id), user_id=str(motorista.id), data={"acao": "FINALIZAR"}
         )
-        # Assert
         assert viagem_atualizada.status == StatusViagem.FINALIZADA
         assert viagem_atualizada.km_real == 0.0

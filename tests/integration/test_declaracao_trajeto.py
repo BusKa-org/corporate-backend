@@ -1,5 +1,6 @@
-"""RF-13/RF-14 pela API: declarar origem e destino durante o buffer, e o efeito do
-cancelamento (RF-19) e do fim do buffer (RF-15) sobre a capacidade."""
+"""RF-13/RF-14 through the API: declaring origin and destination during the buffer,
+and the effect of cancellation (RF-19) and buffer end (RF-15) on capacity.
+"""
 
 from datetime import timedelta
 
@@ -31,7 +32,7 @@ def _passageiro(client, app, _db, organizacao) -> Actor:
 
 @pytest.fixture()
 def buffer(_db, viagem_buffer_aberto, onibus, aluno):
-    """Buffer aberto com capacidade 1 e o `aluno` já solicitado."""
+    """Open buffer with capacity 1 and the `aluno` already requested."""
     onibus.capacidade = 1
     _db.session.add(
         SolicitacaoViagemFactory(viagem_id=viagem_buffer_aberto.id, aluno_id=aluno.user.id)
@@ -99,7 +100,7 @@ def test_origem_igual_ao_destino_e_recusada(buffer, aluno, pontos_circuito):
 def test_quem_so_recebeu_o_aviso_entra_ao_declarar(
     client, app, _db, viagem_buffer_aberto, janela, relogio, organizacao, pontos_circuito
 ):
-    """O broadcast vai para toda a organização: declarar já solicita a viagem."""
+    """The broadcast goes to the whole organization: declaring already requests the trip."""
     viagem_buffer_aberto.data = relogio.agora.date()
     viagem_buffer_aberto.buffer_fim = relogio.agora + timedelta(minutes=5)
     _db.session.commit()

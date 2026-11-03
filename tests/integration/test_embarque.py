@@ -1,9 +1,9 @@
-"""Embarque por credencial: RF-15, RF-16, RF-17 e RF-18.
+"""Credential boarding: RF-15, RF-16, RF-17 and RF-18.
 
-A rodada consolidada é o ponto de partida de quase tudo aqui, então ela é
-montada uma vez na fixture `rodada`: três alunos com trajetos que se cruzam
-(P1→P3 e P2→P4) e um disjunto (P3→P4), o suficiente para que as contagens de
-embarque e desembarque do roteiro sejam diferentes em cada ponto.
+The consolidated round is the starting point of almost everything here, so it is
+built once in the `rodada` fixture: three students with crossing routes
+(P1→P3 and P2→P4) and a disjoint one (P3→P4), enough for the itinerary's
+pickup and drop-off counts to differ at each stop.
 """
 
 import io
@@ -45,9 +45,9 @@ def aluno3(client, app, _db, organizacao):
 
 
 def _consolidar(_db, viagem, reservas):
-    """Abre o buffer, registra os trajetos e deixa a varredura consolidar."""
-    # A fábrica sorteia a capacidade do veículo; aqui ela é fixa, senão um
-    # sorteio baixo nega os trajetos que se cruzam.
+    """Open the buffer, record the routes and let the sweep consolidate."""
+    # The factory picks a random vehicle capacity; here it is fixed, otherwise a
+    # low pick denies the crossing routes.
     viagem.veiculo.capacidade = 17
     viagem.status = StatusViagem.BUFFER_ABERTO
     viagem.buffer_fim = datetime.now(UTC) + timedelta(minutes=5)
@@ -76,7 +76,7 @@ def rodada(_db, viagem_buffer_aberto, pontos_circuito, aluno, aluno2, aluno3):
             (aluno3.user.id, p3, p4),
         ],
     )
-    # Emitidas há uma hora, para os eventos offline dos testes caberem depois da emissão.
+    # Issued an hour ago, so the tests' offline events fit after issuing.
     for credencial in _db.session.query(CredencialEmbarque).filter_by(viagem_id=viagem.id):
         credencial.created_at = datetime.now(UTC) - timedelta(hours=1)
     _db.session.commit()
@@ -88,7 +88,7 @@ def _registro(_db, viagem, actor) -> AlunosConfirmados:
 
 
 def _credencial(_db, viagem, actor) -> CredencialEmbarque | None:
-    """A credencial ativa do aluno na viagem, ou None."""
+    """The student's active credential on the trip, or None."""
     _db.session.expire_all()
     return (
         _db.session.query(CredencialEmbarque)
@@ -98,7 +98,7 @@ def _credencial(_db, viagem, actor) -> CredencialEmbarque | None:
 
 
 def _codigo(credencial: CredencialEmbarque, momento: datetime | None = None) -> str:
-    """O código que o app do aluno mostraria no passo de `momento` (agora, por padrão)."""
+    """The code the student app would show at the `momento` step (now, by default)."""
     momento = momento or datetime.now(UTC)
     return credencial_embarque_service.gerar_codigo(
         bytes.fromhex(credencial.segredo), int(momento.timestamp()) // 30, 6
@@ -106,15 +106,13 @@ def _codigo(credencial: CredencialEmbarque, momento: datetime | None = None) -> 
 
 
 def _qr(_db, viagem, actor, momento: datetime | None = None) -> str:
-    """O conteúdo do QR do aluno: `<credencial_id>.<codigo>`."""
+    """The student's QR content: `<credencial_id>.<codigo>`."""
     credencial = _credencial(_db, viagem, actor)
     assert credencial is not None
     return f"{credencial.id}.{_codigo(credencial, momento)}"
 
 
-# ==========================================
-# RF-15 — emissão das credenciais
-# ==========================================
+# RF-15: credential issuing
 
 
 @pytest.mark.integration
@@ -168,7 +166,7 @@ def test_aluno_busca_a_propria_credencial(_db, rodada, aluno, pontos_circuito):
 def test_aluno_de_fora_da_rodada_nao_alcanca_credencial_alguma(
     _db, viagem_buffer_aberto, pontos_circuito, aluno, aluno2
 ):
-    """A busca é sempre pela identidade do JWT: não há como pedir a do outro."""
+    """The lookup is always by JWT identity: there is no way to ask for someone else's."""
     p1, _, p3, _ = pontos_circuito
     _consolidar(_db, viagem_buffer_aberto, [(aluno.user.id, p1, p3)])
     consentimento_service.aceitar(str(aluno2.user.id), consentimento_service.VERSAO_TERMO_VIGENTE)
@@ -177,9 +175,7 @@ def test_aluno_de_fora_da_rodada_nao_alcanca_credencial_alguma(
     assert r.status_code == 404
 
 
-# ==========================================
-# RF-16 — roteiro do motorista
-# ==========================================
+# RF-16: driver itinerary
 
 
 @pytest.mark.integration
@@ -190,7 +186,7 @@ def test_roteiro_conta_embarques_e_desembarques_por_ponto(rodada, motorista):
     corpo = r.get_json()
     contagens = [(p["embarcam"], p["desembarcam"]) for p in corpo["pontos"]]
 
-    # P1: sobe o aluno 1. P2: sobe o 2. P3: desce o 1 e sobe o 3. P4: descem 2.
+    # P1: student 1 gets on. P2: 2 gets on. P3: 1 gets off and 3 gets on. P4: 2 get off.
     assert contagens == [(1, 0), (1, 0), (1, 1), (0, 2)]
     assert corpo["pontos"][0]["instrucao"].startswith("Aproximando-se de ")
     assert corpo["pontos"][0]["instrucao"].endswith("embarcam 1, desembarcam 0")
@@ -247,9 +243,7 @@ def test_avancar_alem_do_ultimo_ponto_e_recusado(rodada, motorista, pontos_circu
     assert r.status_code == 400
 
 
-# ==========================================
-# RF-17 — validação do embarque
-# ==========================================
+# RF-17: boarding validation
 
 
 def _checkin(motorista, viagem, qr):
@@ -358,7 +352,7 @@ def test_recusa_abre_ocorrencia_e_deixa_a_credencial_para_o_manual(_db, rodada, 
     assert credencial.recusada_em is not None
     assert credencial.motivo_recusa == "FOTO_NAO_CONFERE"
 
-    # O mesmo QR, mesmo com código novo, não embarca mais ninguém (RF-17 fluxo secundário 1).
+    # The same QR, even with a new code, boards no one else (RF-17 secondary flow 1).
     for r in (
         _checkin(motorista, rodada, _qr(_db, rodada, aluno)),
         _confirmar(motorista, rodada, _qr(_db, rodada, aluno)),
@@ -368,7 +362,7 @@ def test_recusa_abre_ocorrencia_e_deixa_a_credencial_para_o_manual(_db, rodada, 
         assert _codigo_erro(r) == "CREDENCIAL_RECUSADA"
     assert _registro(_db, rodada, aluno).embarcou is False
 
-    # O passageiro real aparece e embarca pelo fallback manual.
+    # The real passenger shows up and boards via the manual fallback.
     manual = _manual(motorista, rodada, aluno)
     assert manual.status_code == 200, manual.get_data(as_text=True)
     assert _registro(_db, rodada, aluno).embarcou is True
@@ -483,7 +477,7 @@ def test_codigo_de_outra_credencial_e_recusado(_db, rodada, motorista, aluno, al
 
 @pytest.mark.integration
 def test_horario_do_cliente_e_ignorado_online(_db, rodada, motorista, aluno):
-    """Um `ocorrido_em` antigo não ressuscita a credencial vencida."""
+    """An old `ocorrido_em` does not revive an expired credential."""
     _com_foto(_db, aluno)
     credencial = _credencial(_db, rodada, aluno)
     credencial.expires_at = datetime.now(UTC) - timedelta(minutes=1)
@@ -500,7 +494,7 @@ def test_horario_do_cliente_e_ignorado_online(_db, rodada, motorista, aluno):
 
 @pytest.mark.integration
 def test_credencial_de_ponto_antigo_e_recusada(_db, rodada, motorista, aluno, pontos_circuito):
-    """O ponto do aluno mudou depois da emissão: o QR antigo não vale mais."""
+    """The student's stop changed after issuing: the old QR is no longer valid."""
     _com_foto(_db, aluno)
     qr_antigo = _qr(_db, rodada, aluno)
     registro = _registro(_db, rodada, aluno)
@@ -511,13 +505,13 @@ def test_credencial_de_ponto_antigo_e_recusada(_db, rodada, motorista, aluno, po
     assert r.status_code == 409
     assert _codigo_erro(r) == "CREDENCIAL_DESATUALIZADA"
 
-    # Reemitida para o ponto novo, a antiga fica revogada e a nova é a que vale.
+    # Reissued for the new stop, the old one is revoked and the new one counts.
     credencial_embarque_service.criar_credencial(rodada.id, aluno.user.id, pontos_circuito[1].id)
     _db.session.commit()
     r = _checkin(motorista, rodada, qr_antigo)
     assert r.status_code == 409
     assert _codigo_erro(r) == "CREDENCIAL_DESATUALIZADA"
-    # O veículo ainda está em P1; a nova credencial é de P2.
+    # The vehicle is still at P1; the new credential is for P2.
     r = _checkin(motorista, rodada, _qr(_db, rodada, aluno))
     assert _codigo_erro(r) == "CREDENCIAL_DE_OUTRO_PONTO"
 
@@ -532,7 +526,7 @@ def test_duas_confirmacoes_simultaneas_embarcam_uma_vez(app, _db, rodada, motori
     codigos: list[str] = []
 
     def confirmar():
-        # Cada thread tem seu cliente, contexto e sessão (conexão) próprios
+        # Each thread has its own client, context and session (connection)
         cliente = app.test_client()
         barreira.wait()
         r = cliente.post(
@@ -572,7 +566,7 @@ def test_credencial_de_outra_viagem(
     _db.session.add(outra)
     _db.session.commit()
 
-    # aluno2 já está na `rodada`; aqui ele ganha uma credencial da outra viagem.
+    # aluno2 is already in `rodada`; here they get a credential from the other trip.
     _consolidar(_db, outra, [(aluno2.user.id, p2, p4)])
     token_da_outra = _qr(_db, outra, aluno2)
 
@@ -587,7 +581,7 @@ def test_credencial_de_outra_viagem(
 
 @pytest.mark.integration
 def test_credencial_de_outro_ponto(_db, rodada, motorista, aluno2):
-    """O veículo está em P1 e a credencial do aluno 2 é de P2."""
+    """The vehicle is at P1 and student 2's credential is for P2."""
     token = _qr(_db, rodada, aluno2)
 
     for r in (
@@ -687,7 +681,7 @@ def test_roteiro_traz_a_foto_de_cada_passageiro(_db, rodada, motorista, aluno, a
 def test_motorista_ve_a_foto_do_passageiro_do_roteiro_e_o_de_outra_viagem_nao(
     client, app, _db, rodada, motorista, aluno, organizacao, tmp_path, monkeypatch
 ):
-    """RF-18: com a viagem em rota, o app baixa as fotos do roteiro antes de perder a rede."""
+    """RF-18: with the trip en route, the app downloads the itinerary photos before going offline"""
     monkeypatch.setitem(app.config, "FOTOS_ALUNO_DIR", str(tmp_path))
     enviada = aluno.client.put(
         "/v1/alunos/me/foto",
@@ -708,9 +702,7 @@ def test_motorista_ve_a_foto_do_passageiro_do_roteiro_e_o_de_outra_viagem_nao(
     assert client.get(foto_url, headers=headers).status_code == 403
 
 
-# ==========================================
-# RF-18 — sincronização em lote
-# ==========================================
+# RF-18: batch sync
 
 
 def _lote(_db, rodada, aluno, aluno2, pontos_circuito):
@@ -722,7 +714,7 @@ def _lote(_db, rodada, aluno, aluno2, pontos_circuito):
             "evento_id": "ev-embarque-1",
             "tipo": "EMBARQUE_CONFIRMADO",
             "ocorrido_em": base.isoformat(),
-            # O código do passo em que o motorista leu, não o de agora.
+            # The code for the step when the driver scanned, not the current one.
             "qr_token": _qr(_db, rodada, aluno, base),
             "ponto_id": str(p1.id),
         },
@@ -790,7 +782,7 @@ def test_lote_reenviado_nao_muda_nada(_db, rodada, motorista, aluno, aluno2, pon
     assert _registro(_db, rodada, aluno).embarcado_em == embarcado_em
     assert _db.session.get(ViagemPonto, (rodada.id, pontos_circuito[0].id)).chegada_real == chegada
     assert _db.session.query(TelemetriaViagem).filter_by(viagem_id=rodada.id).count() == 1
-    # Reenviado, o fallback manual não duplica a auditoria.
+    # Resent, the manual fallback does not duplicate the audit.
     assert _db.session.query(Ocorrencia).filter_by(viagem_id=rodada.id).count() == 1
 
 
@@ -844,13 +836,13 @@ def test_posicao_atrasada_nao_sobrescreve_a_mais_recente(_db, rodada, motorista)
     _db.session.expire_all()
     viagem = _db.session.get(Viagem, rodada.id)
     assert float(viagem.motorista_lat) == pytest.approx(-7.10)
-    # As duas posições ficam na trilha; só a corrente respeita o carimbo.
+    # Both positions stay in the trail; only the current one follows the timestamp.
     assert _db.session.query(TelemetriaViagem).filter_by(viagem_id=rodada.id).count() == 2
 
 
 @pytest.mark.integration
 def test_sincronizacao_aceita_viagem_ja_finalizada(_db, rodada, motorista, aluno, pontos_circuito):
-    """A fila pode chegar depois que o motorista encerrou o percurso."""
+    """The queue may arrive after the driver ended the route."""
     _com_foto(_db, aluno)
     rodada.status = StatusViagem.FINALIZADA
     _db.session.commit()
@@ -909,7 +901,7 @@ def test_recusa_offline_abre_ocorrencia_uma_vez_so(_db, rodada, motorista, aluno
 def test_recusa_e_embarque_manual_offline_no_mesmo_lote(
     _db, rodada, motorista, aluno, pontos_circuito
 ):
-    """Foto não confere, depois o passageiro real embarca pelo manual, tudo sem rede."""
+    """Photo does not match, then the real passenger boards manually, all offline."""
     _com_foto(_db, aluno)
     recusa = _recusa_offline(_db, rodada, aluno, pontos_circuito)
     manual = {
@@ -923,7 +915,7 @@ def test_recusa_e_embarque_manual_offline_no_mesmo_lote(
     corpo = _sincronizar(motorista, rodada, [manual, recusa]).get_json()
     reenvio = _sincronizar(motorista, rodada, [manual, recusa]).get_json()
 
-    # Fora de ordem na fila, a recusa é aplicada primeiro pelo carimbo; o manual passa.
+    # Out of order in the queue, the rejection applies first by timestamp; the manual passes.
     assert corpo["aplicados"] == 2, corpo
     assert reenvio["ja_aplicados"] == 2
     assert _registro(_db, rodada, aluno).embarcou is True
@@ -960,7 +952,7 @@ def test_recusa_offline_bloqueia_o_embarque_posterior_do_mesmo_qr(
     depois = datetime.now(UTC) - timedelta(minutes=4)
     embarque = _embarque_offline(_db, rodada, aluno, pontos_circuito[0], depois)
 
-    # A fila chega com o embarque na frente, mas a recusa aconteceu antes.
+    # The queue arrives with the boarding first, but the rejection happened before.
     corpo = _sincronizar(motorista, rodada, [embarque, recusa]).get_json()
 
     assert [x["evento_id"] for x in corpo["resultados"]] == ["ev-recusa-1", "ev-embarque"]
@@ -968,7 +960,7 @@ def test_recusa_offline_bloqueia_o_embarque_posterior_do_mesmo_qr(
     assert corpo["resultados"][1]["codigo"] == "CREDENCIAL_RECUSADA"
     assert _registro(_db, rodada, aluno).embarcou is False
 
-    # Num lote seguinte também, e online também.
+    # In a later batch too, and online too.
     outro = _embarque_offline(
         _db, rodada, aluno, pontos_circuito[0], datetime.now(UTC), evento_id="ev-embarque-2"
     )
@@ -1005,7 +997,7 @@ def test_evento_embarque_antigo_e_recusado_e_o_resto_do_lote_passa(
 def test_evento_offline_com_o_codigo_do_seu_horario_e_aceito(
     _db, rodada, motorista, aluno, pontos_circuito
 ):
-    """O código de 3 minutos atrás não passa online, mas vale para o evento daquele horário."""
+    """The code from 3 minutes ago fails online, but is valid for the event at that time."""
     _com_foto(_db, aluno)
     momento = datetime.now(UTC) - timedelta(minutes=3)
     evento = _embarque_offline(_db, rodada, aluno, pontos_circuito[0], momento)
@@ -1031,7 +1023,7 @@ def test_evento_offline_no_futuro_e_recusado(_db, rodada, motorista, aluno, pont
 
 @pytest.mark.integration
 def test_evento_offline_antes_da_emissao_e_recusado(_db, rodada, motorista, aluno, pontos_circuito):
-    """Carimbo recuado para caber na validade: a credencial nem existia ainda."""
+    """Timestamp moved back to fit the validity: the credential did not even exist yet."""
     _com_foto(_db, aluno)
     antes = datetime.now(UTC) - timedelta(hours=2)
     evento = _embarque_offline(_db, rodada, aluno, pontos_circuito[0], antes)
@@ -1053,7 +1045,7 @@ def test_aluno_sem_foto_nao_embarca_pelo_qr_offline(_db, rodada, motorista, alun
 
 
 def _outra_rodada(_db, rodada, motorista, onibus, circuito, pontos_circuito, actor):
-    """Uma segunda viagem consolidada, com credencial para `actor`."""
+    """A second consolidated trip, with a credential for `actor`."""
     outra = ViagemFactory(
         data=rodada.data,
         rota_id=circuito.id,
@@ -1074,7 +1066,7 @@ def _outra_rodada(_db, rodada, motorista, onibus, circuito, pontos_circuito, act
 def test_mesmo_evento_id_de_recusa_em_viagens_diferentes(
     _db, rodada, motorista, onibus, circuito, pontos_circuito, aluno, aluno3
 ):
-    """Cada app numera a própria fila; o "1" de uma viagem não é o "1" de outra."""
+    """Each app numbers its own queue; one trip's "1" is not another's "1"."""
     outra = _outra_rodada(_db, rodada, motorista, onibus, circuito, pontos_circuito, aluno3)
     na_rodada = [_recusa_offline(_db, rodada, aluno, pontos_circuito, evento_id="1")]
     na_outra = [_recusa_offline(_db, outra, aluno3, pontos_circuito, evento_id="1")]

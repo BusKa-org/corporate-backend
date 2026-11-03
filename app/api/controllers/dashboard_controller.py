@@ -38,7 +38,7 @@ class ProgressoViagemResource(Resource):
     @api.marshal_list_with(models["ponto_progresso"], code=HTTPStatus.OK)
     @jwt_required()
     def get(self, viagem_id):
-        """Obtém o progresso de uma viagem (os pontos fixos visitados)."""
+        """Gets a trip's progress (the fixed stops visited)."""
         current_user_id = get_jwt_identity()
         progresso = obter_progresso_viagem(gestor_id=current_user_id, viagem_id=viagem_id)
         return progresso, 200
@@ -51,7 +51,7 @@ class RelatorioPeriodoResource(Resource):
     @api.marshal_with(models["relatorio_estatisticas"], code=HTTPStatus.OK)
     @jwt_required()
     def get(self):
-        """Gera o relatório operacional de um período."""
+        """Generates the operational report for a period."""
         args = relatorio_parser.parse_args()
         current_user_id = get_jwt_identity()
 
@@ -69,7 +69,7 @@ class IndicadoresPeriodoResource(Resource):
     @api.response(200, "Success", models["indicadores_periodo"])
     @jwt_required()
     def get(self) -> tuple[dict[str, Any], int]:
-        """(Gestor) Indicadores agregados e anonimizados do período (RF-21)"""
+        """(Manager) Aggregated, anonymized indicators for the period (RF-21)"""
         filtros = periodo_query_schema.load(request.args.to_dict())
         dados = indicadores_periodo(
             gestor_id=get_jwt_identity(), inicio=filtros["inicio"], fim=filtros["fim"]
@@ -86,7 +86,7 @@ class IndicadoresExportacaoResource(Resource):
     @api.produces(["text/csv"])
     @jwt_required()
     def get(self) -> Response:
-        """(Gestor) Exporta o relatório do período em CSV"""
+        """(Manager) Exports the period report as CSV"""
         filtros = periodo_query_schema.load(request.args.to_dict())
         csv_texto = exportar_indicadores_csv(
             gestor_id=get_jwt_identity(), inicio=filtros["inicio"], fim=filtros["fim"]
@@ -105,7 +105,7 @@ class TrajetoRealViagemResource(Resource):
     @api.marshal_list_with(models["ponto_telemetria"], code=200)
     @jwt_required()
     def get(self, viagem_id):
-        """Obtém o rastro GPS completo (trajeto real) de uma viagem."""
+        """Gets the full GPS trail (actual route) of a trip."""
         current_user_id = get_jwt_identity()
         rastros = obter_telemetria_viagem(gestor_id=current_user_id, viagem_id=viagem_id)
         return rastros, 200

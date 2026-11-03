@@ -1,8 +1,8 @@
-"""RF-14 sob concorrência — o lock de linha da viagem é o que impede overbooking.
+"""RF-14 under concurrency: the trip row lock is what prevents overbooking.
 
-Um teste sequencial não prova nada sobre esse lock: ele passaria mesmo se o
-`with_for_update()` fosse removido. Aqui as duas declarações rodam de verdade
-em conexões separadas, disputando o último assento.
+A sequential test proves nothing about this lock: it would pass even if
+`with_for_update()` were removed. Here both declarations really run on
+separate connections, fighting for the last seat.
 """
 
 import threading
@@ -41,19 +41,19 @@ def dois_alunos(_db, organizacao, rodada_com_um_assento):
 def test_duas_declaracoes_simultaneas_nao_estouram_a_capacidade(
     app, _db, rodada_com_um_assento, pontos_circuito, dois_alunos
 ):
-    """Só um dos dois pode ficar com o único assento do trecho."""
+    """Only one of the two can get the leg's only seat."""
     p1, p2, _, _ = pontos_circuito
     viagem_id = rodada_com_um_assento.id
     ids = [a.usuario_id for a in dois_alunos]
 
-    # A barreira solta as duas threads no mesmo instante; sem isso uma
-    # terminaria antes da outra começar e o teste viraria um caso sequencial.
+    # The barrier releases both threads at the same instant; without it one would
+    # finish before the other started and the test would become a sequential case.
     largada = threading.Barrier(2, timeout=10)
     resultados: dict[int, str] = {}
 
     def declarar(indice: int) -> None:
-        # Cada thread abre o seu próprio contexto e, com ele, a sua própria
-        # sessão e conexão — é o que torna a disputa real.
+        # Each thread opens its own context and, with it, its own session and
+        # connection; that is what makes the race real.
         with app.app_context():
             try:
                 largada.wait()

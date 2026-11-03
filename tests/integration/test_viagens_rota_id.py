@@ -1,4 +1,4 @@
-"""Código existente com viagens sob demanda (rota_id, sem horario_rota)."""
+"""Existing code with on-demand trips (rota_id, no horario_rota)."""
 
 from datetime import UTC, date, datetime, timedelta
 

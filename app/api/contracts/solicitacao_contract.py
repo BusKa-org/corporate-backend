@@ -1,10 +1,10 @@
-"""Solicitação de viagem sob demanda endpoint documentation models."""
+"""On-demand trip request endpoint documentation models."""
 
 from flask_restx import fields
 
 
 def register_models(api):
-    """Register solicitação models with the API namespace."""
+    """Register solicitacao models with the API namespace."""
 
     solicitacao_viagem_resumo = api.model(
         "SolicitacaoViagemResumo",
