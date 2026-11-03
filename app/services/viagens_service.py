@@ -104,7 +104,7 @@ def get_proximas_viagens_aluno(user_id: str) -> list[Viagem]:
     if not aluno or aluno.role != UserRole.ALUNO:
         raise ForbiddenError("Apenas alunos podem ver sua agenda de viagens")
 
-    hoje = datetime.now(UTC).date()
+    hoje = tempo.agora_local().date()
 
     query = (
         juntar_rota(db.session.query(Viagem))
