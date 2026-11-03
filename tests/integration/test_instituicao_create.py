@@ -1,4 +1,11 @@
+from types import SimpleNamespace
+from unittest.mock import patch
+
 import pytest
+from sqlalchemy.exc import IntegrityError
+
+from app.models.base import db
+from app.models.geo import Instituicao
 
 
 def _payload(tipo: str) -> dict:
@@ -58,3 +65,39 @@ def test_create_instituicao_cnpj_de_outra_organizacao_retorna_409(gestor, other_
     assert segunda.status_code == 409
     # The raw database error must not reach the client.
     assert "IntegrityError" not in segunda.get_data(as_text=True)
+
+
+@pytest.mark.integration
+def test_create_instituicao_cnpj_formatado_vira_digitos(gestor):
+    payload = _payload("ESCOLA_PUBLICA")
+    payload["cnpj"] = "12.345.678/0001-99"
+    r = gestor.client.post("/v1/instituicoes/", json=payload)
+    assert r.status_code == 201
+    assert r.get_json()["cnpj"] == "12345678000199"
+
+    inst = db.session.get(Instituicao, r.get_json()["id"])
+    assert inst.codigo_externo == "12345678000199"
+
+    # The same CNPJ without formatting is still a duplicate.
+    segunda = gestor.client.post("/v1/instituicoes/", json=_payload("ESCOLA_PUBLICA"))
+    assert segunda.status_code == 409
+
+
+@pytest.mark.integration
+def test_create_instituicao_cnpj_curto_retorna_400(gestor):
+    payload = _payload("ESCOLA_PUBLICA")
+    payload["cnpj"] = "123"
+    r = gestor.client.post("/v1/instituicoes/", json=payload)
+    assert r.status_code == 400
+
+
+@pytest.mark.integration
+def test_create_instituicao_outra_integrity_error_retorna_500(gestor):
+    orig = SimpleNamespace(diag=SimpleNamespace(constraint_name="fk_outra_constraint"))
+    erro = IntegrityError("INSERT ...", {}, orig)  # type: ignore[arg-type]
+
+    with patch.object(db.session, "commit", side_effect=erro):
+        r = gestor.client.post("/v1/instituicoes/", json=_payload("ESCOLA_PUBLICA"))
+
+    assert r.status_code == 500
+    assert "fk_outra_constraint" not in r.get_data(as_text=True)

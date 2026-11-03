@@ -42,7 +42,10 @@ def create_instituicao(gestor_id: str, data: dict[str, Any]) -> Instituicao:
 
     organizacao = db.session.get(Organizacao, user.organizacao_id)
     if not organizacao or not organizacao.estado:
-        raise ValidationError("Organização sem UF cadastrada")
+        raise ValidationError(
+            "Organização sem UF cadastrada. "
+            "Peça ao administrador para cadastrar o estado da organização."
+        )
 
     existente = Instituicao.query.filter_by(organizacao_id=user.organizacao_id, cnpj=cnpj).first()
     if existente:
@@ -88,11 +91,14 @@ def create_instituicao(gestor_id: str, data: dict[str, Any]) -> Instituicao:
     except AppError:
         db.session.rollback()
         raise
-    except IntegrityError:
-        # (fonte, codigo_externo) is unique across all organizations, and
-        # codigo_externo is the CNPJ, so another organization may already use it.
+    except IntegrityError as e:
         db.session.rollback()
-        raise ConflictError("Já existe uma instituição com este CNPJ", field="cnpj")
+        # This constraint is global, so a CNPJ used by another organization lands here.
+        constraint = getattr(getattr(e.orig, "diag", None), "constraint_name", None)
+        if constraint == "uq_instituicao_fonte_codigo_externo":
+            raise ConflictError("Já existe uma instituição com este CNPJ", field="cnpj")
+        logger.exception("Error saving institution")
+        raise AppError("Erro ao salvar instituição", 500)
     except Exception:
         db.session.rollback()
         logger.exception("Error saving institution")

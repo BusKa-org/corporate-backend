@@ -3,6 +3,7 @@ from marshmallow import fields, validate
 from app.models.enum import TipoInstituicao
 from app.schemas.common import BaseSchema
 from app.schemas.endereco_schema import EnderecoInputSchema, EnderecoResponseSchema
+from app.schemas.validators import validate_cnpj
 
 # Built from the enum so the allowed list cannot drift from it.
 TIPOS_INSTITUICAO: list[str] = []
@@ -12,7 +13,8 @@ for tipo_instituicao in TipoInstituicao:
 
 class InstituicaoCreateRequestSchema(BaseSchema):
     nome = fields.String(required=True)
-    cnpj = fields.String(required=True)
+    # Loads as digits only, so "12.345.678/0001-99" and "12345678000199" match.
+    cnpj = fields.Function(deserialize=validate_cnpj, required=True)
     tipo = fields.String(
         required=True,
         validate=validate.OneOf(TIPOS_INSTITUICAO),
