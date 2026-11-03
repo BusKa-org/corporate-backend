@@ -3,8 +3,8 @@ tags:
   - Aluno
 summary: Listar Rotas em que o Aluno Está Inscrito
 description: |
-  Retorna todas as rotas nas quais o aluno autenticado está inscrito.  
-  Apenas usuários com o papel **aluno** podem acessar este endpoint.  
+  Retorna todas as rotas nas quais o aluno autenticado está inscrito.
+  Apenas usuários com o papel **aluno** podem acessar este endpoint.
   É necessário um **token JWT** válido no cabeçalho `Authorization`.
 operationId: listarRotasInscritasAluno
 security:

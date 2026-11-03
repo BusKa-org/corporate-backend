@@ -37,8 +37,7 @@ def upgrade() -> None:
     )
 
     # Create trigger function for updated_at
-    op.execute(
-        """
+    op.execute("""
         CREATE OR REPLACE FUNCTION trigger_set_timestamp()
         RETURNS TRIGGER AS $$
         BEGIN
@@ -46,8 +45,7 @@ def upgrade() -> None:
           RETURN NEW;
         END;
         $$ LANGUAGE plpgsql
-    """
-    )
+    """)
 
     # Create prefeitura table
     op.create_table(

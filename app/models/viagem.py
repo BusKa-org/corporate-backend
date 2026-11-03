@@ -5,16 +5,25 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
 from .base import db
-from .enum import StatusViagem
+from .enum import StatusSolicitacao, StatusViagem
 
 
 class Viagem(db.Model):
     __tablename__ = "viagem"
 
-    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = db.Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        server_default=db.text("uuid_generate_v4()"),
+    )
     data = db.Column(db.Date, nullable=False)
     horario_rota_id = db.Column(
         UUID(as_uuid=True), db.ForeignKey("horario_rota.id", ondelete="SET NULL"), nullable=True
+    )
+    # On-demand trips have no horario_rota, so the route is stored here too.
+    rota_id = db.Column(
+        UUID(as_uuid=True), db.ForeignKey("rota.id", ondelete="SET NULL"), nullable=True, index=True
     )
 
     motorista_id = db.Column(
@@ -26,7 +35,11 @@ class Viagem(db.Model):
         UUID(as_uuid=True), db.ForeignKey("onibus.id", ondelete="RESTRICT"), nullable=True
     )
 
-    status = db.Column(db.Enum(StatusViagem, name="status_viagem"), default=StatusViagem.AGENDADA)
+    status = db.Column(
+        db.Enum(StatusViagem, name="status_viagem"),
+        default=StatusViagem.AGENDADA,
+        server_default="AGENDADA",
+    )
 
     inicio_real = db.Column(db.DateTime(timezone=True), nullable=True)
     fim_real = db.Column(db.DateTime(timezone=True), nullable=True)
@@ -39,12 +52,19 @@ class Viagem(db.Model):
     aviso_24h_enviado = db.Column(db.Boolean, default=False, nullable=False)
     aviso_10min_enviado = db.Column(db.Boolean, default=False, nullable=False)
 
+    buffer_fim = db.Column(db.DateTime(timezone=True), nullable=True)
+    # Manager alerted that the driver did not start within the deadline (RF-11, secondary flow).
+    aviso_prazo_enviado = db.Column(
+        db.Boolean, default=False, server_default="false", nullable=False
+    )
+
     created_at = db.Column(db.DateTime(timezone=True), server_default=db.func.now())
     updated_at = db.Column(
         db.DateTime(timezone=True), server_default=db.func.now(), onupdate=db.func.now()
     )
 
     horario_rota = relationship("HorarioRota")
+    rota = relationship("Rota")
     motorista = relationship("Motorista")
     veiculo = relationship("Onibus")
 
@@ -59,11 +79,61 @@ class Viagem(db.Model):
         "AlunosConfirmados", back_populates="viagem", cascade="all, delete-orphan"
     )
 
+    solicitacoes = relationship(
+        "SolicitacaoViagem", back_populates="viagem", cascade="all, delete-orphan"
+    )
+
+
+class SolicitacaoViagem(db.Model):
+    """A student's interest in an on-demand trip (RF-10, RF-19).
+
+    During the buffer the student declares origin and destination (RF-13); the
+    capacity check decides whether the route fits (RF-14). When the buffer ends,
+    those who declared become AlunosConfirmados.
+    """
+
+    __tablename__ = "solicitacao_viagem"
+    __table_args__ = (
+        db.Index(
+            "uq_solicitacao_ativa",
+            "viagem_id",
+            "aluno_id",
+            unique=True,
+            postgresql_where=db.text("status = 'ATIVA'"),
+        ),
+    )
+
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    viagem_id = db.Column(
+        UUID(as_uuid=True), db.ForeignKey("viagem.id", ondelete="CASCADE"), nullable=False
+    )
+    aluno_id = db.Column(
+        UUID(as_uuid=True),
+        db.ForeignKey("aluno.usuario_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    status = db.Column(
+        db.Enum(StatusSolicitacao, name="status_solicitacao"),
+        nullable=False,
+        default=StatusSolicitacao.ATIVA,
+        server_default=StatusSolicitacao.ATIVA.value,
+    )
+    created_at = db.Column(db.DateTime(timezone=True), server_default=db.func.now())
+    cancelada_em = db.Column(db.DateTime(timezone=True), nullable=True)
+
+    ponto_embarque_id = db.Column(UUID(as_uuid=True), db.ForeignKey("ponto.id"), nullable=True)
+    ponto_destino_id = db.Column(UUID(as_uuid=True), db.ForeignKey("ponto.id"), nullable=True)
+    declarada_em = db.Column(db.DateTime(timezone=True), nullable=True)
+
+    viagem = relationship("Viagem", back_populates="solicitacoes")
+    aluno = relationship("Aluno")
+    ponto_embarque = relationship("Ponto", foreign_keys=[ponto_embarque_id])
+    ponto_destino = relationship("Ponto", foreign_keys=[ponto_destino_id])
+
 
 class ViagemPonto(db.Model):
-    """
-    Controla o progresso da viagem ponto a ponto.
-    """
+    """Tracks the trip's progress stop by stop."""
 
     __tablename__ = "viagem_ponto"
 
@@ -87,6 +157,10 @@ class ViagemPonto(db.Model):
 
 
 class AlunosConfirmados(db.Model):
+    """A trip passenger: who confirmed presence on a fixed trip, or whose route was
+    accepted on an on-demand one (created when the buffer ends).
+    """
+
     __tablename__ = "alunos_confirmados"
 
     viagem_id = db.Column(
@@ -117,6 +191,8 @@ class AlunosConfirmados(db.Model):
     aluno_lat = db.Column(db.Numeric(10, 8), nullable=True)
     aluno_lon = db.Column(db.Numeric(11, 8), nullable=True)
     aluno_gps_hora = db.Column(db.DateTime(timezone=True), nullable=True)
+
+    embarcado_em = db.Column(db.DateTime(timezone=True), nullable=True)
 
 
 class TelemetriaViagem(db.Model):

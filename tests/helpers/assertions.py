@@ -1,4 +1,3 @@
-# tests/helpers/assertions.py
 def assert_json_ok(resp):
     assert resp.is_json, f"Response is not JSON: {resp.get_data(as_text=True)}"
     return resp.get_json() or {}

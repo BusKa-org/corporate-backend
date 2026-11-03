@@ -4,12 +4,12 @@ Revision ID: e5f6a7b8c9d0
 Revises: b7c8d9e0f1a2
 Create Date: 2026-09-29 10:00:00.000000+00:00
 """
+
 from typing import Sequence, Union
 
 import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
-
 
 revision: str = "e5f6a7b8c9d0"
 down_revision: Union[str, None] = "b7c8d9e0f1a2"
@@ -26,7 +26,10 @@ def upgrade() -> None:
         sa.Column("versao", sa.String(length=20), nullable=False),
         sa.Column("acao", sa.String(length=10), nullable=False),
         sa.Column(
-            "created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
         ),
         sa.ForeignKeyConstraint(["usuario_id"], ["usuario.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
@@ -38,7 +41,10 @@ def upgrade() -> None:
         sa.Column("email", sa.String(length=120), nullable=False),
         sa.Column("cpf", sa.String(length=64), nullable=False),
         sa.Column(
-            "excluido_em", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False
+            "excluido_em",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
         ),
         sa.Column("reter_ate", sa.DateTime(timezone=True), nullable=False),
         sa.Column("anonimizado_em", sa.DateTime(timezone=True), nullable=True),

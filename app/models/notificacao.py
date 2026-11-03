@@ -9,7 +9,12 @@ class Notificacao(db.Model):
     __tablename__ = "notificacoes"
     __table_args__ = (db.Index("idx_notificacoes_usuario", "usuario_id"),)
 
-    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = db.Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        server_default=db.text("uuid_generate_v4()"),
+    )
 
     usuario_id = db.Column(
         UUID(as_uuid=True), db.ForeignKey("usuario.id", ondelete="CASCADE"), nullable=False

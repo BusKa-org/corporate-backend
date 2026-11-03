@@ -5,20 +5,24 @@ from flask import Flask
 from flask_apscheduler import APScheduler
 
 from app.tasks.convite_tasks import enviar_convites_pendentes
-from app.tasks.notificacao_tasks import verificar_viagens_10min, verificar_viagens_24h
+from app.tasks.notificacao_tasks import (
+    INTERVALO_JOB_10MIN_MINUTOS,
+    INTERVALO_JOB_24H_MINUTOS,
+    verificar_viagens_10min,
+    verificar_viagens_24h,
+)
 from app.tasks.retencao_tasks import job_anonimizar_retencoes
+from app.tasks.viagem_tasks import job_alertar_prazo_inicio, job_fechar_buffers_expirados
 
 
 def init_scheduler(app: Flask, scheduler: APScheduler):
-    """Inicializa e registra todas as tarefas de background."""
+    """Initialize and register all background tasks."""
 
-    # Opt-in explícito, e única condição. Só o processo dedicado
-    # (app.scheduler_main) liga essa variável; os workers do gunicorn e a suíte
-    # de testes ficam sem scheduler.
-    #
-    # A checagem anterior dependia de app.debug e de WERKZEUG_RUN_MAIN para
-    # driblar o reloader do servidor de desenvolvimento. Sob o gunicorn, onde
-    # WERKZEUG_RUN_MAIN nunca existe, ela desligava todos os jobs em produção.
+    # Explicit opt-in, and the only condition. Only the dedicated process
+    # (app.scheduler_main) sets this variable; gunicorn workers and the test suite
+    # run without a scheduler. The previous check relied on app.debug and
+    # WERKZEUG_RUN_MAIN, which never exists under gunicorn, so it disabled every
+    # job in production.
     if os.getenv("RUN_SCHEDULER", "").lower() not in ("1", "true"):
         app.logger.info("RUN_SCHEDULER desligado: nenhum job registrado neste processo.")
         return
@@ -28,7 +32,7 @@ def init_scheduler(app: Flask, scheduler: APScheduler):
         func=verificar_viagens_24h,
         args=[app],
         trigger="interval",
-        minutes=60,
+        minutes=INTERVALO_JOB_24H_MINUTOS,
         replace_existing=True,
     )
 
@@ -37,7 +41,7 @@ def init_scheduler(app: Flask, scheduler: APScheduler):
         func=verificar_viagens_10min,
         args=[app],
         trigger="interval",
-        minutes=10,
+        minutes=INTERVALO_JOB_10MIN_MINUTOS,
         replace_existing=True,
     )
 
@@ -60,6 +64,24 @@ def init_scheduler(app: Flask, scheduler: APScheduler):
         day=1,
         hour=3,
         minute=0,
+        replace_existing=True,
+    )
+
+    scheduler.add_job(
+        id="job_fechar_buffers",
+        func=job_fechar_buffers_expirados,
+        args=[app],
+        trigger="interval",
+        seconds=app.config["JOB_BUFFER_INTERVALO_SEGUNDOS"],
+        replace_existing=True,
+    )
+
+    scheduler.add_job(
+        id="job_prazo_inicio",
+        func=job_alertar_prazo_inicio,
+        args=[app],
+        trigger="interval",
+        seconds=app.config["JOB_PRAZO_INICIO_INTERVALO_SEGUNDOS"],
         replace_existing=True,
     )
 

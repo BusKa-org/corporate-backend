@@ -41,20 +41,16 @@ A `downgrade()` also has to survive the data its own `upgrade()` made possible �
 if the upgrade relaxes a constraint, the downgrade must backfill before
 restoring it.
 
-### Known defect: `downgrade base` does not work
+### `downgrade base` works (fixed defect)
 
-Inherited from the municipal product. `20260408_0237_dcc0d379db3c_expand_instituicao_for_external_catalog_.py`
-calls `op.create_foreign_key(None, ...)` and `op.drop_constraint(None, ...)` —
-an autogenerate artifact that never got a real constraint name. Downgrading
-through it raises:
-
-```
-CompileError: Can't emit DROP CONSTRAINT for constraint ForeignKeyConstraint(...); it has no name
-```
-
-Stepwise downgrades (`downgrade -1`) work fine; only a full unwind to `base`
-fails. To rebuild a dev database from scratch, drop and recreate the schema
-instead:
+Inherited from the municipal product:
+`20260408_0237_dcc0d379db3c_expand_instituicao_for_external_catalog_.py` used
+to call `op.create_foreign_key(None, ...)` and `op.drop_constraint(None, ...)`,
+so a full unwind to `base` failed with `CompileError: Can't emit DROP
+CONSTRAINT ... it has no name`. The constraint is now named
+(`instituicao_prefeitura_id_fkey`), and CI runs `downgrade base` on every
+build. To rebuild a dev database from scratch you can also drop and recreate
+the schema:
 
 ```bash
 PGPASSWORD=postgres psql -h localhost -p 5433 -U postgres -d buska_db <<'SQL'
@@ -71,9 +67,8 @@ Note the superuser: the app role cannot create extensions. Also note that
 `psql -c "a; b; c"` runs as one implicit transaction — if any statement fails,
 the whole thing silently rolls back. Use a heredoc, or separate `-c` flags.
 
-The same defect exists in `municipal-backend`, which *has* deployments, so fixing
-it there requires care. This repo has none, so it can be corrected whenever
-convenient.
+The same defect still exists in `municipal-backend`, which *has* deployments,
+so fixing it there requires care.
 
 ## Client deployments (mebuska-deploy)
 

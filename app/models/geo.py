@@ -10,7 +10,12 @@ from .enum import TipoInstituicao
 class Ponto(db.Model):
     __tablename__ = "ponto"
 
-    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = db.Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        server_default=db.text("uuid_generate_v4()"),
+    )
     organizacao_id = db.Column(
         UUID(as_uuid=True), db.ForeignKey("organizacao.id", ondelete="CASCADE"), nullable=False
     )
@@ -34,7 +39,6 @@ class Ponto(db.Model):
             "apelido": self.apelido,
             "latitude": float(self.latitude),
             "longitude": float(self.longitude),
-            # Optional: return extra data if available
             "endereco": self.endereco.logradouro if self.endereco else None,
             "instituicao": self.instituicao.nome if self.instituicao else None,
         }
@@ -43,7 +47,12 @@ class Ponto(db.Model):
 class Endereco(db.Model):
     __tablename__ = "endereco"
 
-    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = db.Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        server_default=db.text("uuid_generate_v4()"),
+    )
     logradouro = db.Column(db.String(150))
     numero = db.Column(db.String(20))
     bairro = db.Column(db.String(100))
@@ -62,7 +71,12 @@ class Endereco(db.Model):
 class Instituicao(db.Model):
     __tablename__ = "instituicao"
 
-    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = db.Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        server_default=db.text("uuid_generate_v4()"),
+    )
 
     fonte = db.Column(db.String(20), nullable=False)  # "EMEC" | "INEP" | "MANUAL"
     codigo_externo = db.Column(db.String(30), nullable=False)
@@ -74,6 +88,7 @@ class Instituicao(db.Model):
     tipo = db.Column(
         db.Enum(TipoInstituicao, name="tipo_instituicao"),
         nullable=False,
+        server_default="ESCOLA_PUBLICA",
     )
 
     uf = db.Column(db.String(2), nullable=False, index=True)

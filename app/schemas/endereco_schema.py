@@ -1,16 +1,21 @@
-from marshmallow import fields
+from marshmallow import fields, validate
 
 from app.schemas.common import BaseSchema
 
 
 class EnderecoInputSchema(BaseSchema):
-    logradouro = fields.String(required=True)
-    numero = fields.String(required=True)
-    bairro = fields.String(required=True)
-    cidade = fields.String(required=True)
-    cep = fields.String(required=True)
-    latitude = fields.Float(required=True)
-    longitude = fields.Float(required=True)
+    # Lengths match the Endereco columns in app/models/geo.py.
+    logradouro = fields.String(required=True, validate=validate.Length(max=150))
+    numero = fields.String(required=True, validate=validate.Length(max=20))
+    bairro = fields.String(required=True, validate=validate.Length(max=100))
+    cidade = fields.String(required=True, validate=validate.Length(max=100))
+    cep = fields.String(required=True, validate=validate.Length(max=10))
+    uf = fields.String(
+        load_default=None,
+        validate=validate.Regexp(r"^[A-Za-z]{2}$", error="UF deve ter 2 letras"),
+    )
+    latitude = fields.Float(required=True, validate=validate.Range(min=-90, max=90))
+    longitude = fields.Float(required=True, validate=validate.Range(min=-180, max=180))
 
 
 class EnderecoResponseSchema(BaseSchema):

@@ -114,6 +114,25 @@ This applies across services, schemas, tasks, and tests. A one-line
 comprehension that filters, transforms, and dedupes in the same expression is
 exactly the kind of clever code this rule targets.
 
+## Comments
+
+- Only comment what is strictly needed, and write it in English.
+- Comment the *why* the code cannot show: a rationale, a trade-off, a gotcha,
+  a lock order. Never restate what the code does.
+- Keep comments short: one or two lines. Long design reasoning belongs in the
+  module docstring or in `docs/`, not spread across inline comments.
+- Keep requirement references (`RF-xx`, LGPD, RFCs) when they explain a rule.
+- No commented-out code; git history keeps it.
+- Docstrings on Flask-RESTX `Resource` methods become Swagger summaries: keep
+  them to one line.
+- User-facing strings (error messages, e-mails, Swagger `description=` texts)
+  stay in pt-BR. The English rule covers comments and docstrings only.
+- A known limitation gets a marker in the form
+  `# shortcut: <the limit>, <when to upgrade>`.
+- Controllers keep the two standard section comments above their
+  declarations: `# API contracts (Swagger documentation)` and
+  `# Validation schemas (Marshmallow)`.
+
 ## Where to look for more
 
 | Question | Look here |
@@ -126,6 +145,9 @@ exactly the kind of clever code this rule targets.
 
 ## Before opening a PR
 
+- [ ] Branched from `origin/dev` and opened against `dev`, not `main`.
+      `dev` is the integration branch; `main` only receives `dev` at release
+      time.
 - [ ] `pre-commit run --all-files` passes
 - [ ] New or changed endpoints reflected in `docs/api_contracts.md` or
       `docs/endpoints/` if applicable

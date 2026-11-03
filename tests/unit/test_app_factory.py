@@ -72,3 +72,21 @@ def test_plugin_can_register_a_namespace():
     app = create_app(plugins=[plugin])
     client = app.test_client()
     assert client.get("/v1/plugintest/ping").status_code == 200
+
+
+def test_user_factory_cria_com_senha_conhecida():
+    """`create_with_password` was broken and nobody noticed.
+
+    It passed `_raw_password` straight to the model constructor, which raises
+    TypeError. With no caller, nothing failed. This test is the caller.
+    """
+    from werkzeug.security import check_password_hash
+
+    from tests.factories.user_factory import AlunoFactory, GestorFactory, MotoristaFactory
+
+    for fabrica in (AlunoFactory, GestorFactory, MotoristaFactory):
+        usuario = fabrica.create_with_password("SenhaConhecida123!")
+        assert check_password_hash(usuario.senha_hash, "SenhaConhecida123!"), fabrica.__name__
+
+    # The default still applies to those who do not ask for a specific password.
+    assert check_password_hash(AlunoFactory().senha_hash, "StrongPass123!")

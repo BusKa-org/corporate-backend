@@ -3,9 +3,9 @@ tags:
   - Gestor
 summary: Criar Nova Viagem
 description: |
-  Permite que um **gestor** crie uma nova viagem associada a uma rota e a um motorista.  
-  O município é automaticamente associado com base no gestor autenticado.  
-  Apenas usuários com o papel **gestor** podem acessar este endpoint.  
+  Permite que um **gestor** crie uma nova viagem associada a uma rota e a um motorista.
+  O município é automaticamente associado com base no gestor autenticado.
+  Apenas usuários com o papel **gestor** podem acessar este endpoint.
   Requer um **JWT token** válido no cabeçalho `Authorization`.
 operationId: criarViagem
 security:

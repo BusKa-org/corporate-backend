@@ -3,8 +3,8 @@ tags:
   - Aluno
 summary: Confirmar ou Cancelar Presença em Viagem
 description: |
-  Permite que o aluno confirme ou cancele sua presença em uma viagem específica.  
-  Apenas usuários com o papel **aluno** podem acessar este endpoint.  
+  Permite que o aluno confirme ou cancele sua presença em uma viagem específica.
+  Apenas usuários com o papel **aluno** podem acessar este endpoint.
   Requer um **JWT token** válido no cabeçalho `Authorization`.
 operationId: alterarPresencaViagemAluno
 security:

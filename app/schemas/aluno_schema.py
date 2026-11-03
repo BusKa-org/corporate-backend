@@ -1,5 +1,6 @@
-from marshmallow import fields
+from marshmallow import fields, validate
 
+from app.models.enum import NecessidadeAcessibilidade
 from app.schemas.common import BaseSchema
 from app.schemas.endereco_schema import EnderecoInputSchema
 from app.schemas.validators import (
@@ -9,14 +10,23 @@ from app.schemas.validators import (
 )
 
 
-class AlunoMeUpdateRequestSchema(BaseSchema):
+class AcessibilidadeInputSchema(BaseSchema):
+    """Accessibility fields, accepted at sign-up (invite) and when editing the profile."""
+
+    necessidades_acessibilidade = fields.List(
+        fields.String(validate=validate.OneOf([n.name for n in NecessidadeAcessibilidade]))
+    )
+    observacao_acessibilidade = fields.String(allow_none=True, validate=validate.Length(max=500))
+
+
+class AlunoMeUpdateRequestSchema(AcessibilidadeInputSchema):
     """Aluno updates their profile (partial update).
 
-    Campo omitido não é tocado. Não há `load_default`: um default None faria o serviço
-    gravar None em todo campo que o cliente não enviou.
+    An omitted field is left untouched. There is no `load_default`: a None default
+    would make the service write None to every field the client did not send.
     """
 
-    # Nome e endereço não podem ser apagados. Os demais aceitam null para limpar o campo.
+    # Name and address cannot be cleared. The others accept null to clear the field.
     nome = fields.String(validate=validate_optional_string)
     telefone = fields.String(allow_none=True, validate=validate_optional_phone)
 
@@ -40,13 +50,14 @@ class AlunoResponseSchema(BaseSchema):
     status = fields.String(attribute="status.value", dump_default=None)
     signup_completed_at = fields.DateTime(dump_default=None)
 
-    # Minor / guardian
     data_nascimento = fields.Date(dump_default=None)
     is_minor = fields.Boolean(dump_default=False)
-    email_responsavel = fields.Email(dump_default=None)
     nome_responsavel = fields.String(dump_default=None)
     cpf_responsavel = fields.String(dump_default=None)
-    guardian_consented_at = fields.DateTime(dump_default=None)
+
+    foto_url = fields.String(dump_default=None)
+    necessidades_acessibilidade = fields.List(fields.String())
+    observacao_acessibilidade = fields.String(dump_default=None)
 
 
 class AlunoListResponseSchema(BaseSchema):

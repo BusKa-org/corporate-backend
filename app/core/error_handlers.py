@@ -3,12 +3,20 @@ from typing import Any
 
 from flask import g, jsonify, request
 from flask_jwt_extended import JWTManager
+from flask_limiter.errors import RateLimitExceeded
+from flask_restx import Api
 from marshmallow.exceptions import ValidationError as MarshmallowValidationError
 from werkzeug.exceptions import HTTPException
 
 from app.core.exceptions import AppError, ValidationError
+from app.models.base import db
+from app.models.enum import UserStatus
+from app.models.user import User
 
 logger = logging.getLogger(__name__)
+
+# Same statuses the login rejects: a token cannot do what a fresh login would not.
+STATUS_SEM_ACESSO = (UserStatus.DELETED, UserStatus.DISABLED, UserStatus.PENDING_APPROVAL)
 
 
 def _request_id() -> str | None:
@@ -34,6 +42,26 @@ def _error_payload(*, code: str, message: str, details: Any | None = None) -> di
     if details is not None:
         payload["error"]["details"] = details
     return payload
+
+
+def _handle_rate_limited(err: RateLimitExceeded) -> tuple[dict[str, Any], int]:
+    # Flask-Limiter adds Retry-After later, in after_request.
+    payload = _error_payload(
+        code="RATE_LIMITED",
+        message="Muitas requisições. Tente novamente em instantes.",
+        details={"limit": err.description},
+    )
+    # flask-restx uses err.data as the body when present and puts a "message" at the
+    # top of the returned dict; the copy keeps err.data intact and the 429 in one shape.
+    err.data = payload  # type: ignore[attr-defined, unused-ignore]
+    return dict(payload), 429
+
+
+def register_api_error_handlers(api: Api) -> None:
+    """flask_restx answers HTTPExceptions raised inside Resources itself, so the
+    per-route 429 must be registered on it too.
+    """
+    api.errorhandler(RateLimitExceeded)(_handle_rate_limited)
 
 
 def register_error_handlers(app) -> None:
@@ -100,6 +128,8 @@ def register_error_handlers(app) -> None:
             400,
         )
 
+    app.errorhandler(RateLimitExceeded)(_handle_rate_limited)
+
     @app.errorhandler(HTTPException)
     def handle_http_exception(err: HTTPException):
         code = "HTTP_ERROR"
@@ -165,6 +195,14 @@ def register_jwt_handlers(jwt: JWTManager) -> None:
     @jwt.expired_token_loader
     def expired_token(jwt_header, jwt_payload):
         return jsonify(_error_payload(code="TOKEN_EXPIRED", message="Token expirado")), 401
+
+    @jwt.token_in_blocklist_loader
+    def conta_sem_acesso(jwt_header, jwt_payload) -> bool:
+        # One primary-key lookup per authenticated request.
+        user = db.session.get(User, jwt_payload["sub"])
+        if user is None:
+            return True
+        return user.status in STATUS_SEM_ACESSO
 
     @jwt.revoked_token_loader
     def revoked_token(jwt_header, jwt_payload):

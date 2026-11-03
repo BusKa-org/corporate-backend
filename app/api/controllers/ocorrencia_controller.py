@@ -8,6 +8,7 @@ from app.services.ocorrencia_service import OcorrenciaService
 
 api = Namespace("ocorrencias", description="Registro de ocorrências / problemas")
 
+# API contracts (Swagger documentation)
 _ocorrencia_input = api.model(
     "OcorrenciaInput",
     {
@@ -31,7 +32,7 @@ _ocorrencia_output = api.model(
         "tipo": fields.String,
         "descricao": fields.String,
         "status": fields.String,
-        "created_at": fields.String,
+        "created_at": fields.String(description="ISO 8601 ou null"),
     },
 )
 
@@ -45,7 +46,7 @@ def _serialize(o) -> dict[str, Any]:
         "tipo": o.tipo.value,
         "descricao": o.descricao,
         "status": o.status.value,
-        "created_at": str(o.created_at),
+        "created_at": o.created_at.isoformat() if o.created_at else None,
     }
 
 
@@ -56,7 +57,7 @@ class OcorrenciaListResource(Resource):
     @api.response(201, "Ocorrência registrada", _ocorrencia_output)
     @jwt_required()
     def post(self) -> tuple[dict[str, Any], int]:
-        """(Aluno / Motorista) Reporta um problema"""
+        """(Student / Driver) Reports a problem"""
         user_id = get_jwt_identity()
         data = request.get_json(silent=True) or {}
         ocorrencia = OcorrenciaService.criar(user_id, data)
@@ -64,10 +65,10 @@ class OcorrenciaListResource(Resource):
 
     @api.doc("listar_ocorrencias")
     @api.param("status", "Filter by status (ABERTA, RESOLVIDA)", _in="query")
-    @api.response(200, "Success")
+    @api.response(200, "Success", [_ocorrencia_output])
     @jwt_required()
     def get(self) -> tuple[list[dict[str, Any]], int]:
-        """(Gestor) Lista ocorrências da organização"""
+        """(Manager) Lists the organization's incidents"""
         gestor_id = get_jwt_identity()
         status_filter = request.args.get("status")
         ocorrencias = OcorrenciaService.listar(gestor_id, status=status_filter)
@@ -80,7 +81,7 @@ class OcorrenciaResolverResource(Resource):
     @api.response(200, "Ocorrência resolvida", _ocorrencia_output)
     @jwt_required()
     def patch(self, ocorrencia_id: str) -> tuple[dict[str, Any], int]:
-        """(Gestor) Marca uma ocorrência como resolvida"""
+        """(Manager) Marks an incident as resolved"""
         gestor_id = get_jwt_identity()
         ocorrencia = OcorrenciaService.resolver(gestor_id, ocorrencia_id)
         return _serialize(ocorrencia), 200

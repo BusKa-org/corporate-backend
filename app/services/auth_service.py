@@ -1,10 +1,12 @@
 """Authentication service - login and registration."""
 
+import html
 import logging
 import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from flask import current_app
 from flask_jwt_extended import create_access_token
 from werkzeug.security import check_password_hash, generate_password_hash
 
@@ -96,7 +98,7 @@ def login_user(data: dict[str, Any]) -> dict[str, Any]:
             success=False,
             details={"reason": "account_disabled"},
         )
-        raise ForbiddenError("Sua conta está desativada. Entre em contato com o gestor municipal.")
+        raise ForbiddenError("Sua conta está desativada. Entre em contato com o gestor.")
 
     if user.status == UserStatus.PENDING_APPROVAL:
         audit_logger.log_auth(
@@ -107,26 +109,6 @@ def login_user(data: dict[str, Any]) -> dict[str, Any]:
             details={"reason": "pending_approval"},
         )
         raise ForbiddenError("Seu cadastro aguarda aprovação do gestor.")
-
-    # Block minors whose guardian has not yet consented
-    if (
-        user.role == UserRole.ALUNO
-        and hasattr(user, "status")
-        and user.status == UserStatus.PENDING_SIGNUP
-    ):
-        aluno = Aluno.query.get(str(user.id))
-        if aluno and aluno.email_responsavel and not aluno.guardian_consented_at:
-            audit_logger.log_auth(
-                action="login_attempt",
-                user_id=str(user.id),
-                email=email,
-                success=False,
-                details={"reason": "pending_guardian_consent"},
-            )
-            raise ForbiddenError(
-                f"Seu cadastro aguarda a confirmação do responsável legal. "
-                f"Um e-mail foi enviado para {aluno.email_responsavel}."
-            )
 
     access_token = create_access_token(
         identity=str(user.id), additional_claims={"role": str(user.role)}
@@ -178,7 +160,7 @@ def register_user(data: dict[str, Any]) -> User:
     email = validate_email(data.get("email", ""))
     cpf_clean = validate_cpf(data.get("cpf", ""))
 
-    if not Organizacao.query.get(organizacao_id):
+    if not db.session.get(Organizacao, organizacao_id):
         logger.warning(f"Registration attempt with invalid organizacao_id: {organizacao_id}")
         raise NotFoundError("Organizacao not found")
 
@@ -287,7 +269,7 @@ def register_user(data: dict[str, Any]) -> User:
         raise AppError(f"Erro ao registrar usuário: {str(e)}", 500)
 
 
-def request_password_reset(email_raw: str, base_url: str) -> None:
+def request_password_reset(email_raw: str) -> None:
     """
     Send password recovery email with link if the user exists.
     Always returns without error (does not reveal if email exists).
@@ -299,8 +281,6 @@ def request_password_reset(email_raw: str, base_url: str) -> None:
         raise ValidationError("Formato de email inválido")
 
     user = User.query.filter_by(email=email).first()
-    print(user)
-    print(email)
     if not user:
         logger.info("Password reset requested for unknown email: %s", email)
         return
@@ -311,7 +291,8 @@ def request_password_reset(email_raw: str, base_url: str) -> None:
     db.session.add(reset_record)
     db.session.commit()
 
-    link = f"{base_url.rstrip('/')}/v1/auth/reset-password?token={token}"
+    frontend_url = current_app.config.get("FRONTEND_URL", "http://localhost:8081")
+    link = f"{frontend_url.rstrip('/')}/redefinir-senha?token={token}"
     subject = "Recuperação de senha - BusKá"
     body_plain = (
         f"Olá, {user.nome}.\n\n"
@@ -321,7 +302,7 @@ def request_password_reset(email_raw: str, base_url: str) -> None:
         "Equipe BusKá"
     )
     body_html = (
-        f"<p>Olá, {user.nome}.</p>"
+        f"<p>Olá, {html.escape(user.nome)}.</p>"
         "<p>Você solicitou a recuperação de senha no BusKá.</p>"
         f'<p><a href="{link}">Redefinir senha</a> (válido por 1 hora)</p>'
         "<p>Se não foi você, ignore este e-mail.</p>"
@@ -332,7 +313,8 @@ def request_password_reset(email_raw: str, base_url: str) -> None:
 
 def reset_password(token: str, new_password: str) -> None:
     """Reset user password using a valid token. Invalidates the token."""
-    record = PasswordResetToken.query.filter_by(token=token).first()
+    # Lock the link: a second simultaneous use waits and no longer finds the record.
+    record = PasswordResetToken.query.filter_by(token=token).with_for_update().first()
     if not record:
         raise ValidationError("Link inválido ou expirado")
     if record.is_expired():
@@ -341,7 +323,7 @@ def reset_password(token: str, new_password: str) -> None:
         raise ValidationError("Link expirado. Solicite uma nova recuperação de senha.")
 
     new_password = validate_password(new_password, "Nova senha")
-    user = User.query.get(record.user_id)
+    user = db.session.get(User, record.user_id)
     if not user:
         db.session.delete(record)
         db.session.commit()

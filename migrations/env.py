@@ -50,15 +50,19 @@ target_metadata = db.metadata
 # Exclusion filters for autogenerate
 # ==========================================
 
-# Tables managed by PostGIS (not our app)
+# Tables the PostGIS extensions create; no model declares them, so without
+# this `alembic check` would ask to drop them. spatial_ref_sys comes from
+# postgis, topology and layer from postgis_topology (database/init.sql).
 EXCLUDED_TABLES = {"spatial_ref_sys", "topology", "layer"}
 
-# Columns managed by PostgreSQL (computed/generated)
+# ponto.geom is a GENERATED column added with raw SQL in the initial migration.
+# The model leaves it out on purpose (the app writes latitude/longitude only),
+# and SQLAlchemy cannot reflect the geometry type anyway.
 EXCLUDED_COLUMNS = {
     "ponto": ["geom"],  # Generated column: ST_SetSRID(ST_MakePoint(...))
 }
 
-# Indexes managed by PostGIS or that we want to ignore
+# GiST index on ponto.geom, excluded for the same reason as the column.
 EXCLUDED_INDEXES = {"idx_ponto_geom"}
 
 
@@ -109,8 +113,8 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
-        compare_type=False,  # Don't compare column types (avoids ENUM noise)
-        compare_server_default=False,  # Don't compare server defaults
+        compare_type=True,
+        compare_server_default=True,
         include_object=include_object,
     )
 
@@ -137,8 +141,8 @@ def run_migrations_online() -> None:
         context.configure(
             connection=connection,
             target_metadata=target_metadata,
-            compare_type=False,  # Don't compare column types (avoids ENUM noise)
-            compare_server_default=False,  # Don't compare server defaults
+            compare_type=True,
+            compare_server_default=True,
             include_object=include_object,
         )
 

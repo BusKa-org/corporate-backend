@@ -3,8 +3,8 @@ tags:
   - Aluno
 summary: Listar Viagens do Aluno
 description: |
-  Retorna todas as viagens nas quais o aluno está registrado (via tabela de presenças).  
-  Apenas usuários com o papel **aluno** podem acessar este endpoint.  
+  Retorna todas as viagens nas quais o aluno está registrado (via tabela de presenças).
+  Apenas usuários com o papel **aluno** podem acessar este endpoint.
   Requer um **token JWT** válido.
 operationId: listarMinhasViagensAluno
 security:

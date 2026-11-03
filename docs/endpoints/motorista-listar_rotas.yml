@@ -3,8 +3,8 @@ tags:
   - Motorista
 summary: Listar Rotas do Motorista
 description: |
-  Retorna todas as rotas criadas ou atribuídas ao motorista autenticado.  
-  Apenas usuários com o papel **motorista** podem acessar este endpoint.  
+  Retorna todas as rotas criadas ou atribuídas ao motorista autenticado.
+  Apenas usuários com o papel **motorista** podem acessar este endpoint.
   Requer um **JWT token** válido no cabeçalho `Authorization`.
 operationId: listarRotasMotorista
 security:

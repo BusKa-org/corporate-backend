@@ -1,10 +1,10 @@
 import uuid
 from datetime import date
 
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import ARRAY, UUID
 
 from .base import db
-from .enum import UserRole, UserStatus
+from .enum import StatusMotorista, UserRole, UserStatus
 from .notificacao import Notificacao  # noqa: F401
 
 
@@ -12,7 +12,12 @@ class User(db.Model):
     __tablename__ = "usuario"
     __table_args__ = (db.Index("idx_usuario_organizacao", "organizacao_id"),)
 
-    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = db.Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        server_default=db.text("uuid_generate_v4()"),
+    )
     organizacao_id = db.Column(
         UUID(as_uuid=True), db.ForeignKey("organizacao.id", ondelete="CASCADE"), nullable=False
     )
@@ -25,7 +30,12 @@ class User(db.Model):
 
     fcm_token = db.Column(db.String(255), nullable=True)
 
-    role = db.Column(db.Enum(UserRole, name="user_role"), nullable=False, default=UserRole.ALUNO)
+    role = db.Column(
+        db.Enum(UserRole, name="user_role"),
+        nullable=False,
+        default=UserRole.ALUNO,
+        server_default="ALUNO",
+    )
     status = db.Column(
         db.Enum(UserStatus, name="user_status"), nullable=False, default=UserStatus.PENDING_SIGNUP
     )
@@ -55,6 +65,19 @@ class Motorista(User):
     )
     cnh = db.Column(db.String(20), unique=True, nullable=False)
 
+    # Working hours set by the manager. Null = no time/day restriction.
+    # Values from DiaDaSemana ("SEG", "TER", ...).
+    horario_inicio = db.Column(db.Time, nullable=True)
+    horario_fim = db.Column(db.Time, nullable=True)
+    dias_trabalho = db.Column(ARRAY(db.String(3)), nullable=True)
+
+    # End of the mandatory rest, saved when a trip ends. Null = no rest owed.
+    descanso_ate = db.Column(db.DateTime(timezone=True), nullable=True)
+    # Computed by the service for the response (trips + descanso_ate); not a column.
+    # __allow_unmapped__ lets SQLAlchemy ignore this annotation without Mapped[].
+    __allow_unmapped__ = True
+    status_motorista: StatusMotorista | None = None
+
     __mapper_args__ = {
         "polymorphic_identity": UserRole.MOTORISTA,
     }
@@ -81,15 +104,18 @@ class Aluno(User):
     matricula = db.Column(db.String(50))
     foto_url = db.Column(db.String(255))
 
+    # NecessidadeAcessibilidade names. A text list, not a Postgres ENUM, so a new
+    # need can be added without a migration.
+    necessidades_acessibilidade = db.Column(
+        ARRAY(db.String(30)), nullable=False, default=list, server_default="{}"
+    )
+    observacao_acessibilidade = db.Column(db.String(500))
+
     # Guardian (single responsible person, replaces the old pai/mae pair)
     nome_responsavel = db.Column(db.String(100))
     cpf_responsavel = db.Column(db.String(14))
 
-    # Minor / guardian consent flow
     data_nascimento = db.Column(db.Date)
-    email_responsavel = db.Column(db.String(120))
-    guardian_token = db.Column(db.String(64), unique=True)
-    guardian_consented_at = db.Column(db.DateTime(timezone=True))
 
     instituicao_id = db.Column(UUID(as_uuid=True), db.ForeignKey("instituicao.id"))
     ponto_casa_id = db.Column(UUID(as_uuid=True), db.ForeignKey("ponto.id"))

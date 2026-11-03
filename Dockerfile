@@ -30,7 +30,11 @@ COPY app/ ./app/
 COPY database/ ./database/
 COPY docs/ ./docs/
 
-RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
+# A pasta das fotos já existe no image com dono appuser: um volume novo montado ali copia
+# esse dono, e o processo (não root) consegue gravar.
+RUN useradd -m -u 1000 appuser && \
+    mkdir -p /app/instance/fotos_aluno && \
+    chown -R appuser:appuser /app
 USER appuser
 
 ENV PYTHONUNBUFFERED=1 \

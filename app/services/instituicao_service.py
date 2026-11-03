@@ -4,10 +4,17 @@ import logging
 from typing import Any
 
 from sqlalchemy import or_
+from sqlalchemy.exc import IntegrityError
 
-from app.core.exceptions import AppError, ForbiddenError, NotFoundError, ValidationError
+from app.core.exceptions import (
+    AppError,
+    ConflictError,
+    ForbiddenError,
+    NotFoundError,
+    ValidationError,
+)
 from app.models.base import db
-from app.models.enum import TipoInstituicao, UserRole
+from app.models.enum import UserRole
 from app.models.geo import Endereco, Instituicao, Ponto
 from app.models.organizacao import Organizacao
 from app.models.user import User
@@ -19,26 +26,40 @@ def create_instituicao(gestor_id: str, data: dict[str, Any]) -> Instituicao:
     """
     Create a new institution (gestor only).
 
-    Raises: ForbiddenError, ValidationError, AppError
+    Raises: ForbiddenError, ValidationError, ConflictError, AppError
     """
-    user = User.query.get(gestor_id)
+    user = db.session.get(User, gestor_id)
     if not user or user.role != UserRole.GESTOR:
         raise ForbiddenError("Permissão negada. Apenas gestores criam instituições.")
 
     nome = data.get("nome")
     cnpj = data.get("cnpj")
-    tipo_str = data.get("tipo", "ESCOLA_PUBLICA")
+    tipo = data.get("tipo")
     end_data = data.get("endereco")
 
     if not end_data:
         raise ValidationError("Dados de endereço são obrigatórios")
+
+    uf = end_data.get("uf")
+    if uf:
+        uf = uf.upper()
+    else:
+        organizacao = db.session.get(Organizacao, user.organizacao_id)
+        if organizacao:
+            uf = organizacao.estado
+    if not uf:
+        raise ValidationError(
+            "Organização sem UF cadastrada. Informe a UF no endereço ou peça "
+            "ao administrador para cadastrar o estado da organização."
+        )
 
     try:
         novo_ponto = Ponto(
             organizacao_id=user.organizacao_id,
             latitude=end_data.get("latitude"),
             longitude=end_data.get("longitude"),
-            apelido=f"Inst: {nome}",
+            # apelido is String(100) but nome allows 200, so the label is cut.
+            apelido=f"Inst: {nome}"[:100],
         )
         db.session.add(novo_ponto)
         db.session.flush()
@@ -46,7 +67,12 @@ def create_instituicao(gestor_id: str, data: dict[str, Any]) -> Instituicao:
         nova_inst = Instituicao(
             nome=nome,
             cnpj=cnpj,
-            tipo=TipoInstituicao(tipo_str),
+            tipo=tipo,
+            # Entered by a gestor, not imported from EMEC/INEP (same as seed.py).
+            fonte="MANUAL",
+            codigo_externo=cnpj,
+            uf=uf,
+            organizacao_id=user.organizacao_id,
             ponto_id=novo_ponto.id,
         )
         db.session.add(nova_inst)
@@ -64,14 +90,23 @@ def create_instituicao(gestor_id: str, data: dict[str, Any]) -> Instituicao:
         db.session.commit()
         return nova_inst
 
-    except Exception as e:
+    except IntegrityError as e:
         db.session.rollback()
-        raise AppError(f"Erro ao salvar instituição: {str(e)}", 500)
+        # Global constraint: catches duplicates in this and in other organizations.
+        constraint = getattr(getattr(e.orig, "diag", None), "constraint_name", None)
+        if constraint == "uq_instituicao_fonte_codigo_externo":
+            raise ConflictError("Já existe uma instituição com este CNPJ", field="cnpj")
+        logger.exception("Error saving institution")
+        raise AppError("Erro ao salvar instituição", 500)
+    except Exception:
+        db.session.rollback()
+        logger.exception("Error saving institution")
+        raise AppError("Erro ao salvar instituição", 500)
 
 
 def list_all(gestor_id: str) -> list[Instituicao]:
     """List all institutions for user's organizacao."""
-    user = User.query.get(gestor_id)
+    user = db.session.get(User, gestor_id)
     if not user:
         raise NotFoundError("Usuário não encontrado")
 
@@ -107,11 +142,11 @@ def get_by_id(gestor_id: str, inst_id: str) -> Instituicao:
 
     Raises: NotFoundError, ForbiddenError
     """
-    user = User.query.get(gestor_id)
+    user = db.session.get(User, gestor_id)
     if not user:
         raise NotFoundError("Usuário não encontrado")
 
-    inst = Instituicao.query.get(inst_id)
+    inst = db.session.get(Instituicao, inst_id)
     if not inst:
         raise NotFoundError("Instituição não encontrada")
 
@@ -127,11 +162,11 @@ def delete_instituicao(gestor_id: str, inst_id: str) -> None:
 
     Raises: ForbiddenError, NotFoundError, AppError
     """
-    user = User.query.get(gestor_id)
+    user = db.session.get(User, gestor_id)
     if not user or user.role != UserRole.GESTOR:
         raise ForbiddenError("Apenas gestores podem remover instituições")
 
-    inst = Instituicao.query.get(inst_id)
+    inst = db.session.get(Instituicao, inst_id)
     if not inst:
         raise NotFoundError("Instituição não encontrada")
 

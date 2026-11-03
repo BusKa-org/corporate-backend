@@ -8,11 +8,11 @@ from firebase_admin import messaging
 
 from app.core.exceptions import AppError, ForbiddenError, NotFoundError, ValidationError
 from app.models.base import db
-from app.models.enum import UserRole
+from app.models.enum import StatusSolicitacao, UserRole
 from app.models.notificacao import Notificacao
 from app.models.rota import RotaAluno
 from app.models.user import User
-from app.models.viagem import AlunosConfirmados
+from app.models.viagem import AlunosConfirmados, SolicitacaoViagem, Viagem
 from app.utils import audit_logger
 
 logger = logging.getLogger(__name__)
@@ -53,8 +53,6 @@ class NotificacaoService:
 
     @staticmethod
     def notificar_por_gestor(user_id: str, dados: dict[str, Any]) -> dict[str, Any]:
-        from app.models.viagem import Viagem
-
         user = db.session.get(User, user_id)
         if not user:
             raise ForbiddenError("Usuário não encontrado.")
@@ -88,6 +86,9 @@ class NotificacaoService:
         usuarios_notificados = set()
 
         if rota_id:
+            # Inherited scheduled flow: a *route*'s audience is its subscriber list. The
+            # on-demand round has no permanent subscription; its audience is the round's,
+            # addressed by viagem_id below.
             inscricoes = RotaAluno.query.filter_by(rota_id=rota_id).all()
             for insc in inscricoes:
                 usuarios_notificados.add(insc.aluno_id)
@@ -97,6 +98,12 @@ class NotificacaoService:
             ).all()
             for conf in confirmados:
                 usuarios_notificados.add(conf.aluno_id)
+            # On demand, before the buffer ends, the audience is the active requests.
+            solicitacoes = SolicitacaoViagem.query.filter_by(
+                viagem_id=viagem_id, status=StatusSolicitacao.ATIVA
+            ).all()
+            for solicitacao in solicitacoes:
+                usuarios_notificados.add(solicitacao.aluno_id)
         else:
             raise ValidationError("Informe o ID de uma rota (rota_id) ou viagem (viagem_id).")
 
@@ -123,7 +130,7 @@ class NotificacaoService:
 
     @staticmethod
     def listar_notificacoes(user_id: str) -> list[Notificacao]:
-        """Lista avisos do usuário logado"""
+        """List the logged-in user's notices"""
         return (
             Notificacao.query.filter_by(usuario_id=user_id)
             .order_by(Notificacao.created_at.desc())
@@ -146,7 +153,7 @@ class NotificacaoService:
 
     @staticmethod
     def notificar_alunos_viagem_iniciada(viagem_id: str) -> None:
-        """Busca os alunos confirmados na viagem e dispara o aviso de partida."""
+        """Find the students confirmed on the trip and send the departure notice."""
         try:
             confirmados = AlunosConfirmados.query.filter_by(
                 viagem_id=viagem_id, confirmacao=True

@@ -96,11 +96,6 @@ class SecurityConfig:
     JWT_ACCESS_TOKEN_EXPIRES_HOURS = 2
     JWT_REFRESH_TOKEN_EXPIRES_DAYS = 30
 
-    # Rate limiting
-    DEFAULT_RATE_LIMIT = "200 per hour"
-    AUTH_RATE_LIMIT = "10 per minute"
-    SENSITIVE_RATE_LIMIT = "5 per minute"
-
     # CORS
     CORS_MAX_AGE = 86400  # 24 hours
 
@@ -123,7 +118,6 @@ class SecurityConfig:
             },
             "authentication": {
                 "jwt_expiration": f"{cls.JWT_ACCESS_TOKEN_EXPIRES_HOURS} hours",
-                "rate_limiting": cls.AUTH_RATE_LIMIT,
                 "recommendations": [
                     "Enable 2FA for production",
                     "Implement account lockout after failed attempts",

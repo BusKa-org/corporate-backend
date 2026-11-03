@@ -1,10 +1,10 @@
-"""PUT /v1/alunos/me é uma atualização parcial: o que não vem no corpo não muda."""
+"""PUT /v1/alunos/me is a partial update: whatever is not in the body does not change."""
 
 ENDERECO = {
     "logradouro": "Rua A",
     "numero": "1",
     "bairro": "Centro",
-    "cidade": "Campina Grande",
+    "cidade": "Cidade Exemplo",
     "cep": "58400000",
     "latitude": -7.2,
     "longitude": -35.9,

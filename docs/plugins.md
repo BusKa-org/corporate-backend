@@ -76,15 +76,16 @@ collision structurally impossible, both against the product and against any
 future co-installed plugin.
 
 Product-owned prefixes you must never register under: `/v1/auth`, `/v1/users`,
-`/v1/notificacoes`, `/v1/onibus`, `/v1/rotas`, `/v1/pontos`, `/v1/routing`,
-`/v1/viagens`, `/v1/instituicoes`, `/v1/alunos`, `/v1/ocorrencias`,
-`/v1/dashboard`.
+`/v1/consentimento`, `/v1/convites`, `/v1/notificacoes`, `/v1/onibus`,
+`/v1/rotas`, `/v1/pontos`, `/v1/routing`, `/v1/viagens`, `/v1/instituicoes`,
+`/v1/alunos`, `/v1/ocorrencias`, `/v1/dashboard`, `/v1/embarque`,
+`/v1/telemetria`.
 
 ### If a route should not be client-specific
 
 Then it is not a plugin. A capability the *next* corporate client would also
 want belongs in this product, not in a deployment repo — see
-`ARQUITETURA_REPOSITORIOS.md` §7 for where the line sits. Raise it as a product
+`ARQUITETURA_REPOSITORIOS.md` §5 for where the line sits. Raise it as a product
 issue rather than shipping it under your namespace.
 
 ---

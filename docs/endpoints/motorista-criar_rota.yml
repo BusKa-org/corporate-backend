@@ -3,9 +3,9 @@ tags:
   - Motorista
 summary: Criar Nova Rota
 description: |
-  Permite que um motorista crie uma nova rota.  
-  O município é automaticamente associado com base no motorista autenticado.  
-  Apenas usuários com o papel **motorista** podem acessar este endpoint.  
+  Permite que um motorista crie uma nova rota.
+  O município é automaticamente associado com base no motorista autenticado.
+  Apenas usuários com o papel **motorista** podem acessar este endpoint.
   Requer um **JWT token** válido no cabeçalho `Authorization`.
 operationId: criarRota
 security:

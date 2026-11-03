@@ -1,6 +1,6 @@
 import os
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 
 import psycopg2
@@ -13,10 +13,10 @@ from app import create_app
 from app.core.config import Settings
 from app.models.base import db
 from app.models.consentimento import ACEITE, Consentimento
-from app.models.enum import DiaDaSemana, StatusViagem, UserStatus
+from app.models.enum import DiaDaSemana, StatusViagem, TipoViagem, UserStatus
 from app.services.consentimento_service import VERSAO_TERMO_VIGENTE
 from tests.factories.geo_factory import PontoFactory
-from tests.factories.onibus_factory import OnibusFactory
+from tests.factories.onibus_factory import JanelaDisponibilidadeFactory, OnibusFactory
 from tests.factories.organizacao_factory import OrganizacaoFactory
 from tests.factories.rota_factory import (
     DiasOperacaoFactory,
@@ -26,7 +26,11 @@ from tests.factories.rota_factory import (
     RotaPontoFactory,
 )
 from tests.factories.user_factory import AlunoFactory, GestorFactory, MotoristaFactory
-from tests.factories.viagem_factory import AlunosConfirmadosFactory, ViagemFactory
+from tests.factories.viagem_factory import (
+    AlunosConfirmadosFactory,
+    SolicitacaoViagemFactory,
+    ViagemFactory,
+)
 
 
 class AuthenticatedClient:
@@ -63,12 +67,12 @@ class Actor:
     client: AuthenticatedClient
 
 
-# A suíte nunca deve iniciar o scheduler. A variável pode vazar do shell do dev.
+# The suite must never start the scheduler. The variable can leak from the dev shell.
 os.environ.pop("RUN_SCHEDULER", None)
 
 load_dotenv()
 
-# `_db` calls db.drop_all(). Never let that point at the dev/prod database —
+# `_db` calls db.drop_all(). Never let that point at the dev/prod database:
 # default to a dedicated "<db>_test" database, and refuse to run at all if
 # the resolved URI doesn't look like a test database.
 _TEST_DB_URI = os.getenv("TEST_DATABASE_URI") or Settings().SQLALCHEMY_DATABASE_URI + "_test"
@@ -140,6 +144,8 @@ def app():
             "JWT_SECRET_KEY": "change_this_secret_key_use_long_random_string",
             "SQLALCHEMY_DATABASE_URI": _TEST_DB_URI,
             "SQLALCHEMY_TRACK_MODIFICATIONS": False,
+            # The suite does many logins in a row; the limit has its own tests.
+            "RATELIMIT_ENABLED": False,
         }
     )
     return app
@@ -206,7 +212,7 @@ def aluno(client, app, _db, organizacao):
     u = AlunoFactory(organizacao_id=organizacao.id)
     _db.session.add(u)
     _db.session.commit()
-    # Passageiro que já aceitou o termo. Os testes de LGPD revogam quando precisam.
+    # Passenger who already accepted the terms. The LGPD tests revoke when needed.
     _db.session.add(Consentimento(usuario_id=u.id, versao=VERSAO_TERMO_VIGENTE, acao=ACEITE))
     _db.session.commit()
 
@@ -237,7 +243,7 @@ def other_aluno(client, app, _db, other_organizacao):
     u = AlunoFactory(organizacao_id=other_organizacao.id)
     _db.session.add(u)
     _db.session.commit()
-    # Passageiro que já aceitou o termo, como o fixture `aluno`.
+    # Passenger who already accepted the terms, like the `aluno` fixture.
     _db.session.add(Consentimento(usuario_id=u.id, versao=VERSAO_TERMO_VIGENTE, acao=ACEITE))
     _db.session.commit()
 
@@ -369,6 +375,63 @@ def viagem_futura_iniciada_com_motorista(_db, horario_rota, motorista):
     return v
 
 
+# On-demand circuit with per-leg capacity (RF-13 to RF-18).
+#
+# A circuit of four ordered stops gives three segments (P1→P2, P2→P3, P3→P4),
+# the minimum to exercise disjoint routes reusing the same seat in the
+# capacity check (RF-14).
+
+
+@pytest.fixture()
+def pontos_circuito(_db, organizacao):
+    pontos = [PontoFactory(organizacao_id=organizacao.id) for _ in range(4)]
+    _db.session.add_all(pontos)
+    _db.session.commit()
+    return pontos
+
+
+@pytest.fixture()
+def circuito(_db, rota_sob_demanda, pontos_circuito):
+    """The on-demand route with the four stops in order."""
+    for ordem, p in enumerate(pontos_circuito, start=1):
+        _db.session.add(RotaPontoFactory(rota_id=rota_sob_demanda.id, ponto_id=p.id, ordem=ordem))
+    _db.session.commit()
+    return rota_sob_demanda
+
+
+@pytest.fixture()
+def viagem_buffer_aberto(_db, circuito, motorista, onibus):
+    """Circuit trip with the buffer opened by the real clock, still without requests."""
+    v = ViagemFactory(
+        data=date.today(),
+        rota_id=circuito.id,
+        motorista_id=motorista.user.id,
+        veiculo_id=onibus.id,
+        status=StatusViagem.BUFFER_ABERTO,
+        buffer_fim=datetime.now(UTC) + timedelta(minutes=5),
+    )
+    _db.session.add(v)
+    _db.session.commit()
+    return v
+
+
+def reservar_trajeto(_db, viagem, aluno_id, origem_id, destino_id):
+    """Request (if not yet requested) and declare the route on the trip."""
+    from app.models.enum import StatusSolicitacao
+    from app.models.viagem import SolicitacaoViagem
+    from app.services import capacidade_service
+
+    ativa = (
+        _db.session.query(SolicitacaoViagem)
+        .filter_by(viagem_id=viagem.id, aluno_id=aluno_id, status=StatusSolicitacao.ATIVA)
+        .first()
+    )
+    if not ativa:
+        _db.session.add(SolicitacaoViagemFactory(viagem_id=viagem.id, aluno_id=aluno_id))
+        _db.session.commit()
+    return capacidade_service.validar_e_reservar(viagem.id, aluno_id, origem_id, destino_id)
+
+
 @pytest.fixture()
 def confirmacao_aluno(_db, viagem_futura_agendada_com_motorista, aluno, ponto):
     conf = AlunosConfirmadosFactory(
@@ -381,3 +444,81 @@ def confirmacao_aluno(_db, viagem_futura_agendada_com_motorista, aluno, ponto):
     _db.session.add(conf)
     _db.session.commit()
     return conf
+
+
+# ---------------------------------------------------------------------------
+# On-demand trips (RF-05, RF-10, RF-11, RF-12, RF-19)
+# ---------------------------------------------------------------------------
+
+# Monday 10:00 in the default time zone (America/Sao_Paulo, UTC-3): inside the 08:00-12:00 window.
+SEGUNDA_10H_LOCAL = datetime(2026, 11, 2, 13, 0, tzinfo=UTC)
+
+
+class Relogio:
+    def __init__(self, agora: datetime):
+        self.agora = agora
+
+    def ajustar(self, agora: datetime) -> None:
+        self.agora = agora
+
+    def avancar(self, **delta: float) -> None:
+        self.agora = self.agora + timedelta(**delta)
+
+
+@pytest.fixture()
+def relogio(monkeypatch):
+    """Pins app.utils.tempo.agora_utc (and so agora_local). Starts at SEGUNDA_10H_LOCAL."""
+    from app.utils import tempo
+
+    r = Relogio(SEGUNDA_10H_LOCAL)
+    monkeypatch.setattr(tempo, "agora_utc", lambda: r.agora)
+    return r
+
+
+@pytest.fixture()
+def rota_sob_demanda(_db, organizacao, onibus):
+    r = RotaFactory(
+        organizacao_id=organizacao.id,
+        tipo=TipoViagem.SOB_DEMANDA,
+        buffer_minutos=5,
+        prazo_inicio_minutos=10,
+        motorista_padrao_id=None,
+        veiculo_padrao_id=onibus.id,
+    )
+    _db.session.add(r)
+    _db.session.commit()
+    return r
+
+
+@pytest.fixture()
+def janela(_db, onibus, motorista):
+    """Monday 08:00-12:00 window of the `onibus`, with the `motorista`."""
+    j = JanelaDisponibilidadeFactory(
+        onibus_id=onibus.id,
+        motorista_id=motorista.user.id,
+        dia=DiaDaSemana.SEG,
+        hora_inicio=time(8, 0),
+        hora_fim=time(12, 0),
+    )
+    _db.session.add(j)
+    _db.session.commit()
+    return j
+
+
+@pytest.fixture()
+def viagem_solicitada(_db, rota_sob_demanda, onibus, motorista, aluno):
+    """SOLICITADA trip of the on-demand route, with an ATIVA request from the `aluno`."""
+    v = ViagemFactory(
+        rota_id=rota_sob_demanda.id,
+        horario_rota_id=None,
+        data=SEGUNDA_10H_LOCAL.date(),
+        status=StatusViagem.SOLICITADA,
+        motorista_id=motorista.user.id,
+        veiculo_id=onibus.id,
+        created_at=SEGUNDA_10H_LOCAL,
+    )
+    _db.session.add(v)
+    _db.session.flush()
+    _db.session.add(SolicitacaoViagemFactory(viagem_id=v.id, aluno_id=aluno.user.id))
+    _db.session.commit()
+    return v

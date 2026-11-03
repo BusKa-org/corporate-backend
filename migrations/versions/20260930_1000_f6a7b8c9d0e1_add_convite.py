@@ -4,12 +4,12 @@ Revision ID: f6a7b8c9d0e1
 Revises: a1b2c3d4e5f7
 Create Date: 2026-09-30 10:00:00.000000+00:00
 """
+
 from typing import Sequence, Union
 
 import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
-
 
 revision: str = "f6a7b8c9d0e1"
 down_revision: Union[str, None] = "a1b2c3d4e5f7"
@@ -40,7 +40,10 @@ def upgrade() -> None:
         sa.Column("criado_por_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column("usuario_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column(
-            "created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
         ),
         sa.Column("concluido_em", sa.DateTime(timezone=True), nullable=True),
         sa.ForeignKeyConstraint(["organizacao_id"], ["organizacao.id"], ondelete="CASCADE"),

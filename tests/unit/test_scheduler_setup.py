@@ -8,8 +8,8 @@ from app.utils.scheduler_setup import init_scheduler
 
 REPO_ROOT = Path(__file__).parents[2]
 
-# Variáveis que precisam chegar aos containers de produção. A ausência de
-# FLASK_ENV foi a causa raiz do scheduler nunca ter rodado na VM.
+# Variables that must reach the production containers. A missing FLASK_ENV was
+# the root cause of the scheduler never running on the VM.
 ENV_OBRIGATORIAS = [
     "FLASK_ENV",
     "TZ",
@@ -20,14 +20,23 @@ ENV_OBRIGATORIAS = [
     "MAIL_SERVER",
 ]
 
-JOBS_ESPERADOS = {"job_24h", "job_10min", "job_convites", "job_retencao"}
+JOBS_ESPERADOS = {
+    "job_24h",
+    "job_10min",
+    "job_convites",
+    "job_retencao",
+    "job_fechar_buffers",
+    "job_prazo_inicio",
+}
 
 
 @pytest.fixture()
 def scheduler_app():
-    """App mínima e isolada: init_scheduler só usa app.logger e app.debug."""
+    """Minimal, isolated app: init_scheduler only uses app.logger and app.debug."""
     app = Flask("scheduler_test")
     app.config["SCHEDULER_API_ENABLED"] = False
+    app.config["JOB_BUFFER_INTERVALO_SEGUNDOS"] = 30
+    app.config["JOB_PRAZO_INICIO_INTERVALO_SEGUNDOS"] = 60
     return app
 
 
@@ -49,7 +58,7 @@ def test_init_scheduler_registra_todos_os_jobs(scheduler_app, sched, monkeypatch
 
 
 def test_init_scheduler_nao_registra_nada_sem_run_scheduler(scheduler_app, sched, monkeypatch):
-    """Garante que os 4 workers da API (e a suíte de testes) fiquem sem scheduler."""
+    """Ensures the API's 4 workers (and the test suite) run without a scheduler."""
     monkeypatch.delenv("RUN_SCHEDULER", raising=False)
 
     init_scheduler(scheduler_app, sched)
@@ -58,8 +67,8 @@ def test_init_scheduler_nao_registra_nada_sem_run_scheduler(scheduler_app, sched
 
 
 def test_compose_de_producao_repassa_env_obrigatorias():
-    # Leitura como texto, sem dependência de yaml. Trocar por yaml.safe_load
-    # se um dia for preciso afirmar coisas por serviço.
+    # Read as text, with no yaml dependency. Switch to yaml.safe_load if per-service
+    # assertions are ever needed.
     texto = (REPO_ROOT / "docker-compose.prod.yml").read_text()
 
     ausentes = [chave for chave in ENV_OBRIGATORIAS if f"{chave}:" not in texto]

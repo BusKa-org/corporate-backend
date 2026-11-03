@@ -36,7 +36,7 @@ install:
 	fi
 
 run:
-	$(DOCKER) -f infra/database.yml up -d db
+	$(DOCKER) -f infra/database.yml up -d db redis
 	$(PYTHON) flask --app app run --host=0.0.0.0 --port=5000 --debug
 
 # Espelha a produção: os jobs rodam em um processo separado da API, nunca
@@ -62,7 +62,7 @@ install-dev:
 .PHONY: db-up db-down db-reset db-shell db-create seed migrate migrate-create migrate-history migrate-downgrade
 
 db-up:
-	$(DOCKER) -f infra/database.yml up -d db
+	$(DOCKER) -f infra/database.yml up -d db redis
 
 db-down:
 	$(DOCKER) -f infra/database.yml down
@@ -70,9 +70,9 @@ db-down:
 db-reset:
 	$(DOCKER) -f infra/database.yml down --volumes
 	$(DOCKER) -f infra/database.yml rm -f
-	$(DOCKER) -f infra/database.yml up -d db
+	$(DOCKER) -f infra/database.yml up -d db redis
 	@echo "Waiting for database to be ready..."
-	@until docker exec buska_db psql -U buska_user -d buska_db -c "SELECT 1" > /dev/null 2>&1; do \
+	@until docker exec mebuska_corporate_db psql -U $${DB_USER:-buska_user} -d $${DB_NAME:-buska_db} -c "SELECT 1" > /dev/null 2>&1; do \
 		echo "  still waiting..."; sleep 2; \
 	done
 	@echo "Database is ready."
@@ -80,7 +80,7 @@ db-reset:
 	@echo "Database reset complete. Run 'make seed' to populate data."
 
 db-create:
-	$(DOCKER) -f infra/database.yml up -d db
+	$(DOCKER) -f infra/database.yml up -d db redis
 	@echo "Waiting for database to start..."
 	sleep 5
 	uv run alembic upgrade head
@@ -90,9 +90,6 @@ db-shell:
 
 seed:
 	uv run python seed.py
-
-seed-sql:
-	PGPASSWORD=$${DB_PASSWORD:-buska_pass} psql -h $${DB_HOST:-localhost} -p $${DB_PORT:-5432} -U $${DB_USER:-buska_user} -d $${DB_NAME:-buska_db} -f database/populate.sql
 
 # Alembic migrations
 migrate:
@@ -198,13 +195,12 @@ help:
 	@echo "  install-dev     Install dev dependencies + pre-commit hooks"
 	@echo ""
 	@echo "Database:"
-	@echo "  db-up           Start database container"
+	@echo "  db-up           Start database and redis containers"
 	@echo "  db-down         Stop database container"
 	@echo "  db-reset        Reset database (drop + recreate via Alembic)"
 	@echo "  db-create       Create database from scratch (Alembic)"
 	@echo "  db-shell        Connect to database via psql"
 	@echo "  seed            Seed data using seed.py"
-	@echo "  seed-sql        Seed data using populate.sql"
 	@echo ""
 	@echo "Migrations (Alembic):"
 	@echo "  migrate         Apply pending migrations"

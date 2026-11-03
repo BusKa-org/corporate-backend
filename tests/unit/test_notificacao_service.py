@@ -1,4 +1,4 @@
-"""Testes unitários para as regras de negócio de notificações."""
+"""Unit tests for the notification business rules."""
 
 from unittest.mock import MagicMock, patch
 
@@ -10,7 +10,7 @@ from app.services.notificacao_service import NotificacaoService
 
 
 def test_notificar_por_gestor_sucesso(app):
-    """Testa se o gestor consegue disparar notificações em massa."""
+    """Checks the manager can send bulk notifications."""
     with app.app_context():
 
         with (
@@ -42,7 +42,7 @@ def test_notificar_por_gestor_sucesso(app):
 
 
 def test_notificar_por_gestor_falha_nao_eh_gestor(app):
-    """Testa se o serviço bloqueia envio de notificações por quem não é gestor."""
+    """Checks the service blocks notifications sent by a non-manager."""
     with app.app_context():
 
         with patch("app.services.notificacao_service.db.session.get") as mock_get:
@@ -60,7 +60,7 @@ def test_notificar_por_gestor_falha_nao_eh_gestor(app):
 
 
 def test_notificar_por_gestor_falha_sem_alunos(app):
-    """Testa se o serviço falha caso tente notificar uma rota/viagem vazia."""
+    """Checks the service fails when notifying an empty route/trip."""
     with app.app_context():
 
         with (

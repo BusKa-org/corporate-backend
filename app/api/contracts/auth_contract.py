@@ -29,6 +29,9 @@ def register_models(api):
         {
             "message": fields.String(description="Mensagem de sucesso"),
             "token": fields.String(description="JWT Token"),
+            "consentimento_pendente": fields.Boolean(
+                description="true quando o usuário ainda não aceitou a versão vigente do termo"
+            ),
             "user": fields.Nested(user_info, description="Dados do usuário"),
         },
     )
@@ -38,8 +41,18 @@ def register_models(api):
         {"email": fields.String(required=True, description="Email para recuperação de senha")},
     )
 
+    reset_password_request = api.model(
+        "ResetPasswordRequest",
+        {
+            "token": fields.String(required=True, description="Token do link enviado por e-mail"),
+            "new_password": fields.String(required=True, description="Nova senha"),
+            "confirm_password": fields.String(required=True, description="Confirmação da senha"),
+        },
+    )
+
     return {
         "login_request": login_request,
         "token_response": token_response,
         "forgot_password_request": forgot_password_request,
+        "reset_password_request": reset_password_request,
     }

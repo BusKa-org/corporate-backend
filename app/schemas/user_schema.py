@@ -1,5 +1,6 @@
 from marshmallow import fields
 
+from app.models.enum import DiaDaSemana
 from app.schemas.common import BaseSchema
 
 # ==========================================
@@ -28,7 +29,15 @@ class UpdateProfileRequestSchema(BaseSchema):
     cnh = fields.String(required=False)
 
 
-class MotoristaCreateRequestSchema(BaseSchema):
+class JornadaMotoristaSchema(BaseSchema):
+    """Working hours fields shared by driver create/update."""
+
+    horario_inicio = fields.Time(allow_none=True)
+    horario_fim = fields.Time(allow_none=True)
+    dias_trabalho = fields.List(fields.Enum(DiaDaSemana), allow_none=True)
+
+
+class MotoristaCreateRequestSchema(JornadaMotoristaSchema):
     """Schema for creating a new driver."""
 
     nome = fields.String(required=True)
@@ -37,6 +46,14 @@ class MotoristaCreateRequestSchema(BaseSchema):
     cpf = fields.String(required=True)
     telefone = fields.String(load_default=None)
     cnh = fields.String(required=True)
+
+
+class MotoristaUpdateRequestSchema(JornadaMotoristaSchema):
+    """Schema for a gestor updating a driver (PATCH /users/motoristas/<id>)."""
+
+    nome = fields.String()
+    telefone = fields.String()
+    cnh = fields.String()
 
 
 class ExcluirContaRequestSchema(BaseSchema):
@@ -72,7 +89,6 @@ class UserResponseSchema(BaseSchema):
     role = fields.Method("get_role")
     status = fields.String(attribute="status.value")
     signup_completed_at = fields.DateTime(attribute="signup_completed_at")
-    # Municipality info
     municipio_nome = fields.Method("get_municipio_nome")
     municipio_uf = fields.Method("get_municipio_uf")
 
@@ -81,6 +97,24 @@ class UserResponseSchema(BaseSchema):
     nome_pai = fields.String(dump_default=None)
     nome_mae = fields.String(dump_default=None)
     cnh = fields.String(dump_default=None)
+    horario_inicio = fields.Time(dump_default=None)
+    horario_fim = fields.Time(dump_default=None)
+    dias_trabalho = fields.List(fields.String(), dump_default=None)
+    status_motorista = fields.Method("get_status_motorista")
+    descanso_ate = fields.Method("get_descanso_ate")
+
+    def get_status_motorista(self, obj):
+        # Filled in by the service (user_service._preencher_status_motoristas)
+        status = getattr(obj, "status_motorista", None)
+        if status is None:
+            return None
+        return status.value
+
+    def get_descanso_ate(self, obj):
+        # Only shown while the rest is still in effect, so an expired rest is never displayed
+        if self.get_status_motorista(obj) != "EM_DESCANSO_OBRIGATORIO":
+            return None
+        return obj.descanso_ate.isoformat()
 
     def get_role(self, obj):
         return str(obj.role.value) if hasattr(obj.role, "value") else str(obj.role)

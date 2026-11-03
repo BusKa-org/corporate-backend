@@ -3,8 +3,8 @@ tags:
   - Motorista
 summary: Listar Viagens do Motorista
 description: |
-  Retorna todas as viagens (trips) associadas ao motorista autenticado.  
-  Disponível apenas para usuários com o papel **motorista**.  
+  Retorna todas as viagens (trips) associadas ao motorista autenticado.
+  Disponível apenas para usuários com o papel **motorista**.
   Requer um **JWT token** válido no cabeçalho `Authorization`.
 operationId: listarViagensMotorista
 security:

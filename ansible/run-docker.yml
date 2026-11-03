@@ -3,7 +3,7 @@
   hosts: localhost
   connection: local
   vars:
-    project_dir: "{{ lookup('env', 'PWD') | default('/Users/julio/Documents/25.2/projeto1/mebuska-corporate') }}"
+    project_dir: "{{ playbook_dir | dirname }}"
     docker_compose_file: "docker-compose.prod.yml"
     env_file: ".env.prod"
 

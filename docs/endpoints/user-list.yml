@@ -3,8 +3,8 @@ tags:
   - User
 summary: List All Users
 description: |
-  Returns a list of all registered users in the system.  
-  **Access restricted to users with the `gestor` role.**  
+  Returns a list of all registered users in the system.
+  **Access restricted to users with the `gestor` role.**
   Requires a valid **JWT access token** in the `Authorization` header.
 operationId: listUsers
 security:

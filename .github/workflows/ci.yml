@@ -2,9 +2,9 @@ name: BusKá Backend CI/CD
 
 on:
   push:
-    branches: [main, release/**]
+    branches: [main, dev, release/**]
   pull_request:
-    branches: [main, release/**]
+    branches: [main, dev, release/**]
   workflow_dispatch:
     inputs:
       GIT_REFERENCE:
@@ -84,7 +84,7 @@ jobs:
     env:
       RESOLVED_REF: ${{ needs.meta.outputs.resolved_ref }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ env.RESOLVED_REF }}
           fetch-depth: 0
@@ -102,7 +102,7 @@ jobs:
           du -h -d1 . 2>/dev/null | sort -hr | head -20 || true
 
       - name: "Install uv"
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           enable-cache: true
@@ -154,7 +154,7 @@ jobs:
 
       - name: Upload Security Reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: security-reports
           path: |
@@ -188,6 +188,14 @@ jobs:
     if: needs.meta.outputs.should_run_tests == 'true'
     env:
       RESOLVED_REF: ${{ needs.meta.outputs.resolved_ref }}
+      ENV: test
+      DB_USER: buska_user
+      DB_PASSWORD: buska_pass
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_NAME: buska_db
+      PGPASSWORD: buska_pass
+      JWT_SECRET_KEY: test_secret
     services:
       postgres:
         image: postgis/postgis:16-3.4
@@ -202,9 +210,18 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 10
+      redis:
+        image: redis:8.6-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ env.RESOLVED_REF }}
           fetch-depth: 0
@@ -222,7 +239,7 @@ jobs:
           du -h -d1 . 2>/dev/null | sort -hr | head -20 || true
 
       - name: "Install uv"
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           enable-cache: true
@@ -237,18 +254,31 @@ jobs:
             sleep 2
           done
 
+      # Tests build tables with db.create_all(), so migrations are checked here
+      # on their own empty database.
+      - name: "Check Alembic migrations"
+        env:
+          DB_NAME: ci_migr_check
+        run: |
+          set -euo pipefail
+          psql -h localhost -U buska_user -d buska_db -v ON_ERROR_STOP=1 -c "CREATE DATABASE ci_migr_check"
+          # The initial migration expects these extensions to exist already.
+          psql -h localhost -U buska_user -d ci_migr_check -v ON_ERROR_STOP=1 \
+            -c "CREATE EXTENSION IF NOT EXISTS postgis" \
+            -c 'CREATE EXTENSION IF NOT EXISTS "uuid-ossp"'
+
+          # upgrade head also fails when there is more than one head.
+          uv run alembic upgrade head
+          uv run alembic check
+          uv run alembic downgrade base
+          uv run alembic upgrade head
+
       - name: "Run Integration (DB) with Coverage"
         id: coverage
         env:
-          ENV: test
-          DB_USER: buska_user
-          DB_PASSWORD: buska_pass
-          DB_HOST: localhost
-          DB_PORT: 5432
-          DB_NAME: buska_db
           POSTGRES_USER: buska_user
           POSTGRES_PASSWORD: buska_pass
-          JWT_SECRET_KEY: test_secret
+          REDIS_URL: redis://localhost:6379/0
         run: |
           uv run pytest -m "not e2e" \
             --cov=app --cov-branch --cov-report=term-missing --cov-report=xml --cov-report=html
@@ -264,7 +294,7 @@ jobs:
 
       - name: "Upload Coverage Reports (DB)"
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-reports-db
           path: |
@@ -274,7 +304,7 @@ jobs:
 
       - name: "Comment CI Summary on PR"
         if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const lineCov = "${{ steps.coverage.outputs.COVERAGE_PERCENT }}";
@@ -398,7 +428,7 @@ jobs:
       RESOLVED_REF: ${{ needs.meta.outputs.resolved_ref }}
       SHOULD_TAG_LATEST: ${{ needs.meta.outputs.should_tag_latest }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ env.RESOLVED_REF }}
           fetch-depth: 0
@@ -476,7 +506,7 @@ jobs:
 
       - name: "Upload Docker Image Artifact (main only)"
         if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: docker-image
           path: |
@@ -512,7 +542,7 @@ jobs:
     environment:
       name: production
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Show disk space before deploy
         shell: bash
@@ -527,7 +557,7 @@ jobs:
           docker ps -a || true
 
       - name: "Download Docker Image"
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: docker-image
 
@@ -543,6 +573,7 @@ jobs:
           echo "API_IMAGE=$API_IMAGE" >> $GITHUB_ENV
 
       - name: "Create .env.prod"
+        shell: bash
         env:
           DB_USER: ${{ secrets.DB_USER }}
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
@@ -556,6 +587,11 @@ jobs:
           FRONTEND_URL: ${{ secrets.FRONTEND_URL }}
           CORS_ORIGINS: ${{ secrets.CORS_ORIGINS }}
           FIREBASE_CREDENTIALS: ${{ secrets.FIREBASE_CREDENTIALS }}
+          TIMEZONE: ${{ vars.TIMEZONE }}
+          ROTA_BUFFER_MINUTOS_PADRAO: ${{ vars.ROTA_BUFFER_MINUTOS_PADRAO }}
+          ROTA_BUFFER_MINUTOS_MAX: ${{ vars.ROTA_BUFFER_MINUTOS_MAX }}
+          ROTA_PRAZO_INICIO_MINUTOS_PADRAO: ${{ vars.ROTA_PRAZO_INICIO_MINUTOS_PADRAO }}
+          ROTA_PRAZO_INICIO_MINUTOS_MAX: ${{ vars.ROTA_PRAZO_INICIO_MINUTOS_MAX }}
         run: |
           cat > .env.prod <<EOF
           DB_USER=${DB_USER}
@@ -574,6 +610,12 @@ jobs:
           CORS_ORIGINS=${CORS_ORIGINS}
           FIREBASE_CREDENTIALS=${FIREBASE_CREDENTIALS}
           EOF
+          # Optional repository variables: an empty line would override the Settings default
+          for name in TIMEZONE ROTA_BUFFER_MINUTOS_PADRAO ROTA_BUFFER_MINUTOS_MAX ROTA_PRAZO_INICIO_MINUTOS_PADRAO ROTA_PRAZO_INICIO_MINUTOS_MAX; do
+            if [ -n "${!name}" ]; then
+              echo "${name}=${!name}" >> .env.prod
+            fi
+          done
           chmod 600 .env.prod
 
       - name: Start database first
@@ -607,7 +649,7 @@ jobs:
           docker exec buska_db_prod psql -U "$DB_USER" -d "$DB_NAME" -c 'CREATE EXTENSION IF NOT EXISTS "uuid-ossp";' || true
 
       - name: "Install uv"
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           enable-cache: true

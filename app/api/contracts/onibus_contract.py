@@ -11,8 +11,7 @@ def register_models(api):
         {
             "placa": fields.String(required=True, description="Placa do veículo"),
             "modelo": fields.String(description="Modelo"),
-            "capacidade": fields.Integer(description="Capacidade de passageiros"),
-            "ano": fields.Integer(description="Ano de fabricação"),
+            "capacidade": fields.Integer(required=True, description="Capacidade de passageiros"),
         },
     )
 
@@ -23,7 +22,7 @@ def register_models(api):
             "placa": fields.String(description="Placa"),
             "modelo": fields.String(description="Modelo"),
             "capacidade": fields.Integer(description="Capacidade"),
-            "ano": fields.Integer(description="Ano"),
+            "organizacao_id": fields.String(description="UUID da organização"),
         },
     )
 

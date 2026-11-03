@@ -15,16 +15,13 @@ from .validators import (
 )
 
 __all__ = [
-    # Logging
     "audit_logger",
     "AuditLogger",
     "setup_logging",
     "setup_request_id_middleware",
-    # Security
     "SecurityConfig",
     "setup_security_headers",
     "check_production_security",
-    # Validators
     "validate_uuid",
     "validate_cpf",
     "validate_email",

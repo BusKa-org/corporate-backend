@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from flask import Flask, g, has_request_context, request
-from pythonjsonlogger import jsonlogger
+from pythonjsonlogger.json import JsonFormatter
 
 
 class RequestIdFilter(logging.Filter):
@@ -28,7 +28,7 @@ class RequestIdFilter(logging.Filter):
         return True
 
 
-class CustomJsonFormatter(jsonlogger.JsonFormatter):
+class CustomJsonFormatter(JsonFormatter):
     """Custom JSON formatter with additional fields."""
 
     def add_fields(
@@ -58,19 +58,10 @@ class CustomJsonFormatter(jsonlogger.JsonFormatter):
 
 
 def setup_logging(app: Flask) -> None:
-    """
-    Configure logging for the application.
-
-    - Development (DEBUG=True): Human-readable colored format
-    - Production (DEBUG=False): Structured JSON format
-
-    Args:
-        app: Flask application instance
-    """
+    """Configure logging: colored human-readable output when DEBUG, JSON otherwise."""
     is_debug = app.config.get("DEBUG", False)
     log_level = logging.DEBUG if is_debug else logging.INFO
 
-    # Choose formatter based on environment
     if is_debug:
         # Human-readable format for development
         formatter = logging.Formatter(
@@ -98,7 +89,6 @@ def setup_logging(app: Flask) -> None:
     app_logger = logging.getLogger("app")
     app_logger.setLevel(log_level)
 
-    # Suppress noisy loggers
     logging.getLogger("werkzeug").setLevel(logging.WARNING)
     logging.getLogger("urllib3").setLevel(logging.WARNING)
 
@@ -107,12 +97,7 @@ def setup_logging(app: Flask) -> None:
 
 
 def setup_request_id_middleware(app: Flask) -> None:
-    """
-    Add request ID middleware to track requests across the application.
-
-    Args:
-        app: Flask application instance
-    """
+    """Add request ID middleware to track requests across the application."""
 
     @app.before_request
     def add_request_id() -> None:
@@ -141,16 +126,7 @@ class AuditLogger:
         success: bool = True,
         details: dict[str, Any] | None = None,
     ) -> None:
-        """
-        Log authentication events.
-
-        Args:
-            action: Action performed (login, logout, register, etc.)
-            user_id: User ID if available
-            email: User email
-            success: Whether the action was successful
-            details: Additional details
-        """
+        """Log authentication events (login, logout, register, etc.)."""
         extra = {
             "audit_type": "authentication",
             "action": action,
@@ -173,16 +149,7 @@ class AuditLogger:
         resource_id: str | None = None,
         details: dict[str, Any] | None = None,
     ) -> None:
-        """
-        Log user actions on resources.
-
-        Args:
-            action: Action performed (create, update, delete, etc.)
-            user_id: User performing the action
-            resource_type: Type of resource (user, rota, viagem, etc.)
-            resource_id: ID of the resource
-            details: Additional details
-        """
+        """Log user actions on resources (create, update, delete, etc.)."""
         extra = {
             "audit_type": "user_action",
             "action": action,
@@ -201,15 +168,7 @@ class AuditLogger:
         user_id: str | None = None,
         details: dict[str, Any] | None = None,
     ) -> None:
-        """
-        Log security-related events.
-
-        Args:
-            event_type: Type of security event
-            severity: Severity level (low, medium, high, critical)
-            user_id: User ID if applicable
-            details: Additional details
-        """
+        """Log security-related events. severity: low, medium, high or critical."""
         extra = {
             "audit_type": "security",
             "event_type": event_type,
@@ -226,5 +185,4 @@ class AuditLogger:
             self.logger.info(f"Security: {event_type}", extra=extra)
 
 
-# Global audit logger instance
 audit_logger = AuditLogger()
