@@ -14,7 +14,7 @@ from app.core.exceptions import (
     ValidationError,
 )
 from app.models.base import db
-from app.models.enum import TipoInstituicao, UserRole
+from app.models.enum import UserRole
 from app.models.geo import Endereco, Instituicao, Ponto
 from app.models.organizacao import Organizacao
 from app.models.user import User
@@ -34,29 +34,32 @@ def create_instituicao(gestor_id: str, data: dict[str, Any]) -> Instituicao:
 
     nome = data.get("nome")
     cnpj = data.get("cnpj")
-    tipo_str = data.get("tipo", "ESCOLA_PUBLICA")
+    tipo = data.get("tipo")
     end_data = data.get("endereco")
 
     if not end_data:
         raise ValidationError("Dados de endereço são obrigatórios")
 
-    organizacao = db.session.get(Organizacao, user.organizacao_id)
-    if not organizacao or not organizacao.estado:
+    uf = end_data.get("uf")
+    if uf:
+        uf = uf.upper()
+    else:
+        organizacao = db.session.get(Organizacao, user.organizacao_id)
+        if organizacao:
+            uf = organizacao.estado
+    if not uf:
         raise ValidationError(
-            "Organização sem UF cadastrada. "
-            "Peça ao administrador para cadastrar o estado da organização."
+            "Organização sem UF cadastrada. Informe a UF no endereço ou peça "
+            "ao administrador para cadastrar o estado da organização."
         )
-
-    existente = Instituicao.query.filter_by(organizacao_id=user.organizacao_id, cnpj=cnpj).first()
-    if existente:
-        raise ConflictError("Já existe uma instituição com este CNPJ", field="cnpj")
 
     try:
         novo_ponto = Ponto(
             organizacao_id=user.organizacao_id,
             latitude=end_data.get("latitude"),
             longitude=end_data.get("longitude"),
-            apelido=f"Inst: {nome}",
+            # apelido is String(100) but nome allows 200, so the label is cut.
+            apelido=f"Inst: {nome}"[:100],
         )
         db.session.add(novo_ponto)
         db.session.flush()
@@ -64,12 +67,11 @@ def create_instituicao(gestor_id: str, data: dict[str, Any]) -> Instituicao:
         nova_inst = Instituicao(
             nome=nome,
             cnpj=cnpj,
-            # The schema validates enum NAMES (e.g. "INSTITUTO_FEDERAL"), not values.
-            tipo=TipoInstituicao[tipo_str],
+            tipo=tipo,
             # Entered by a gestor, not imported from EMEC/INEP (same as seed.py).
             fonte="MANUAL",
             codigo_externo=cnpj,
-            uf=organizacao.estado,
+            uf=uf,
             organizacao_id=user.organizacao_id,
             ponto_id=novo_ponto.id,
         )
@@ -88,12 +90,9 @@ def create_instituicao(gestor_id: str, data: dict[str, Any]) -> Instituicao:
         db.session.commit()
         return nova_inst
 
-    except AppError:
-        db.session.rollback()
-        raise
     except IntegrityError as e:
         db.session.rollback()
-        # This constraint is global, so a CNPJ used by another organization lands here.
+        # Global constraint: catches duplicates in this and in other organizations.
         constraint = getattr(getattr(e.orig, "diag", None), "constraint_name", None)
         if constraint == "uq_instituicao_fonte_codigo_externo":
             raise ConflictError("Já existe uma instituição com este CNPJ", field="cnpj")

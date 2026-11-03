@@ -5,19 +5,14 @@ from app.schemas.common import BaseSchema
 from app.schemas.endereco_schema import EnderecoInputSchema, EnderecoResponseSchema
 from app.schemas.validators import validate_cnpj
 
-# Built from the enum so the allowed list cannot drift from it.
-TIPOS_INSTITUICAO: list[str] = []
-for tipo_instituicao in TipoInstituicao:
-    TIPOS_INSTITUICAO.append(tipo_instituicao.name)
-
 
 class InstituicaoCreateRequestSchema(BaseSchema):
-    nome = fields.String(required=True)
+    nome = fields.String(required=True, validate=validate.Length(min=1, max=200))
     # Loads as digits only, so "12.345.678/0001-99" and "12345678000199" match.
     cnpj = fields.Function(deserialize=validate_cnpj, required=True)
-    tipo = fields.String(
+    tipo = fields.Enum(
+        TipoInstituicao,
         required=True,
-        validate=validate.OneOf(TIPOS_INSTITUICAO),
         metadata={"description": "Tipo da instituição conforme modelo"},
     )
     endereco = fields.Nested(EnderecoInputSchema, required=True)

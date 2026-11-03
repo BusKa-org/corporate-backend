@@ -101,3 +101,44 @@ def test_create_instituicao_outra_integrity_error_retorna_500(gestor):
 
     assert r.status_code == 500
     assert "fk_outra_constraint" not in r.get_data(as_text=True)
+
+
+@pytest.mark.integration
+def test_create_instituicao_nome_longo_retorna_400(gestor):
+    payload = _payload("ESCOLA_PUBLICA")
+    payload["nome"] = "A" * 201
+    r = gestor.client.post("/v1/instituicoes/", json=payload)
+    assert r.status_code == 400
+
+
+@pytest.mark.integration
+def test_create_instituicao_nome_de_200_cabe_no_apelido(gestor):
+    payload = _payload("ESCOLA_PUBLICA")
+    payload["nome"] = "A" * 200
+    r = gestor.client.post("/v1/instituicoes/", json=payload)
+    assert r.status_code == 201, r.get_json()
+
+
+@pytest.mark.integration
+def test_create_instituicao_latitude_fora_do_intervalo_retorna_400(gestor):
+    payload = _payload("ESCOLA_PUBLICA")
+    payload["endereco"]["latitude"] = 500
+    r = gestor.client.post("/v1/instituicoes/", json=payload)
+    assert r.status_code == 400
+
+
+@pytest.mark.integration
+def test_create_instituicao_usa_uf_do_endereco(gestor):
+    # The gestor's organização is in PB (OrganizacaoFactory).
+    payload = _payload("ESCOLA_PUBLICA")
+    payload["endereco"]["uf"] = "pe"
+    r = gestor.client.post("/v1/instituicoes/", json=payload)
+    assert r.status_code == 201, r.get_json()
+    assert r.get_json()["uf"] == "PE"
+
+
+@pytest.mark.integration
+def test_create_instituicao_sem_uf_usa_a_da_organizacao(gestor):
+    r = gestor.client.post("/v1/instituicoes/", json=_payload("ESCOLA_PUBLICA"))
+    assert r.status_code == 201, r.get_json()
+    assert r.get_json()["uf"] == "PB"
