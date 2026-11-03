@@ -61,12 +61,15 @@ class InstituicaoListResource(Resource):
             200,
         )
 
-    @api.doc("create_instituicao")
+    @api.doc(
+        "create_instituicao",
+        responses={400: "Validation error", 409: "CNPJ já cadastrado", 500: "Internal error"},
+    )
     @api.expect(models["instituicao_create_request"])
     @api.response(201, "Created", models["instituicao_response"])
     @jwt_required()
     def post(self) -> tuple[dict[str, Any], int]:
-        """Cadastra uma nova instituição com endereço."""
+        """Registers a new institution with its address."""
         user_id = get_jwt_identity()
         payload = instituicao_create_request_schema.load(request.get_json(silent=True) or {})
 

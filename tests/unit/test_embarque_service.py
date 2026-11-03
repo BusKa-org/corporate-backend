@@ -1,4 +1,4 @@
-"""Peças puras do serviço de embarque (RF-15 a RF-18)."""
+"""Pure pieces of the boarding service (RF-15 to RF-18)."""
 
 from datetime import UTC, datetime, timedelta
 
@@ -44,14 +44,14 @@ def test_recusa_carrega_codigo_proprio_no_contrato_de_erro():
 
 @pytest.mark.unit
 def test_sincronizacao_aceita_a_viagem_ja_encerrada():
-    """A fila offline chega depois do fim do percurso — RF-18."""
+    """The offline queue arrives after the route ends (RF-18)."""
     assert StatusViagem.FINALIZADA in embarque_service.SINCRONIZAVEL
     assert StatusViagem.FINALIZADA not in embarque_service.EM_PERCURSO
 
 
 @pytest.mark.unit
 def test_tipos_de_evento_cobrem_a_fila_do_app():
-    # EMBARQUE segue no esquema só para ser recusado com EVENTO_DESCONTINUADO.
+    # EMBARQUE stays in the schema only to be rejected with EVENTO_DESCONTINUADO.
     assert set(embarque_service.TIPOS_EVENTO) == {
         "EMBARQUE",
         "EMBARQUE_CONFIRMADO",

@@ -20,7 +20,7 @@ def test_senha_e_destinatario_nao_vao_para_o_log(caplog):
         with caplog.at_level(logging.DEBUG):
             send_email(to="aluno@exemplo.test", subject="Teste", body_plain="Oi")
 
-    # Garante que o envio passou pelo login, e não saiu antes pelo "e-mail não configurado".
+    # Ensures the send went through login, and did not exit earlier on "e-mail not configured".
     smtp.return_value.__enter__.return_value.login.assert_called_once()
     assert "senha-secreta-do-smtp" not in caplog.text
     assert "aluno@exemplo.test" not in caplog.text

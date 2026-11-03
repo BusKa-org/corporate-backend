@@ -1,4 +1,4 @@
-"""Testes de integração do serviço de credencial de embarque."""
+"""Integration tests for the boarding credential service."""
 
 from datetime import UTC, datetime
 
@@ -91,7 +91,7 @@ def test_gerar_credencial_viagem_nao_encontrada(_db, aluno, ponto):
 
 
 def test_validar_credencial_foi_removida():
-    """As regras da credencial lida moram só em embarque_service."""
+    """The scanned credential rules live only in embarque_service."""
     assert not hasattr(credencial_embarque_service, "validar_credencial")
 
 
@@ -141,7 +141,7 @@ def test_get_credencial_embarque_devolve_a_do_ponto_atual(
     _db.session.commit()
     url = f"/v1/viagens/{viagem_futura_agendada_com_motorista.id}/credencial-embarque"
 
-    # O ponto mudou e ninguém reemitiu: a credencial antiga não é mais a dele.
+    # The stop changed and no one reissued: the old credential is no longer theirs.
     assert aluno.client.get(url).status_code == 404
 
     nova = _gerar(viagem_futura_agendada_com_motorista, aluno, outro_ponto)

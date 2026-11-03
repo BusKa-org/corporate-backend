@@ -24,14 +24,13 @@ class GestorFactory(factory.Factory):
     status = UserStatus.ACTIVE
 
     class Params:
-        # Params fica fora dos kwargs do modelo. A versão anterior passava
-        # `_raw_password` direto para o construtor e estourava TypeError —
-        # não aparecia porque nada chamava `create_with_password`.
+        # Params stays out of the model kwargs. The previous version passed
+        # `_raw_password` straight to the constructor and raised TypeError.
         raw_password = SENHA_PADRAO
 
     @classmethod
     def create_with_password(cls, password: str, **kwargs):
-        """Cria o usuário com uma senha conhecida, para testes que fazem login."""
+        """Create the user with a known password, for tests that log in."""
         return cls(raw_password=password, **kwargs)
 
 
@@ -55,14 +54,13 @@ class AlunoFactory(factory.Factory):
     cpf_responsavel = factory.Faker("cpf", locale="pt_BR")
 
     class Params:
-        # Params fica fora dos kwargs do modelo. A versão anterior passava
-        # `_raw_password` direto para o construtor e estourava TypeError —
-        # não aparecia porque nada chamava `create_with_password`.
+        # Params stays out of the model kwargs. The previous version passed
+        # `_raw_password` straight to the constructor and raised TypeError.
         raw_password = SENHA_PADRAO
 
     @classmethod
     def create_with_password(cls, password: str, **kwargs):
-        """Cria o usuário com uma senha conhecida, para testes que fazem login."""
+        """Create the user with a known password, for tests that log in."""
         return cls(raw_password=password, **kwargs)
 
 
@@ -87,5 +85,5 @@ class MotoristaFactory(factory.Factory):
 
     @classmethod
     def create_with_password(cls, password: str, **kwargs):
-        """Cria o motorista com uma senha conhecida, para testes que fazem login."""
+        """Create the driver with a known password, for tests that log in."""
         return cls(raw_password=password, **kwargs)

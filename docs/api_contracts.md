@@ -401,8 +401,7 @@ Counting key depends on the route:
   anyway. Known trade-off: anyone can use up a victim's e-mail bucket and block
   that one user's login for up to a minute.
 - `POST /v1/auth/reset-password`: the body's e-mail if it has one, otherwise
-  the reset `token` (JSON or form). `GET /v1/auth/reset-password` and
-  `GET`/`POST /v1/convites/aceite/<token>`: the token. No token: one shared
+  the reset `token` from the JSON body. `GET`/`POST /v1/convites/aceite/<token>`: the token. No token: one shared
   `sem-token` bucket.
 - E-mails, tokens and IPs are stored in the key as a keyed hash
   (HMAC-SHA256 with `JWT_SECRET_KEY`, first 32 hex chars), never in clear
@@ -423,7 +422,7 @@ counted, and CORS exposes `Retry-After` and `X-RateLimit-*` to the browser.
 | Setting | Default | Routes |
 |---|---|---|
 | `RATELIMIT_SENSITIVE` | `5 per minute` | `POST /v1/convites/pin/validar`, `POST /v1/auth/reset-password`, `POST /v1/users/change-password` |
-| `RATELIMIT_AUTH` | `10 per minute` | `POST /v1/auth/login`, `POST /v1/auth/forgot-password`, `GET /v1/auth/reset-password`, `GET`/`POST /v1/convites/aceite/<token>`, `POST /v1/convites/pin` |
+| `RATELIMIT_AUTH` | `10 per minute` | `POST /v1/auth/login`, `POST /v1/auth/forgot-password`, `GET`/`POST /v1/convites/aceite/<token>`, `POST /v1/convites/pin` |
 | `RATELIMIT_REALTIME` | `120 per minute` | `GET`/`POST /v1/viagens/<id>/localizacao`, `POST /v1/viagens/<id>/localizacao-aluno`, `POST /v1/telemetria/ingestao`, `POST /v1/embarque/viagens/<id>/` `roteiro/avancar`, `checkin`, `confirmacao`, `recusa`, `manual`, `sincronizacao` |
 | `RATELIMIT_DEFAULT` | `2000 per hour` | every other route |
 | (none) | | `/health`, `/ready` (probes are never limited) |

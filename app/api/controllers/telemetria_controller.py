@@ -1,9 +1,4 @@
-"""RF-22 — ingestão e consulta de telemetria da bateria.
-
-Namespace registrado vazio de propósito: o registro em `app/__init__.py` é
-feito uma vez, antes dos planos rodarem, para que nenhum deles precise editar
-o app factory. Os recursos entram aqui.
-"""
+"""Battery telemetry ingestion and queries (RF-22)."""
 
 from typing import Any
 
@@ -43,7 +38,7 @@ class TelemetriaIngestaoResource(Resource):
     @jwt_required()
     @limite_tempo_real
     def post(self) -> tuple[dict[str, Any], int]:
-        """(Veículo) Envia um lote de amostras de telemetria"""
+        """(Vehicle) Sends a batch of telemetry samples"""
         current_user_id = get_jwt_identity()
         data = request.get_json(silent=True) or {}
         payload = ingestao_request_schema.load(data)
@@ -59,7 +54,7 @@ class TelemetriaUltimoResource(Resource):
     @api.response(200, "Success", models["telemetria_list_response"])
     @jwt_required()
     def get(self) -> tuple[dict[str, Any], int]:
-        """(Gestor) Última leitura de cada veículo da frota"""
+        """(Manager) Latest reading of each fleet vehicle"""
         current_user_id = get_jwt_identity()
         leituras = telemetria_service.ultimo_por_veiculo(current_user_id)
         return (
@@ -79,7 +74,7 @@ class TelemetriaSerieResource(Resource):
     @api.response(200, "Success", models["telemetria_list_response"])
     @jwt_required()
     def get(self) -> tuple[dict[str, Any], int]:
-        """(Gestor) Série temporal de telemetria no período"""
+        """(Manager) Telemetry time series for the period"""
         current_user_id = get_jwt_identity()
         filtros = periodo_query_schema.load(request.args.to_dict())
         leituras = telemetria_service.serie(
@@ -104,7 +99,7 @@ class TelemetriaConsumoViagemResource(Resource):
     @api.response(200, "Success", models["consumo_viagem_list_response"])
     @jwt_required()
     def get(self) -> tuple[dict[str, Any], int]:
-        """(Gestor) Consumo energético agregado por viagem"""
+        """(Manager) Aggregated energy consumption per trip"""
         current_user_id = get_jwt_identity()
         filtros = periodo_query_schema.load(request.args.to_dict())
         agregados = telemetria_service.consumo_por_viagem(

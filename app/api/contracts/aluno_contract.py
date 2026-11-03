@@ -8,21 +8,23 @@ ACESSIBILIDADE_DESC = (
 )
 
 
+def endereco_input_fields():
+    """Fields of EnderecoInputSchema, shared by the aluno and instituicao contracts."""
+    return {
+        "logradouro": fields.String(required=True, max_length=150, description="Logradouro"),
+        "numero": fields.String(required=True, max_length=20, description="Número"),
+        "bairro": fields.String(required=True, max_length=100, description="Bairro"),
+        "cidade": fields.String(required=True, max_length=100, description="Cidade"),
+        "cep": fields.String(required=True, max_length=10, description="CEP"),
+        "latitude": fields.Float(required=True, min=-90, max=90, description="Latitude"),
+        "longitude": fields.Float(required=True, min=-180, max=180, description="Longitude"),
+    }
+
+
 def register_models(api):
     """Register aluno models with the API namespace."""
 
-    endereco_input = api.model(
-        "EnderecoInput",
-        {
-            "logradouro": fields.String(required=True, description="Logradouro"),
-            "numero": fields.String(required=True, description="Número"),
-            "bairro": fields.String(required=True, description="Bairro"),
-            "cidade": fields.String(required=True, description="Cidade"),
-            "cep": fields.String(required=True, description="CEP"),
-            "latitude": fields.Float(required=True, description="Latitude"),
-            "longitude": fields.Float(required=True, description="Longitude"),
-        },
-    )
+    endereco_input = api.model("EnderecoInput", endereco_input_fields())
 
     me_update_request = api.model(
         "AlunoMeUpdateRequest",

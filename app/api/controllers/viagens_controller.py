@@ -40,11 +40,10 @@ from app.services.consentimento_service import exige_consentimento
 
 api = Namespace("viagens", description="Execução de Viagens")
 
+# API contracts (Swagger documentation)
 ponto_models = ponto_contract.register_models(api)
 credencial_embarque_models = credencial_embarque_contract.register_models(api)
 solicitacao_models = solicitacao_contract.register_models(api)
-
-# API contracts (Swagger documentation)
 models = viagem_contract.register_models(api)
 
 # Validation schemas (Marshmallow)
@@ -60,7 +59,6 @@ viagem_list_query_schema = ViagemListQuerySchema()
 message_response_schema = MessageResponseSchema()
 viagem_aluno_confirmacao_response_schema = ViagemAlunoConfirmacaoResponseSchema()
 viagem_agenda_aluno_list_response_schema = ViagemAgendaAlunoListResponseSchema()
-
 
 ponto_flat_list_response_schema = PontoFlatListResponseSchema()
 credencial_embarque_response_schema = CredencialEmbarqueResponseSchema()
@@ -84,7 +82,7 @@ class ViagemDeclaracaoResource(Resource):
     @jwt_required()
     @exige_consentimento
     def post(self, id: str) -> tuple[dict[str, Any], int]:
-        """(Aluno) Declara origem e destino durante o buffer (RF-13/RF-14)"""
+        """(Student) Declares origin and destination during the buffer (RF-13/RF-14)"""
         payload = declaracao_trajeto_request_schema.load(request.get_json(silent=True) or {})
         solicitacao = solicitacoes_service.declarar_trajeto(get_jwt_identity(), id, payload)
         return solicitacao_response_schema.dump(solicitacao), 200
@@ -115,7 +113,7 @@ class ViagemPontosResource(Resource):
     @api.response(200, "Success", ponto_models["ponto_flat_list_response"])
     @jwt_required()
     def get(self, id: str) -> tuple[dict[str, Any], int]:
-        """Lista todos os pontos de embarque disponíveis para esta viagem."""
+        """Lists all boarding stops available for this trip."""
         user_id = get_jwt_identity()
         pontos = viagens_service.listar_pontos_embarque(user_id, id)
         return (
@@ -136,7 +134,7 @@ class ViagemCredencialEmbarqueResource(Resource):
     @jwt_required()
     @exige_consentimento
     def get(self, id: str) -> tuple[dict[str, Any], int]:
-        """Retorna o QR de embarque do aluno autenticado para esta viagem."""
+        """Returns the authenticated student's boarding QR for this trip."""
         user_id = get_jwt_identity()
         credencial = credencial_embarque_service.buscar_credencial_do_aluno(user_id, id)
         return credencial_embarque_response_schema.dump(credencial), 200
@@ -228,7 +226,7 @@ class ViagemCancelarResource(Resource):
     @api.response(200, "Trip cancelled successfully", models["viagem_cancelar_response"])
     @jwt_required()
     def put(self, id: str) -> tuple[dict[str, Any], int]:
-        """Cancela uma viagem agendada e notifica alunos (Gestor)"""
+        """Cancels a scheduled trip and notifies students (Manager)"""
         user_id = get_jwt_identity()
         result = viagens_service.cancelar_viagem(user_id, id)
         return result, 200
@@ -242,7 +240,7 @@ class ViagemLocalizacaoResource(Resource):
     @jwt_required()
     @limite_tempo_real
     def post(self, id):
-        """(Motorista) Envia coordenada GPS atual do ônibus em tempo real"""
+        """(Driver) Sends the bus's current GPS coordinate in real time"""
         user_id = get_jwt_identity()
         data = request.get_json()
 
@@ -254,7 +252,7 @@ class ViagemLocalizacaoResource(Resource):
     @jwt_required()
     @limite_tempo_real
     def get(self, id):
-        """(Aluno/Motorista) Obtém a localização atual do ônibus (viagem em andamento)."""
+        """(Student/Driver) Gets the bus's current location (trip in progress)."""
         user_id = get_jwt_identity()
         result = viagens_service.obter_localizacao_onibus(user_id, id)
         return result, 200
@@ -264,13 +262,13 @@ class ViagemLocalizacaoResource(Resource):
 class ViagemLocalizacaoAluno(Resource):
     """Endpoint for students to broadcast their real-time location during an active trip."""
 
-    @api.doc("atualizar_localizacao_aluno", security="Bearer Auth")
+    @api.doc("atualizar_localizacao_aluno", security="Bearer")
     @api.expect(models["localizacao_request"])
     @api.response(200, "Success", models["localizacao_aluno_response"])
     @jwt_required()
     @limite_tempo_real
     def post(self, viagem_id: str):
-        """Recebe o GPS em tempo real do Aluno para o Auto-Checkin (Geofencing)."""
+        """Receives the Student's real-time GPS for auto check-in (geofencing)."""
         current_user_id = get_jwt_identity()
 
         data = request.get_json() or {}
@@ -291,7 +289,7 @@ class ViagemSolicitacaoResource(Resource):
     @api.response(200, "Success", solicitacao_models["solicitacao_response"])
     @jwt_required()
     def delete(self, id: str) -> tuple[dict[str, Any], int]:
-        """(Aluno) Cancela a própria solicitação. Depois do início do percurso vira desistência."""
+        """(Student) Cancels their own request. After the route starts it becomes a dropout."""
         user_id = get_jwt_identity()
         solicitacao = solicitacoes_service.cancelar_solicitacao(user_id, id)
         return solicitacao_response_schema.dump(solicitacao), 200
@@ -303,7 +301,7 @@ class ViagemIniciarPercursoResource(Resource):
     @api.response(200, "Success", models["viagem_response"])
     @jwt_required()
     def post(self, id: str) -> tuple[dict[str, Any], int]:
-        """(Motorista) Inicia o percurso sob demanda e abre a janela de buffer (RF-11)"""
+        """(Driver) Starts the on-demand route and opens the buffer window (RF-11)"""
         user_id = get_jwt_identity()
         viagem = buffer_service.iniciar_percurso(user_id, id)
         return viagem_response_schema.dump(viagem), 200

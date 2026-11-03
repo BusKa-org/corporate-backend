@@ -1,5 +1,3 @@
-# instituicao_parsers.py
-
 from flask_restx import reqparse
 
 instituicao_list_parser = reqparse.RequestParser()

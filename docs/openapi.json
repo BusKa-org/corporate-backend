@@ -12,7 +12,7 @@
             }
           }
         },
-        "summary": "Gestor vê lista de alunos cadastrados",
+        "summary": "Manager lists registered students",
         "operationId": "list_alunos_gestor",
         "parameters": [
           {
@@ -37,7 +37,7 @@
             }
           }
         },
-        "summary": "Aluno atualiza seu perfil (Dados Pessoais + Endereço)",
+        "summary": "Student updates their profile (personal data + address)",
         "operationId": "aluno_profile",
         "parameters": [
           {
@@ -64,7 +64,7 @@
             }
           }
         },
-        "summary": "Aluno envia a própria foto (multipart, campo `foto`)",
+        "summary": "Student uploads their own photo (multipart, field `foto`)",
         "operationId": "aluno_upload_foto",
         "parameters": [
           {
@@ -101,7 +101,7 @@
             }
           }
         },
-        "summary": "(Gestor) Obtém detalhes completos de um aluno",
+        "summary": "(Manager) Gets a student's full details",
         "operationId": "get_aluno_detail",
         "tags": [
           "alunos"
@@ -123,7 +123,7 @@
             "description": "Success"
           }
         },
-        "summary": "Foto do aluno (o próprio aluno, gestor da organização ou motorista da viagem)",
+        "summary": "Student photo (the student, the organization's manager, or the trip's driver)",
         "operationId": "get_aluno_foto",
         "produces": [
           "image/jpeg",
@@ -200,22 +200,45 @@
         ]
       }
     },
-    "/v1/consentimento": {
-      "delete": {
+    "/v1/auth/reset-password": {
+      "post": {
         "responses": {
           "200": {
-            "description": "Consentimento revogado",
+            "description": "Password reset"
+          },
+          "400": {
+            "description": "Validation error, or invalid/expired token"
+          }
+        },
+        "summary": "Reset password with the token from the e-mail link (sent by the frontend)",
+        "operationId": "auth_reset_password",
+        "parameters": [
+          {
+            "name": "payload",
+            "required": true,
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/ResetPasswordRequest"
+            }
+          }
+        ],
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/v1/consentimento": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Estado do consentimento do usuário logado",
             "schema": {
               "$ref": "#/definitions/ConsentimentoEstadoResponse"
             }
-          },
-          "409": {
-            "description": "Não há consentimento vigente"
           }
         },
-        "summary": "Revoga o consentimento",
-        "description": "O usuário volta ao estado pendente.",
-        "operationId": "revogar_consentimento",
+        "summary": "Current terms version and whether the logged-in user still needs to accept it",
+        "operationId": "get_consentimento",
         "tags": [
           "consentimento"
         ]
@@ -232,8 +255,8 @@
             "description": "Versão do termo inválida"
           }
         },
-        "summary": "Registra o aceite da versão vigente do termo",
-        "description": "Corpo: {\"versao\": \"...\"}",
+        "summary": "Records acceptance of the current terms version",
+        "description": "Body: {\"versao\": \"...\"}",
         "operationId": "aceitar_consentimento",
         "parameters": [
           {
@@ -249,23 +272,54 @@
           "consentimento"
         ]
       },
-      "get": {
+      "delete": {
         "responses": {
           "200": {
-            "description": "Estado do consentimento do usuário logado",
+            "description": "Consentimento revogado",
             "schema": {
               "$ref": "#/definitions/ConsentimentoEstadoResponse"
             }
+          },
+          "409": {
+            "description": "Não há consentimento vigente"
           }
         },
-        "summary": "Versão vigente do termo e se o usuário logado ainda precisa aceitar",
-        "operationId": "get_consentimento",
+        "summary": "Revokes consent",
+        "description": "The user goes back to the pending state.",
+        "operationId": "revogar_consentimento",
         "tags": [
           "consentimento"
         ]
       }
     },
     "/v1/convites": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Convites da organização",
+            "schema": {
+              "$ref": "#/definitions/ConviteListResponse"
+            }
+          },
+          "403": {
+            "description": "Não é gestor"
+          }
+        },
+        "summary": "(Manager) Lists the organization's invites",
+        "description": "Optional filter: ?estado=",
+        "operationId": "listar_convites",
+        "parameters": [
+          {
+            "in": "query",
+            "description": "PENDENTE, CONCLUIDO ou CANCELADO",
+            "name": "estado",
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "convites"
+        ]
+      },
       "post": {
         "responses": {
           "200": {
@@ -281,8 +335,8 @@
             "description": "Não é gestor"
           }
         },
-        "summary": "(Gestor) Convida por e-mail, até 500 por chamada",
-        "description": "Corpo: {\"convites\": [{\"email\", ...}]}",
+        "summary": "(Manager) Invites by e-mail, up to 500 per call",
+        "description": "Body: {\"convites\": [{\"email\", ...}]}",
         "operationId": "criar_convites",
         "parameters": [
           {
@@ -292,33 +346,6 @@
             "schema": {
               "$ref": "#/definitions/ConvitesCreateRequest"
             }
-          }
-        ],
-        "tags": [
-          "convites"
-        ]
-      },
-      "get": {
-        "responses": {
-          "200": {
-            "description": "Convites da organização",
-            "schema": {
-              "$ref": "#/definitions/ConviteListResponse"
-            }
-          },
-          "403": {
-            "description": "Não é gestor"
-          }
-        },
-        "summary": "(Gestor) Lista os convites da organização",
-        "description": "Filtro opcional: ?estado=",
-        "operationId": "listar_convites",
-        "parameters": [
-          {
-            "in": "query",
-            "description": "PENDENTE, CONCLUIDO ou CANCELADO",
-            "name": "estado",
-            "type": "string"
           }
         ],
         "tags": [
@@ -335,6 +362,24 @@
           "type": "string"
         }
       ],
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Dados do convite",
+            "schema": {
+              "$ref": "#/definitions/ConviteDadosResponse"
+            }
+          },
+          "404": {
+            "description": "Convite inválido ou expirado"
+          }
+        },
+        "summary": "(Public) Data filled in by the manager and the fields still missing",
+        "operationId": "consultar_convite",
+        "tags": [
+          "convites"
+        ]
+      },
       "post": {
         "responses": {
           "201": {
@@ -350,8 +395,7 @@
             "description": "E-mail ou CPF já cadastrado"
           }
         },
-        "summary": "(Público) Conclui o cadastro",
-        "description": "Corpo: nome, cpf, telefone, instituicao_id, senha,\nnecessidades_acessibilidade, observacao_acessibilidade",
+        "summary": "(Public) Completes sign-up: nome, cpf, telefone, instituicao_id, senha, accessibility",
         "operationId": "concluir_convite",
         "parameters": [
           {
@@ -366,24 +410,6 @@
         "tags": [
           "convites"
         ]
-      },
-      "get": {
-        "responses": {
-          "200": {
-            "description": "Dados do convite",
-            "schema": {
-              "$ref": "#/definitions/ConviteDadosResponse"
-            }
-          },
-          "404": {
-            "description": "Convite inválido ou expirado"
-          }
-        },
-        "summary": "(Público) Dados preenchidos pelo gestor e os campos que ainda faltam",
-        "operationId": "consultar_convite",
-        "tags": [
-          "convites"
-        ]
       }
     },
     "/v1/convites/pin": {
@@ -393,8 +419,8 @@
             "description": "Resposta igual para qualquer e-mail"
           }
         },
-        "summary": "(Público) Envia um PIN de 10 minutos ao e-mail, se ele estiver habilitado",
-        "description": "Corpo: {\"email\"}",
+        "summary": "(Public) Sends a 10-minute PIN to the e-mail, if it is enabled",
+        "description": "Body: {\"email\"}",
         "operationId": "solicitar_pin_do_convite",
         "parameters": [
           {
@@ -424,8 +450,8 @@
             "description": "PIN inválido ou expirado"
           }
         },
-        "summary": "(Público) Confere o PIN",
-        "description": "Devolve o token que abre /aceite/<token>. Corpo: {\"email\", \"pin\"}",
+        "summary": "(Public) Checks the PIN, returns the token for /aceite/<token>",
+        "description": "Body: {\"email\", \"pin\"}",
         "operationId": "validar_pin_do_convite",
         "parameters": [
           {
@@ -463,7 +489,7 @@
             "description": "Não pendente"
           }
         },
-        "summary": "(Gestor) Cancela um convite pendente",
+        "summary": "(Manager) Cancels a pending invite",
         "operationId": "cancelar_convite",
         "tags": [
           "convites"
@@ -494,8 +520,8 @@
             "description": "Não pendente"
           }
         },
-        "summary": "(Gestor) Reenvia um convite pendente",
-        "description": "O link anterior deixa de valer.",
+        "summary": "(Manager) Resends a pending invite",
+        "description": "The previous link stops working.",
         "operationId": "reenviar_convite",
         "tags": [
           "convites"
@@ -512,7 +538,7 @@
             }
           }
         },
-        "summary": "(Gestor) Indicadores agregados e anonimizados do período (RF-21)",
+        "summary": "(Manager) Aggregated, anonymized indicators for the period (RF-21)",
         "operationId": "indicadores_periodo",
         "parameters": [
           {
@@ -542,7 +568,7 @@
             "description": "Relatório em CSV"
           }
         },
-        "summary": "(Gestor) Exporta o relatório do período em CSV",
+        "summary": "(Manager) Exports the period report as CSV",
         "operationId": "exportar_indicadores",
         "parameters": [
           {
@@ -578,7 +604,7 @@
             }
           }
         },
-        "summary": "Gera o relatório operacional de um período",
+        "summary": "Generates the operational report for a period",
         "operationId": "relatorio_periodo",
         "parameters": [
           {
@@ -629,7 +655,7 @@
             }
           }
         },
-        "summary": "Obtém o progresso de uma viagem (os pontos fixos visitados)",
+        "summary": "Gets a trip's progress (the fixed stops visited)",
         "operationId": "progresso_viagem",
         "parameters": [
           {
@@ -666,7 +692,7 @@
             }
           }
         },
-        "summary": "Obtém o rastro GPS completo (trajeto real) de uma viagem",
+        "summary": "Gets the full GPS trail (actual route) of a trip",
         "operationId": "trajeto_real_viagem",
         "parameters": [
           {
@@ -706,7 +732,7 @@
             }
           }
         },
-        "summary": "Confere o QR lido e devolve o passageiro com a foto, sem embarcar (RF-17)",
+        "summary": "Checks the scanned QR and returns the passenger photo, without boarding (RF-17)",
         "operationId": "checkin_embarque",
         "parameters": [
           {
@@ -747,7 +773,7 @@
             }
           }
         },
-        "summary": "A foto confere: registra o embarque e consome a credencial (RF-17)",
+        "summary": "Photo matches: records the boarding and consumes the credential (RF-17)",
         "operationId": "confirmar_embarque",
         "parameters": [
           {
@@ -782,7 +808,7 @@
             }
           }
         },
-        "summary": "Fallback manual: motorista acha o aluno na lista do ponto (RF-17)",
+        "summary": "Manual fallback: driver finds the student in the stop's list (RF-17)",
         "operationId": "confirmar_embarque_manual",
         "parameters": [
           {
@@ -823,7 +849,7 @@
             }
           }
         },
-        "summary": "A foto não confere: não embarca, recusa o QR e abre ocorrência (RF-17)",
+        "summary": "Photo does not match: no boarding, rejects the QR and opens an incident (RF-17)",
         "operationId": "recusar_embarque",
         "parameters": [
           {
@@ -858,7 +884,7 @@
             }
           }
         },
-        "summary": "Roteiro consolidado do motorista, com embarques e desembarques (RF-16)",
+        "summary": "Driver's consolidated itinerary, with pickups and drop-offs (RF-16)",
         "operationId": "get_roteiro",
         "tags": [
           "embarque"
@@ -883,7 +909,7 @@
             }
           }
         },
-        "summary": "Conclui a parada corrente e segue para a próxima (RF-16)",
+        "summary": "Completes the current stop and moves to the next one (RF-16)",
         "operationId": "avancar_ponto",
         "parameters": [
           {
@@ -918,7 +944,7 @@
             }
           }
         },
-        "summary": "Aplica em lote a fila de eventos registrados sem conexão (RF-18)",
+        "summary": "Applies in batch the queue of events recorded offline (RF-18)",
         "operationId": "sincronizar_eventos_offline",
         "parameters": [
           {
@@ -950,7 +976,7 @@
             "description": "ENDPOINT_DESCONTINUADO: use /checkin e depois /confirmacao"
           }
         },
-        "summary": "Descontinuado: embarcava na leitura, sem conferir a foto (RF-17)",
+        "summary": "Deprecated: boarded on scan, without checking the photo (RF-17)",
         "operationId": "validar_embarque_descontinuado",
         "tags": [
           "embarque"
@@ -958,6 +984,20 @@
       }
     },
     "/v1/instituicoes/": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/InstituicaoListResponse"
+            }
+          }
+        },
+        "operationId": "list_instituicoes",
+        "tags": [
+          "instituicoes"
+        ]
+      },
       "post": {
         "responses": {
           "201": {
@@ -965,9 +1005,18 @@
             "schema": {
               "$ref": "#/definitions/InstituicaoResponse"
             }
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "409": {
+            "description": "CNPJ já cadastrado"
+          },
+          "500": {
+            "description": "Internal error"
           }
         },
-        "summary": "Cadastra uma nova instituição com endereço",
+        "summary": "Registers a new institution with its address",
         "operationId": "create_instituicao",
         "parameters": [
           {
@@ -979,20 +1028,6 @@
             }
           }
         ],
-        "tags": [
-          "instituicoes"
-        ]
-      },
-      "get": {
-        "responses": {
-          "200": {
-            "description": "Success",
-            "schema": {
-              "$ref": "#/definitions/InstituicaoListResponse"
-            }
-          }
-        },
-        "operationId": "list_instituicoes",
         "tags": [
           "instituicoes"
         ]
@@ -1038,17 +1073,6 @@
           "type": "string"
         }
       ],
-      "delete": {
-        "responses": {
-          "200": {
-            "description": "Success"
-          }
-        },
-        "operationId": "delete_instituicao",
-        "tags": [
-          "instituicoes"
-        ]
-      },
       "get": {
         "responses": {
           "200": {
@@ -1062,31 +1086,20 @@
         "tags": [
           "instituicoes"
         ]
-      }
-    },
-    "/v1/notificacoes/": {
-      "post": {
+      },
+      "delete": {
         "responses": {
           "200": {
             "description": "Success"
           }
         },
-        "summary": "(Gestor) Envia um aviso para Rota ou Viagem",
-        "operationId": "gestor_enviar_notificacao",
-        "parameters": [
-          {
-            "name": "payload",
-            "required": true,
-            "in": "body",
-            "schema": {
-              "$ref": "#/definitions/NotificacaoInput"
-            }
-          }
-        ],
+        "operationId": "delete_instituicao",
         "tags": [
-          "notificacoes"
+          "instituicoes"
         ]
-      },
+      }
+    },
+    "/v1/notificacoes/": {
       "get": {
         "responses": {
           "200": {
@@ -1099,8 +1112,30 @@
             }
           }
         },
-        "summary": "Lista as notificações do usuário logado",
+        "summary": "Lists the logged-in user's notifications",
         "operationId": "listar_minhas_notificacoes",
+        "tags": [
+          "notificacoes"
+        ]
+      },
+      "post": {
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "(Manager) Sends a notice to a Route or Trip",
+        "operationId": "gestor_enviar_notificacao",
+        "parameters": [
+          {
+            "name": "payload",
+            "required": true,
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/NotificacaoInput"
+            }
+          }
+        ],
         "tags": [
           "notificacoes"
         ]
@@ -1121,7 +1156,7 @@
             "description": "Success"
           }
         },
-        "summary": "Marca uma notificação como lida",
+        "summary": "Marks a notification as read",
         "operationId": "marcar_notificacao_lida",
         "tags": [
           "notificacoes"
@@ -1129,31 +1164,6 @@
       }
     },
     "/v1/ocorrencias/": {
-      "post": {
-        "responses": {
-          "201": {
-            "description": "Ocorrência registrada",
-            "schema": {
-              "$ref": "#/definitions/OcorrenciaResponse"
-            }
-          }
-        },
-        "summary": "(Aluno / Motorista) Reporta um problema",
-        "operationId": "criar_ocorrencia",
-        "parameters": [
-          {
-            "name": "payload",
-            "required": true,
-            "in": "body",
-            "schema": {
-              "$ref": "#/definitions/OcorrenciaInput"
-            }
-          }
-        ],
-        "tags": [
-          "ocorrencias"
-        ]
-      },
       "get": {
         "responses": {
           "200": {
@@ -1166,7 +1176,7 @@
             }
           }
         },
-        "summary": "(Gestor) Lista ocorrências da organização",
+        "summary": "(Manager) Lists the organization's incidents",
         "operationId": "listar_ocorrencias",
         "parameters": [
           {
@@ -1174,6 +1184,31 @@
             "description": "Filter by status (ABERTA, RESOLVIDA)",
             "name": "status",
             "type": "string"
+          }
+        ],
+        "tags": [
+          "ocorrencias"
+        ]
+      },
+      "post": {
+        "responses": {
+          "201": {
+            "description": "Ocorrência registrada",
+            "schema": {
+              "$ref": "#/definitions/OcorrenciaResponse"
+            }
+          }
+        },
+        "summary": "(Student / Driver) Reports a problem",
+        "operationId": "criar_ocorrencia",
+        "parameters": [
+          {
+            "name": "payload",
+            "required": true,
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/OcorrenciaInput"
+            }
           }
         ],
         "tags": [
@@ -1199,7 +1234,7 @@
             }
           }
         },
-        "summary": "(Gestor) Marca uma ocorrência como resolvida",
+        "summary": "(Manager) Marks an incident as resolved",
         "operationId": "resolver_ocorrencia",
         "tags": [
           "ocorrencias"
@@ -1207,6 +1242,21 @@
       }
     },
     "/v1/onibus/": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/OnibusListResponse"
+            }
+          }
+        },
+        "summary": "Lists the organization's fleet",
+        "operationId": "list_onibus",
+        "tags": [
+          "onibus"
+        ]
+      },
       "post": {
         "responses": {
           "201": {
@@ -1216,7 +1266,7 @@
             }
           }
         },
-        "summary": "Cadastra um novo ônibus",
+        "summary": "Registers a new bus",
         "operationId": "create_onibus",
         "parameters": [
           {
@@ -1231,21 +1281,6 @@
         "tags": [
           "onibus"
         ]
-      },
-      "get": {
-        "responses": {
-          "200": {
-            "description": "Success",
-            "schema": {
-              "$ref": "#/definitions/OnibusListResponse"
-            }
-          }
-        },
-        "summary": "Lista a frota da organização",
-        "operationId": "list_onibus",
-        "tags": [
-          "onibus"
-        ]
       }
     },
     "/v1/onibus/{id}": {
@@ -1257,13 +1292,28 @@
           "type": "string"
         }
       ],
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/OnibusResponse"
+            }
+          }
+        },
+        "summary": "Bus details",
+        "operationId": "get_onibus",
+        "tags": [
+          "onibus"
+        ]
+      },
       "delete": {
         "responses": {
           "200": {
             "description": "Success"
           }
         },
-        "summary": "Remove um ônibus",
+        "summary": "Removes a bus",
         "operationId": "delete_onibus",
         "tags": [
           "onibus"
@@ -1278,7 +1328,7 @@
             }
           }
         },
-        "summary": "Atualiza dados de um ônibus",
+        "summary": "Updates a bus",
         "operationId": "update_onibus",
         "parameters": [
           {
@@ -1293,21 +1343,6 @@
         "tags": [
           "onibus"
         ]
-      },
-      "get": {
-        "responses": {
-          "200": {
-            "description": "Success",
-            "schema": {
-              "$ref": "#/definitions/OnibusResponse"
-            }
-          }
-        },
-        "summary": "Detalhes de um ônibus",
-        "operationId": "get_onibus",
-        "tags": [
-          "onibus"
-        ]
       }
     },
     "/v1/onibus/{id}/janelas": {
@@ -1319,6 +1354,21 @@
           "type": "string"
         }
       ],
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/JanelaListResponse"
+            }
+          }
+        },
+        "summary": "Lists the bus's availability windows",
+        "operationId": "list_janelas",
+        "tags": [
+          "onibus"
+        ]
+      },
       "post": {
         "responses": {
           "201": {
@@ -1328,7 +1378,7 @@
             }
           }
         },
-        "summary": "Cria uma janela de disponibilidade para o ônibus",
+        "summary": "Creates an availability window for the bus",
         "operationId": "create_janela",
         "parameters": [
           {
@@ -1340,21 +1390,6 @@
             }
           }
         ],
-        "tags": [
-          "onibus"
-        ]
-      },
-      "get": {
-        "responses": {
-          "200": {
-            "description": "Success",
-            "schema": {
-              "$ref": "#/definitions/JanelaListResponse"
-            }
-          }
-        },
-        "summary": "Lista as janelas de disponibilidade do ônibus",
-        "operationId": "list_janelas",
         "tags": [
           "onibus"
         ]
@@ -1381,7 +1416,7 @@
             "description": "Success"
           }
         },
-        "summary": "Remove uma janela de disponibilidade",
+        "summary": "Removes an availability window",
         "operationId": "delete_janela",
         "tags": [
           "onibus"
@@ -1389,6 +1424,20 @@
       }
     },
     "/v1/pontos/": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/PontoListResponse"
+            }
+          }
+        },
+        "operationId": "list_pontos",
+        "tags": [
+          "pontos"
+        ]
+      },
       "post": {
         "responses": {
           "201": {
@@ -1412,20 +1461,6 @@
         "tags": [
           "pontos"
         ]
-      },
-      "get": {
-        "responses": {
-          "200": {
-            "description": "Success",
-            "schema": {
-              "$ref": "#/definitions/PontoListResponse"
-            }
-          }
-        },
-        "operationId": "list_pontos",
-        "tags": [
-          "pontos"
-        ]
       }
     },
     "/v1/pontos/{id}": {
@@ -1437,6 +1472,20 @@
           "type": "string"
         }
       ],
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/PontoResponse"
+            }
+          }
+        },
+        "operationId": "get_ponto",
+        "tags": [
+          "pontos"
+        ]
+      },
       "delete": {
         "responses": {
           "200": {
@@ -1471,23 +1520,23 @@
         "tags": [
           "pontos"
         ]
-      },
+      }
+    },
+    "/v1/rotas/": {
       "get": {
         "responses": {
           "200": {
             "description": "Success",
             "schema": {
-              "$ref": "#/definitions/PontoResponse"
+              "$ref": "#/definitions/RotaListResponse"
             }
           }
         },
-        "operationId": "get_ponto",
+        "operationId": "list_rotas",
         "tags": [
-          "pontos"
+          "rotas"
         ]
-      }
-    },
-    "/v1/rotas/": {
+      },
       "post": {
         "responses": {
           "201": {
@@ -1508,20 +1557,6 @@
             }
           }
         ],
-        "tags": [
-          "rotas"
-        ]
-      },
-      "get": {
-        "responses": {
-          "200": {
-            "description": "Success",
-            "schema": {
-              "$ref": "#/definitions/RotaListResponse"
-            }
-          }
-        },
-        "operationId": "list_rotas",
         "tags": [
           "rotas"
         ]
@@ -1552,6 +1587,20 @@
           "type": "string"
         }
       ],
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/RotaDetailResponse"
+            }
+          }
+        },
+        "operationId": "get_rota",
+        "tags": [
+          "rotas"
+        ]
+      },
       "delete": {
         "responses": {
           "200": {
@@ -1586,20 +1635,6 @@
         "tags": [
           "rotas"
         ]
-      },
-      "get": {
-        "responses": {
-          "200": {
-            "description": "Success",
-            "schema": {
-              "$ref": "#/definitions/RotaDetailResponse"
-            }
-          }
-        },
-        "operationId": "get_rota",
-        "tags": [
-          "rotas"
-        ]
       }
     },
     "/v1/rotas/{id}/horarios": {
@@ -1611,6 +1646,20 @@
           "type": "string"
         }
       ],
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/RotaHorarioListResponse"
+            }
+          }
+        },
+        "operationId": "list_rota_horarios",
+        "tags": [
+          "rotas"
+        ]
+      },
       "post": {
         "responses": {
           "201": {
@@ -1634,20 +1683,6 @@
         "tags": [
           "rotas"
         ]
-      },
-      "get": {
-        "responses": {
-          "200": {
-            "description": "Success",
-            "schema": {
-              "$ref": "#/definitions/RotaHorarioListResponse"
-            }
-          }
-        },
-        "operationId": "list_rota_horarios",
-        "tags": [
-          "rotas"
-        ]
       }
     },
     "/v1/rotas/{id}/pontos": {
@@ -1659,6 +1694,20 @@
           "type": "string"
         }
       ],
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/PontoFlatListResponse"
+            }
+          }
+        },
+        "operationId": "list_rota_pontos",
+        "tags": [
+          "rotas"
+        ]
+      },
       "post": {
         "responses": {
           "200": {
@@ -1676,20 +1725,6 @@
             }
           }
         ],
-        "tags": [
-          "rotas"
-        ]
-      },
-      "get": {
-        "responses": {
-          "200": {
-            "description": "Success",
-            "schema": {
-              "$ref": "#/definitions/PontoFlatListResponse"
-            }
-          }
-        },
-        "operationId": "list_rota_pontos",
         "tags": [
           "rotas"
         ]
@@ -1740,7 +1775,7 @@
             }
           }
         },
-        "summary": "(Aluno) Solicita o veículo da rota sob demanda dentro da janela de disponibilidade",
+        "summary": "(Student) Requests the on-demand route's vehicle within the availability window",
         "operationId": "solicitar_viagem",
         "tags": [
           "rotas"
@@ -1765,7 +1800,7 @@
             }
           }
         },
-        "summary": "Rodada ativa da rota sob demanda (viagem null quando ociosa) e as janelas de hoje",
+        "summary": "Active round of the on-demand route (viagem null when idle) and today's windows",
         "operationId": "rodada_ativa",
         "tags": [
           "rotas"
@@ -1833,7 +1868,7 @@
             }
           }
         },
-        "summary": "(Gestor) Consumo energético agregado por viagem",
+        "summary": "(Manager) Aggregated energy consumption per trip",
         "operationId": "consumo_por_viagem",
         "parameters": [
           {
@@ -1864,7 +1899,7 @@
             }
           }
         },
-        "summary": "(Veículo) Envia um lote de amostras de telemetria",
+        "summary": "(Vehicle) Sends a batch of telemetry samples",
         "operationId": "ingerir_telemetria",
         "parameters": [
           {
@@ -1891,7 +1926,7 @@
             }
           }
         },
-        "summary": "(Gestor) Série temporal de telemetria no período",
+        "summary": "(Manager) Telemetry time series for the period",
         "operationId": "serie_telemetria",
         "parameters": [
           {
@@ -1928,7 +1963,7 @@
             }
           }
         },
-        "summary": "(Gestor) Última leitura de cada veículo da frota",
+        "summary": "(Manager) Latest reading of each fleet vehicle",
         "operationId": "ultimo_por_veiculo",
         "tags": [
           "telemetria"
@@ -1948,7 +1983,7 @@
             "description": "Forbidden - not a gestor"
           }
         },
-        "summary": "Lista todos os usuários da organização (Apenas Gestor)",
+        "summary": "Lists all users in the organization (Manager only)",
         "operationId": "list_users",
         "tags": [
           "users"
@@ -1974,7 +2009,7 @@
             "description": "Too many attempts - rate limited"
           }
         },
-        "summary": "Altera a senha do usuário logado (Requer senha atual)",
+        "summary": "Changes the logged-in user's password (requires the current password)",
         "operationId": "change_user_password",
         "parameters": [
           {
@@ -2004,7 +2039,7 @@
             "description": "Token não enviado"
           }
         },
-        "summary": "Atualiza o Token do Firebase (Push Notifications) do aparelho do usuário",
+        "summary": "Updates the Firebase (push notifications) token of the user's device",
         "operationId": "update_fcm_token",
         "parameters": [
           {
@@ -2022,6 +2057,24 @@
       }
     },
     "/v1/users/me": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/UserMeResponse"
+            }
+          },
+          "404": {
+            "description": "User not found"
+          }
+        },
+        "summary": "Logged-in user's profile",
+        "operationId": "get_my_profile",
+        "tags": [
+          "users"
+        ]
+      },
       "delete": {
         "responses": {
           "200": {
@@ -2037,8 +2090,8 @@
             "description": "Viagem em andamento"
           }
         },
-        "summary": "Exclui a conta e os dados pessoais do passageiro logado",
-        "description": "Corpo: {\"email\", \"senha\"}",
+        "summary": "Deletes the logged-in passenger's account and personal data",
+        "description": "Body: {\"email\", \"senha\"}",
         "operationId": "delete_my_account",
         "parameters": [
           {
@@ -2069,7 +2122,7 @@
             "description": "Conflict"
           }
         },
-        "summary": "Atualiza perfil do usuário logado (nome, telefone, receber_notificacoes, cnh)",
+        "summary": "Updates the logged-in user's profile (nome, telefone, receber_notificacoes, cnh)",
         "operationId": "update_my_profile",
         "parameters": [
           {
@@ -2084,27 +2137,36 @@
         "tags": [
           "users"
         ]
-      },
+      }
+    },
+    "/v1/users/motoristas": {
       "get": {
         "responses": {
           "200": {
             "description": "Success",
             "schema": {
-              "$ref": "#/definitions/UserMeResponse"
+              "$ref": "#/definitions/UserListResponse"
             }
           },
-          "404": {
-            "description": "User not found"
+          "403": {
+            "description": "Forbidden - not a gestor"
           }
         },
-        "summary": "Perfil do usuário logado",
-        "operationId": "get_my_profile",
+        "summary": "Lists drivers in the Manager's organization",
+        "operationId": "list_motoristas",
+        "parameters": [
+          {
+            "name": "X-Fields",
+            "in": "header",
+            "type": "string",
+            "format": "mask",
+            "description": "An optional fields mask"
+          }
+        ],
         "tags": [
           "users"
         ]
-      }
-    },
-    "/v1/users/motoristas": {
+      },
       "post": {
         "responses": {
           "201": {
@@ -2123,7 +2185,7 @@
             "description": "Conflict"
           }
         },
-        "summary": "Gestor cria um novo Motorista",
+        "summary": "Manager creates a new Driver",
         "operationId": "create_motorista",
         "parameters": [
           {
@@ -2133,36 +2195,6 @@
             "schema": {
               "$ref": "#/definitions/MotoristaCreateRequest"
             }
-          }
-        ],
-        "tags": [
-          "users"
-        ]
-      },
-      "get": {
-        "responses": {
-          "200": {
-            "description": "Success",
-            "schema": {
-              "type": "array",
-              "items": {
-                "$ref": "#/definitions/UserListResponse"
-              }
-            }
-          },
-          "403": {
-            "description": "Forbidden - not a gestor"
-          }
-        },
-        "summary": "Lista motoristas do mesmo município do Gestor",
-        "operationId": "list_motoristas",
-        "parameters": [
-          {
-            "name": "X-Fields",
-            "in": "header",
-            "type": "string",
-            "format": "mask",
-            "description": "An optional fields mask"
           }
         ],
         "tags": [
@@ -2194,7 +2226,7 @@
             "description": "Has linked trips"
           }
         },
-        "summary": "Gestor remove um motorista",
+        "summary": "Manager removes a driver",
         "operationId": "delete_motorista",
         "tags": [
           "users"
@@ -2218,7 +2250,7 @@
             "description": "Not found"
           }
         },
-        "summary": "Gestor edita um motorista (dados e horário de trabalho)",
+        "summary": "Manager edits a driver (data and working hours)",
         "operationId": "update_motorista",
         "parameters": [
           {
@@ -2260,7 +2292,7 @@
             "description": "User not found"
           }
         },
-        "summary": "Busca usuário por ID (próprio perfil ou mesma organização se Gestor)",
+        "summary": "Gets a user by ID (own profile, or same organization if Manager)",
         "operationId": "get_user_by_id",
         "tags": [
           "users"
@@ -2268,30 +2300,6 @@
       }
     },
     "/v1/viagens/": {
-      "post": {
-        "responses": {
-          "201": {
-            "description": "Created",
-            "schema": {
-              "$ref": "#/definitions/ViagemResponse"
-            }
-          }
-        },
-        "operationId": "create_viagem",
-        "parameters": [
-          {
-            "name": "payload",
-            "required": true,
-            "in": "body",
-            "schema": {
-              "$ref": "#/definitions/ViagemCreateRequest"
-            }
-          }
-        ],
-        "tags": [
-          "viagens"
-        ]
-      },
       "get": {
         "responses": {
           "200": {
@@ -2332,6 +2340,30 @@
             "in": "query",
             "type": "string",
             "description": "UUID da rota"
+          }
+        ],
+        "tags": [
+          "viagens"
+        ]
+      },
+      "post": {
+        "responses": {
+          "201": {
+            "description": "Created",
+            "schema": {
+              "$ref": "#/definitions/ViagemResponse"
+            }
+          }
+        },
+        "operationId": "create_viagem",
+        "parameters": [
+          {
+            "name": "payload",
+            "required": true,
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/ViagemCreateRequest"
+            }
           }
         ],
         "tags": [
@@ -2423,7 +2455,7 @@
             }
           }
         },
-        "summary": "Cancela uma viagem agendada e notifica alunos (Gestor)",
+        "summary": "Cancels a scheduled trip and notifies students (Manager)",
         "operationId": "cancelar_viagem",
         "tags": [
           "viagens"
@@ -2482,7 +2514,7 @@
             }
           }
         },
-        "summary": "Retorna o QR de embarque do aluno autenticado para esta viagem",
+        "summary": "Returns the authenticated student's boarding QR for this trip",
         "operationId": "get_credencial_embarque_viagem",
         "tags": [
           "viagens"
@@ -2513,7 +2545,7 @@
             "description": "Sem lugar no trecho"
           }
         },
-        "summary": "(Aluno) Declara origem e destino durante o buffer (RF-13/RF-14)",
+        "summary": "(Student) Declares origin and destination during the buffer (RF-13/RF-14)",
         "operationId": "declarar_trajeto",
         "parameters": [
           {
@@ -2548,7 +2580,7 @@
             }
           }
         },
-        "summary": "(Motorista) Inicia o percurso sob demanda e abre a janela de buffer (RF-11)",
+        "summary": "(Driver) Starts the on-demand route and opens the buffer window (RF-11)",
         "operationId": "iniciar_percurso",
         "tags": [
           "viagens"
@@ -2564,6 +2596,21 @@
           "type": "string"
         }
       ],
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/LocalizacaoOnibusResponse"
+            }
+          }
+        },
+        "summary": "(Student/Driver) Gets the bus's current location (trip in progress)",
+        "operationId": "obter_localizacao_onibus",
+        "tags": [
+          "viagens"
+        ]
+      },
       "post": {
         "responses": {
           "200": {
@@ -2573,7 +2620,7 @@
             }
           }
         },
-        "summary": "(Motorista) Envia coordenada GPS atual do ônibus em tempo real",
+        "summary": "(Driver) Sends the bus's current GPS coordinate in real time",
         "operationId": "atualizar_localizacao_onibus",
         "parameters": [
           {
@@ -2585,21 +2632,6 @@
             }
           }
         ],
-        "tags": [
-          "viagens"
-        ]
-      },
-      "get": {
-        "responses": {
-          "200": {
-            "description": "Success",
-            "schema": {
-              "$ref": "#/definitions/LocalizacaoOnibusResponse"
-            }
-          }
-        },
-        "summary": "(Aluno/Motorista) Obtém a localização atual do ônibus (viagem em andamento)",
-        "operationId": "obter_localizacao_onibus",
         "tags": [
           "viagens"
         ]
@@ -2623,7 +2655,7 @@
             }
           }
         },
-        "summary": "Lista todos os pontos de embarque disponíveis para esta viagem",
+        "summary": "Lists all boarding stops available for this trip",
         "operationId": "list_pontos_embarque_viagem",
         "tags": [
           "viagens"
@@ -2648,8 +2680,8 @@
             }
           }
         },
-        "summary": "(Aluno) Cancela a própria solicitação",
-        "description": "Depois do início do percurso vira desistência.",
+        "summary": "(Student) Cancels their own request",
+        "description": "After the route starts it becomes a dropout.",
         "operationId": "cancelar_solicitacao",
         "tags": [
           "viagens"
@@ -2674,7 +2706,7 @@
             }
           }
         },
-        "summary": "Recebe o GPS em tempo real do Aluno para o Auto-Checkin (Geofencing)",
+        "summary": "Receives the Student's real-time GPS for auto check-in (geofencing)",
         "operationId": "atualizar_localizacao_aluno",
         "parameters": [
           {
@@ -2688,7 +2720,7 @@
         ],
         "security": [
           {
-            "Bearer Auth": []
+            "Bearer": []
           }
         ],
         "tags": [
@@ -2859,6 +2891,28 @@
         "email": {
           "type": "string",
           "description": "Email para recuperação de senha"
+        }
+      },
+      "type": "object"
+    },
+    "ResetPasswordRequest": {
+      "required": [
+        "confirm_password",
+        "new_password",
+        "token"
+      ],
+      "properties": {
+        "token": {
+          "type": "string",
+          "description": "Token do link enviado por e-mail"
+        },
+        "new_password": {
+          "type": "string",
+          "description": "Nova senha"
+        },
+        "confirm_password": {
+          "type": "string",
+          "description": "Confirmação da senha"
         }
       },
       "type": "object"
@@ -3298,40 +3352,6 @@
       },
       "type": "object"
     },
-    "ConvitesCreateResponse": {
-      "properties": {
-        "resultados": {
-          "type": "array",
-          "items": {
-            "$ref": "#/definitions/ConviteResultado"
-          }
-        }
-      },
-      "type": "object"
-    },
-    "ConviteResultado": {
-      "properties": {
-        "email": {
-          "type": "string",
-          "description": "E-mail da linha"
-        },
-        "resultado": {
-          "type": "string",
-          "example": "CRIADO",
-          "enum": [
-            "CRIADO",
-            "RENOVADO",
-            "PULADO",
-            "INVALIDO"
-          ]
-        },
-        "motivo": {
-          "type": "string",
-          "description": "Motivo quando PULADO ou INVALIDO"
-        }
-      },
-      "type": "object"
-    },
     "ConviteListResponse": {
       "properties": {
         "items": {
@@ -3409,6 +3429,40 @@
           "type": "string",
           "format": "date-time",
           "description": "Data de conclusão do cadastro"
+        }
+      },
+      "type": "object"
+    },
+    "ConvitesCreateResponse": {
+      "properties": {
+        "resultados": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ConviteResultado"
+          }
+        }
+      },
+      "type": "object"
+    },
+    "ConviteResultado": {
+      "properties": {
+        "email": {
+          "type": "string",
+          "description": "E-mail da linha"
+        },
+        "resultado": {
+          "type": "string",
+          "example": "CRIADO",
+          "enum": [
+            "CRIADO",
+            "RENOVADO",
+            "PULADO",
+            "INVALIDO"
+          ]
+        },
+        "motivo": {
+          "type": "string",
+          "description": "Motivo quando PULADO ou INVALIDO"
         }
       },
       "type": "object"
@@ -3597,6 +3651,21 @@
       },
       "type": "object"
     },
+    "OnibusListResponse": {
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/OnibusResponse"
+          }
+        },
+        "total": {
+          "type": "integer",
+          "description": "Total de ônibus"
+        }
+      },
+      "type": "object"
+    },
     "OnibusResponse": {
       "properties": {
         "id": {
@@ -3618,21 +3687,6 @@
         "organizacao_id": {
           "type": "string",
           "description": "UUID da organização"
-        }
-      },
-      "type": "object"
-    },
-    "OnibusListResponse": {
-      "properties": {
-        "items": {
-          "type": "array",
-          "items": {
-            "$ref": "#/definitions/OnibusResponse"
-          }
-        },
-        "total": {
-          "type": "integer",
-          "description": "Total de ônibus"
         }
       },
       "type": "object"
@@ -3691,6 +3745,21 @@
       },
       "type": "object"
     },
+    "JanelaListResponse": {
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/JanelaResponse"
+          }
+        },
+        "total": {
+          "type": "integer",
+          "description": "Total de janelas"
+        }
+      },
+      "type": "object"
+    },
     "JanelaResponse": {
       "properties": {
         "id": {
@@ -3725,21 +3794,6 @@
           "type": "string",
           "format": "date-time",
           "description": "Data de criação"
-        }
-      },
-      "type": "object"
-    },
-    "JanelaListResponse": {
-      "properties": {
-        "items": {
-          "type": "array",
-          "items": {
-            "$ref": "#/definitions/JanelaResponse"
-          }
-        },
-        "total": {
-          "type": "integer",
-          "description": "Total de janelas"
         }
       },
       "type": "object"
@@ -3837,6 +3891,21 @@
       },
       "type": "object"
     },
+    "RotaListResponse": {
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RotaResponse"
+          }
+        },
+        "total": {
+          "type": "integer",
+          "description": "Total de rotas"
+        }
+      },
+      "type": "object"
+    },
     "RotaResponse": {
       "properties": {
         "id": {
@@ -3882,21 +3951,6 @@
         "municipio_uf": {
           "type": "string",
           "description": "UF do município"
-        }
-      },
-      "type": "object"
-    },
-    "RotaListResponse": {
-      "properties": {
-        "items": {
-          "type": "array",
-          "items": {
-            "$ref": "#/definitions/RotaResponse"
-          }
-        },
-        "total": {
-          "type": "integer",
-          "description": "Total de rotas"
         }
       },
       "type": "object"
@@ -3956,6 +4010,21 @@
       },
       "type": "object"
     },
+    "RotaHorarioListResponse": {
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RotaHorarioResponse"
+          }
+        },
+        "total": {
+          "type": "integer",
+          "description": "Total de horários"
+        }
+      },
+      "type": "object"
+    },
     "RotaHorarioResponse": {
       "properties": {
         "id": {
@@ -3976,21 +4045,6 @@
           "items": {
             "type": "string"
           }
-        }
-      },
-      "type": "object"
-    },
-    "RotaHorarioListResponse": {
-      "properties": {
-        "items": {
-          "type": "array",
-          "items": {
-            "$ref": "#/definitions/RotaHorarioResponse"
-          }
-        },
-        "total": {
-          "type": "integer",
-          "description": "Total de horários"
         }
       },
       "type": "object"
@@ -4323,6 +4377,21 @@
       },
       "type": "object"
     },
+    "PontoListResponse": {
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/PontoResponse"
+          }
+        },
+        "total": {
+          "type": "integer",
+          "description": "Total de pontos"
+        }
+      },
+      "type": "object"
+    },
     "PontoResponse": {
       "properties": {
         "id": {
@@ -4348,21 +4417,6 @@
         "instituicao": {
           "type": "string",
           "description": "Instituição vinculada"
-        }
-      },
-      "type": "object"
-    },
-    "PontoListResponse": {
-      "properties": {
-        "items": {
-          "type": "array",
-          "items": {
-            "$ref": "#/definitions/PontoResponse"
-          }
-        },
-        "total": {
-          "type": "integer",
-          "description": "Total de pontos"
         }
       },
       "type": "object"
@@ -4610,6 +4664,21 @@
       },
       "type": "object"
     },
+    "ViagemListResponse": {
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ViagemResponse"
+          }
+        },
+        "total": {
+          "type": "integer",
+          "description": "Total de viagens"
+        }
+      },
+      "type": "object"
+    },
     "ViagemResponse": {
       "properties": {
         "id": {
@@ -4724,21 +4793,6 @@
       },
       "type": "object"
     },
-    "ViagemListResponse": {
-      "properties": {
-        "items": {
-          "type": "array",
-          "items": {
-            "$ref": "#/definitions/ViagemResponse"
-          }
-        },
-        "total": {
-          "type": "integer",
-          "description": "Total de viagens"
-        }
-      },
-      "type": "object"
-    },
     "ViagemAcaoRequest": {
       "required": [
         "acao"
@@ -4781,19 +4835,6 @@
       },
       "type": "object"
     },
-    "LocalizacaoMotoristaResponse": {
-      "properties": {
-        "message": {
-          "type": "string",
-          "description": "Resultado"
-        },
-        "distancia_metros": {
-          "type": "integer",
-          "description": "Distância até o próximo ponto"
-        }
-      },
-      "type": "object"
-    },
     "LocalizacaoOnibusResponse": {
       "properties": {
         "latitude": {
@@ -4807,6 +4848,19 @@
         "atualizado_em": {
           "type": "string",
           "description": "Hora do último GPS (ISO 8601)"
+        }
+      },
+      "type": "object"
+    },
+    "LocalizacaoMotoristaResponse": {
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Resultado"
+        },
+        "distancia_metros": {
+          "type": "integer",
+          "description": "Distância até o próximo ponto"
         }
       },
       "type": "object"
@@ -4919,11 +4973,13 @@
       "properties": {
         "nome": {
           "type": "string",
-          "description": "Nome da instituição"
+          "description": "Nome da instituição",
+          "minLength": 1,
+          "maxLength": 200
         },
         "cnpj": {
           "type": "string",
-          "description": "CNPJ"
+          "description": "CNPJ com ou sem máscara; gravado com 14 dígitos e único entre todas as organizações"
         },
         "tipo": {
           "type": "string",
@@ -4953,37 +5009,56 @@
     },
     "InstituicaoEnderecoInput": {
       "required": [
+        "bairro",
+        "cep",
+        "cidade",
         "latitude",
-        "longitude"
+        "logradouro",
+        "longitude",
+        "numero"
       ],
       "properties": {
         "logradouro": {
           "type": "string",
-          "description": "Logradouro"
+          "description": "Logradouro",
+          "maxLength": 150
         },
         "numero": {
           "type": "string",
-          "description": "Número"
+          "description": "Número",
+          "maxLength": 20
         },
         "bairro": {
           "type": "string",
-          "description": "Bairro"
+          "description": "Bairro",
+          "maxLength": 100
         },
         "cidade": {
           "type": "string",
-          "description": "Cidade"
+          "description": "Cidade",
+          "maxLength": 100
         },
         "cep": {
           "type": "string",
-          "description": "CEP"
+          "description": "CEP",
+          "maxLength": 10
         },
         "latitude": {
           "type": "number",
-          "description": "Latitude"
+          "description": "Latitude",
+          "minimum": -90,
+          "maximum": 90
         },
         "longitude": {
           "type": "number",
-          "description": "Longitude"
+          "description": "Longitude",
+          "minimum": -180,
+          "maximum": 180
+        },
+        "uf": {
+          "type": "string",
+          "description": "UF (2 letras); sem ela, vale o estado da organização",
+          "pattern": "^[A-Za-z]{2}$"
         }
       },
       "type": "object"
@@ -5040,31 +5115,40 @@
       "properties": {
         "logradouro": {
           "type": "string",
-          "description": "Logradouro"
+          "description": "Logradouro",
+          "maxLength": 150
         },
         "numero": {
           "type": "string",
-          "description": "Número"
+          "description": "Número",
+          "maxLength": 20
         },
         "bairro": {
           "type": "string",
-          "description": "Bairro"
+          "description": "Bairro",
+          "maxLength": 100
         },
         "cidade": {
           "type": "string",
-          "description": "Cidade"
+          "description": "Cidade",
+          "maxLength": 100
         },
         "cep": {
           "type": "string",
-          "description": "CEP"
+          "description": "CEP",
+          "maxLength": 10
         },
         "latitude": {
           "type": "number",
-          "description": "Latitude"
+          "description": "Latitude",
+          "minimum": -90,
+          "maximum": 90
         },
         "longitude": {
           "type": "number",
-          "description": "Longitude"
+          "description": "Longitude",
+          "minimum": -180,
+          "maximum": 180
         }
       },
       "type": "object"
@@ -5204,7 +5288,8 @@
           "type": "string"
         },
         "created_at": {
-          "type": "string"
+          "type": "string",
+          "description": "ISO 8601 ou null"
         }
       },
       "type": "object"

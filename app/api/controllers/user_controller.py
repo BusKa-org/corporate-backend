@@ -44,7 +44,7 @@ class UserList(Resource):
     @api.response(200, "Success", models["user_list_response"])
     @jwt_required()
     def get(self) -> tuple[dict[str, Any], int]:
-        """Lista todos os usuários da organização (Apenas Gestor)"""
+        """Lists all users in the organization (Manager only)"""
         current_user_id = get_jwt_identity()
         users = user_service.get_all_users(current_user_id)
         return (
@@ -64,7 +64,7 @@ class UserProfile(Resource):
     @api.response(200, "Success", models["user_me_response"])
     @jwt_required()
     def get(self) -> tuple[dict[str, Any], int]:
-        """Perfil do usuário logado"""
+        """Logged-in user's profile"""
         current_user_id = get_jwt_identity()
         user = user_service.get_user_by_id(current_user_id)
         data = user_response_schema.dump(user)
@@ -81,7 +81,7 @@ class UserProfile(Resource):
     @api.response(200, "Success", models["user_response"])
     @jwt_required()
     def patch(self) -> tuple[dict[str, Any], int]:
-        """Atualiza perfil do usuário logado (nome, telefone, receber_notificacoes, cnh)"""
+        """Updates the logged-in user's profile (nome, telefone, receber_notificacoes, cnh)"""
         current_user_id = get_jwt_identity()
         payload = update_profile_schema.load(request.get_json(silent=True) or {})
         user = user_service.update_profile(current_user_id, payload)
@@ -99,7 +99,7 @@ class UserProfile(Resource):
     @api.expect(models["excluir_conta_request"])
     @jwt_required()
     def delete(self) -> tuple[dict[str, str], int]:
-        """Exclui a conta e os dados pessoais do passageiro logado. Corpo: {"email", "senha"}"""
+        """Deletes the logged-in passenger's account and personal data. Body: {"email", "senha"}"""
         current_user_id = get_jwt_identity()
         payload = excluir_conta_schema.load(request.get_json(silent=True) or {})
         conta_service.excluir_conta(current_user_id, payload["email"], payload["senha"])
@@ -113,7 +113,7 @@ class UserResource(Resource):
     @api.response(200, "Success", models["user_response"])
     @jwt_required()
     def get(self, id: str) -> tuple[dict[str, Any], int]:
-        """Busca usuário por ID (próprio perfil ou mesma organização se Gestor)"""
+        """Gets a user by ID (own profile, or same organization if Manager)"""
         current_user_id = get_jwt_identity()
         user = user_service.get_user_by_id(id, current_user_id)
         return user_response_schema.dump(user), 200
@@ -129,7 +129,7 @@ class MotoristaResource(Resource):
     @api.response(200, "Success", models["user_response"])
     @jwt_required()
     def patch(self, motorista_id: str) -> tuple[dict[str, Any], int]:
-        """Gestor edita um motorista (dados e horário de trabalho)"""
+        """Manager edits a driver (data and working hours)"""
         current_user_id = get_jwt_identity()
         payload = motorista_update_schema.load(request.get_json(silent=True) or {})
         motorista = user_service.update_motorista(current_user_id, motorista_id, payload)
@@ -141,7 +141,7 @@ class MotoristaResource(Resource):
     )
     @jwt_required()
     def delete(self, motorista_id: str) -> tuple[dict[str, Any], int]:
-        """Gestor remove um motorista"""
+        """Manager removes a driver"""
         current_user_id = get_jwt_identity()
         user_service.delete_motorista(current_user_id, motorista_id)
         return {"message": "Motorista removido com sucesso"}, 200
@@ -150,10 +150,10 @@ class MotoristaResource(Resource):
 @api.route("/motoristas")
 class MotoristaCreateResource(Resource):
     @api.doc("list_motoristas", responses={200: "Success", 403: "Forbidden - not a gestor"})
-    @api.marshal_list_with(models["user_list_response"], code=200)
+    @api.marshal_with(models["user_list_response"], code=200)
     @jwt_required()
-    def get(self) -> tuple[list[dict[str, Any]], int]:
-        """Lista motoristas do mesmo município do Gestor"""
+    def get(self) -> tuple[dict[str, Any], int]:
+        """Lists drivers in the Manager's organization"""
         current_user_id = get_jwt_identity()
         motoristas = user_service.get_motoristas_by_municipio(current_user_id)
         return (
@@ -179,7 +179,7 @@ class MotoristaCreateResource(Resource):
     @api.response(201, "Motorista created", models["user_response"])
     @jwt_required()
     def post(self) -> tuple[dict[str, Any], int]:
-        """Gestor cria um novo Motorista"""
+        """Manager creates a new Driver"""
         current_user_id = get_jwt_identity()
         payload = motorista_create_schema.load(request.get_json(silent=True) or {})
 
@@ -203,7 +203,7 @@ class UserChangePassword(Resource):
     @jwt_required()
     @limite_sensivel
     def post(self) -> tuple[dict[str, Any], int]:
-        """Altera a senha do usuário logado (Requer senha atual)."""
+        """Changes the logged-in user's password (requires the current password)."""
         current_user_id = get_jwt_identity()
         payload = change_password_schema.load(request.get_json(silent=True) or {})
 
@@ -218,7 +218,7 @@ class UserFcmToken(Resource):
     @api.response(200, "Token updated successfully", models["fcm_token_response"])
     @jwt_required()
     def patch(self) -> tuple[dict[str, str], int]:
-        """Atualiza o Token do Firebase (Push Notifications) do aparelho do usuário"""
+        """Updates the Firebase (push notifications) token of the user's device"""
         current_user_id = get_jwt_identity()
         data = request.get_json() or {}
         payload = fcm_token_request_schema.load(data)

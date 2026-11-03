@@ -1,8 +1,7 @@
-"""RF-01, RF-03, RF-06, RF-07, RF-08 — verificação pós-renomeação.
+"""RF-01, RF-03, RF-06, RF-07, RF-08: post-rename check.
 
-Estes requisitos vieram prontos do produto municipal e o que se verifica aqui é
-que continuam de pé depois da troca de `Prefeitura` por `Organizacao`. Nada
-neste arquivo constrói funcionalidade nova.
+These requirements came ready from the municipal product; what is checked here
+is that they still hold after replacing `Prefeitura` with `Organizacao`.
 """
 
 from datetime import UTC, datetime
@@ -17,9 +16,7 @@ from app.models.viagem import AlunosConfirmados
 SENHA = "StrongPass123!"
 
 
-# ==========================================
-# RF-01 — login/logout
-# ==========================================
+# RF-01: login/logout
 
 
 @pytest.mark.integration
@@ -40,14 +37,13 @@ def test_rf01_credenciais_invalidas_sao_recusadas(client, gestor):
 
 @pytest.mark.integration
 def test_rf01_token_valido_da_acesso_a_rota_protegida(gestor):
-    """O logout é do lado do cliente (descarte do token); o que se verifica é
-    que o token emitido abre um recurso protegido."""
+    """Logout is client side (discarding the token); what is checked is that the
+    issued token opens a protected resource.
+    """
     assert gestor.client.get("/v1/users/me").status_code == 200
 
 
-# ==========================================
-# RF-03 — recuperar senha
-# ==========================================
+# RF-03: password recovery
 
 
 @pytest.mark.integration
@@ -80,9 +76,7 @@ def test_rf03_email_desconhecido_nao_revela_cadastro(client):
     assert r.status_code == 200
 
 
-# ==========================================
-# RF-06 — gerenciar motorista e veículo
-# ==========================================
+# RF-06: manage driver and vehicle
 
 
 @pytest.mark.integration
@@ -121,9 +115,7 @@ def test_rf06_gestor_gerencia_o_veiculo_com_capacidade(gestor, _db):
     assert gestor.client.delete(f"/v1/onibus/{veiculo_id}").status_code == 200
 
 
-# ==========================================
-# RF-07 — localização em tempo real
-# ==========================================
+# RF-07: real-time location
 
 
 @pytest.mark.integration
@@ -169,9 +161,7 @@ def test_rf07_localizacao_so_com_viagem_em_andamento(
     assert r.status_code == 400
 
 
-# ==========================================
-# RF-08 — notificações
-# ==========================================
+# RF-08: notifications
 
 
 @pytest.mark.integration

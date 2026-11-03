@@ -160,7 +160,7 @@ def register_models(api):
         },
     )
 
-    # ----- Declaração de trajeto sob demanda (RF-13) -----
+    # ----- On-demand route declaration (RF-13) -----
 
     declaracao_trajeto_request = api.model(
         "DeclaracaoTrajetoRequest",

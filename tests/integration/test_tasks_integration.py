@@ -1,4 +1,4 @@
-"""Testes de integração para as tarefas agendadas (cron jobs) no banco real."""
+"""Integration tests for the scheduled tasks (cron jobs) on the real database."""
 
 from datetime import date, time, timedelta
 from unittest.mock import MagicMock, patch
@@ -11,9 +11,7 @@ from app.tasks.notificacao_tasks import verificar_viagens_24h
 
 
 def test_integracao_job_24h_banco_real(app, _db, organizacao):
-    """
-    Verifica se a task roda sem erros no banco real e altera o status da viagem.
-    """
+    """Checks the task runs without errors on the real database and changes the trip status."""
     with app.app_context():
         motorista = Motorista(
             organizacao_id=organizacao.id,

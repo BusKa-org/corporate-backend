@@ -79,11 +79,11 @@ def _rota_id_da_viagem(viagem: Viagem):
 
 
 def _popular_dados_da_viagem(viagem_obj: Viagem, rota_obj: Rota) -> None:
-    """Copia os pontos da rota para a viagem.
+    """Copy the route's stops to the trip.
 
-    Os passageiros não são mais copiados de uma inscrição permanente: cada
-    viagem tem sua própria lista, criada quando o aluno confirma presença
-    (viagem fixa) ou quando o buffer da sob demanda fecha (RF-15).
+    Passengers are no longer copied from a permanent subscription: each trip has
+    its own list, created when the student confirms presence (fixed trip) or when
+    the on-demand buffer closes (RF-15).
     """
     pontos_rota = (
         db.session.query(RotaPonto).filter_by(rota_id=rota_obj.id).order_by(RotaPonto.ordem).all()
@@ -104,7 +104,7 @@ def get_proximas_viagens_aluno(user_id: str) -> list[Viagem]:
     if not aluno or aluno.role != UserRole.ALUNO:
         raise ForbiddenError("Apenas alunos podem ver sua agenda de viagens")
 
-    hoje = datetime.now(UTC).date()
+    hoje = tempo.agora_local().date()
 
     query = (
         juntar_rota(db.session.query(Viagem))
@@ -164,8 +164,8 @@ def confirmar_presenca_aluno(
         if not horario:
             raise NotFoundError("Horário da viagem não encontrado")
 
-        # Trava o aluno antes de ler o registro: um duplo toque espera o primeiro e encontra o
-        # registro já criado (200 com o mesmo resultado) em vez de bater na chave primária (409).
+        # Lock the student before reading the record: a double tap waits for the first and
+        # finds the record already created (200, same result) instead of hitting the PK (409).
         db.session.execute(
             select(User.id).where(User.id == aluno.usuario_id).with_for_update(key_share=True)
         )
@@ -231,8 +231,7 @@ def confirmar_presenca_aluno(
 
 
 def listar_pontos_embarque(user_id: str, viagem_id: str) -> list[dict]:
-    """
-    Retorna os pontos de embarque disponíveis para uma viagem específica.
+    """Return the boarding stops available for a specific trip.
 
     Raises: ForbiddenError, NotFoundError, AppError
     """
@@ -277,8 +276,7 @@ def listar_pontos_embarque(user_id: str, viagem_id: str) -> list[dict]:
 
 
 def gerar_viagem(user_id: str, data_input: dict) -> Viagem:
-    """
-    Gera UMA viagem para UMA rota específica (Modo Manual).
+    """Generate ONE trip for ONE specific route (manual mode).
 
     Raises: ForbiddenError, NotFoundError, ValidationError, ConflictError, AppError
     """
@@ -385,7 +383,7 @@ def _periodos_de_direcao(
     motorista_id: Any, agora: datetime
 ) -> list[tuple[datetime, datetime | None]]:
     """(inicio_real, fim_real) of the driver's trips started in the last 24 h."""
-    # Uma sequência de direção contínua maior que 24 h já teria sido bloqueada antes.
+    # A continuous driving stretch longer than 24 h would already have been blocked.
     viagens = (
         db.session.query(Viagem.inicio_real, Viagem.fim_real)
         .filter(
@@ -471,7 +469,7 @@ def disponibilidade_motorista(
     if status == StatusMotorista.EM_DESCANSO_OBRIGATORIO:
         liberado_em = motorista.descanso_ate
     else:
-        # Recalcula pelo histórico também: cobre viagens anteriores a `descanso_ate` existir.
+        # Also recompute from history: covers trips from before `descanso_ate` existed.
         liberado_em = _fim_descanso_motorista(motorista, agora)
     if liberado_em is not None:
         horas_max = current_app.config["MOTORISTA_HORAS_MAX_DIRECAO"]
@@ -496,7 +494,7 @@ def disponibilidade_motorista(
         if inicio < fim:
             dentro = inicio <= hora < fim
         else:
-            # Turno que atravessa a meia-noite, ex.: 22:00-06:00
+            # Shift that crosses midnight, e.g. 22:00-06:00
             dentro = hora >= inicio or hora < fim
         if not dentro:
             motivo = (
@@ -548,8 +546,8 @@ def controlar_viagem(user_id: str, viagem_id: str, data: dict[str, Any]) -> Viag
 
     with transactional():
         if acao == "INICIAR":
-            # Trava viagem e motorista até o commit: dois INICIAR ao mesmo tempo
-            # esperam um pelo outro e o segundo vê o estado já atualizado.
+            # Lock trip and driver until commit: two simultaneous INICIAR wait for each
+            # other and the second sees the already updated state.
             viagem = (
                 db.session.query(Viagem)
                 .filter(Viagem.id == viagem.id)
@@ -639,7 +637,7 @@ def list_viagens_gestor(user_id: str, filters: dict[str, Any]) -> list[Viagem]:
 
 
 def cancelar_viagem(user_id: str, viagem_id: str) -> dict[str, Any]:
-    """Cancela uma viagem e notifica alunos confirmados"""
+    """Cancel a trip and notify the confirmed students"""
     user = db.session.get(User, user_id)
     if not user or user.role != UserRole.GESTOR:
         raise ForbiddenError("Apenas gestores podem cancelar viagens")
@@ -703,7 +701,7 @@ def cancelar_viagem(user_id: str, viagem_id: str) -> dict[str, Any]:
 
 
 def atualizar_localizacao(user_id: str, viagem_id: str, data: dict) -> dict:
-    """Atualiza o GPS do motorista, salva telemetria e engatilha o Auto-Checkin."""
+    """Update the driver's GPS, save telemetry and trigger the auto check-in."""
     user = db.session.get(User, user_id)
     if not user or user.role != UserRole.MOTORISTA:
         raise ForbiddenError("Apenas motoristas podem enviar localização em tempo real")
@@ -788,9 +786,9 @@ def atualizar_localizacao(user_id: str, viagem_id: str, data: dict) -> dict:
 
 
 def obter_localizacao_onibus(user_id: str, viagem_id: str) -> dict:
-    """
-    Retorna a localização atual do ônibus (GPS do motorista) para uma viagem em andamento.
-    Aluno (confirmado na viagem) ou motorista da viagem podem consultar.
+    """Return the bus's current location (driver GPS) for a trip in progress.
+
+    The student (confirmed on the trip) or the trip's driver may query it.
     """
     user = db.session.get(User, user_id)
     if not user:
@@ -866,7 +864,7 @@ def atualizar_localizacao_aluno(user_id: str, viagem_id: str, data: dict) -> dic
 
 
 def obter_progresso_viagem(gestor_id: str, viagem_id: str):
-    """Retorna os pontos pelos quais o motorista já passou, em ordem cronológica."""
+    """Return the stops the driver has already passed, in chronological order."""
     user = db.session.get(User, gestor_id)
     if not user or user.role != UserRole.GESTOR:
         raise ForbiddenError("Apenas gestores podem auditar o trajeto")
@@ -889,7 +887,7 @@ def obter_progresso_viagem(gestor_id: str, viagem_id: str):
     ]
 
 
-# Estados em que a rodada sob demanda ocupa o veículo. Sem viagem nesses estados = Ociosa.
+# States in which the on-demand round occupies the vehicle. No trip in these states = Idle.
 ESTADOS_ATIVOS_SOB_DEMANDA = (
     StatusViagem.SOLICITADA,
     StatusViagem.BUFFER_ABERTO,

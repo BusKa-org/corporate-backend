@@ -1,4 +1,4 @@
-"""RF-04 — gestão dos pontos de parada ordenados do circuito."""
+"""RF-04: management of the circuit's ordered stops."""
 
 from app.models.rota import RotaPonto
 
@@ -10,7 +10,7 @@ def _ordens(client, rota_id):
 
 
 def test_gestor_define_sequencia_gap_free(gestor, circuito, pontos_circuito):
-    """A ordem enviada é só preferência: o que persiste é 1..n sem buracos."""
+    """The order sent is only a preference: what persists is 1..n with no gaps."""
     payload = {
         "pontos": [
             {"ponto_id": str(pontos_circuito[2].id), "ordem": 50},
@@ -53,7 +53,7 @@ def test_gestor_de_outra_organizacao_nao_remove_ponto(other_gestor, circuito, po
 def test_viagem_ativa_bloqueia_remocao_do_ponto(
     gestor, circuito, pontos_circuito, viagem_buffer_aberto
 ):
-    """Fluxo secundário 1: a alteração espera a viagem em curso terminar."""
+    """Secondary flow 1: the change waits for the trip in progress to end."""
     r = gestor.client.delete(f"/v1/rotas/{circuito.id}/pontos/{pontos_circuito[0].id}")
     assert r.status_code == 409
 

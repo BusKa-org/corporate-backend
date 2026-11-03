@@ -122,6 +122,15 @@ see `TODO.md`'s code-debt section 3 for what's still municipality-shaped on
 the wire (`municipio_nome`/`municipio_uf` in a couple of schemas, kept for
 backward compatibility).
 
+One exception is the institution CNPJ, which is unique across all
+organizações rather than per tenant. `POST /v1/instituicoes/` stores the
+CNPJ (digits only) as `codigo_externo` with `fonte="MANUAL"`, and the
+`uq_instituicao_fonte_codigo_externo` constraint on `(fonte, codigo_externo)`
+has no `organizacao_id`. So two organizações cannot register the same CNPJ:
+the second one gets 409. That 409 also tells the caller the CNPJ exists in
+another organização, which is accepted because a CNPJ is public data. To
+make it per tenant, add `organizacao_id` to that unique key in a migration.
+
 ## Error Handling
 
 Custom exceptions are raised in services and caught by global Flask error

@@ -1,4 +1,4 @@
-"""Necessidades de acessibilidade do aluno: cadastro no perfil e visão de gestor e motorista."""
+"""Student accessibility needs: set in the profile and seen by the manager and driver."""
 
 
 def test_aluno_informa_acessibilidade_no_perfil(aluno, _db):

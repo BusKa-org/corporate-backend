@@ -1,4 +1,4 @@
-"""Convites de cadastro de passageiro: o gestor convida, a pessoa conclui."""
+"""Passenger sign-up invites: the manager invites, the person completes."""
 
 import hashlib
 import hmac
@@ -49,9 +49,9 @@ PIN_MAX_TENTATIVAS = 5
 PIN_INTERVALO_SEGUNDOS = 60
 ESTADOS_DO_CONVITE = (PENDENTE, CONCLUIDO, CANCELADO)
 
-# O e-mail do PIN sai fora da requisição: enviar dentro dela deixava o e-mail habilitado
-# mais lento que o desconhecido. Thread e não fila no banco para o PIN nunca ser gravado em
-# texto puro, e porque o job de convites roda a cada minuto (a pessoa está esperando).
+# The PIN e-mail is sent outside the request: sending it inside made an enabled
+# e-mail slower than an unknown one. A thread rather than a DB queue so the PIN is
+# never stored in plain text, and because the invite job runs every minute (the person is waiting).
 _envios_de_pin = ThreadPoolExecutor(max_workers=4, thread_name_prefix="pin-email")
 
 
@@ -60,7 +60,7 @@ def _agora() -> datetime:
 
 
 def _renovar(convite: Convite) -> None:
-    """Token novo, validade nova e envio do e-mail de volta para a fila."""
+    """New token, new expiry, and the e-mail goes back to the send queue."""
     convite.token = secrets.token_urlsafe(32)
     convite.expira_em = _agora() + timedelta(days=VALIDADE_DIAS)
     convite.envio_estado = ENVIO_PENDENTE
@@ -79,7 +79,7 @@ def _limpar_pin(convite: Convite) -> None:
 
 
 def _texto(dados: dict[str, Any], campo: str) -> str | None:
-    """Texto sem espaços nas pontas, ou None se não veio ou veio vazio."""
+    """Text stripped of leading/trailing spaces, or None if missing or empty."""
     valor = dados.get(campo)
     if valor is None:
         return None
@@ -104,11 +104,11 @@ def _validar_nome(nome: str | None) -> str | None:
     return nome
 
 
-# ─── Gestor: convidar ──────────────────────────────────────────────────────────
+# ─── Manager: invite ───────────────────────────────────────────────────────────
 
 
 def _validar_item(gestor, item: dict[str, Any]) -> dict[str, Any]:
-    """Valida uma linha do lote. Levanta ValidationError se algo estiver errado."""
+    """Validate one row of the batch. Raises ValidationError if something is wrong."""
     email = validate_email(_texto(item, "email") or "")
     nome = _validar_nome(_texto(item, "nome"))
 
@@ -181,7 +181,7 @@ def _processar_item(gestor, item: dict[str, Any]) -> dict[str, str]:
 
 
 def criar_convites(gestor_id: str, itens: list[dict[str, Any]]) -> list[dict[str, str]]:
-    """Cria convites em lote. Uma linha com problema não impede as outras."""
+    """Create invites in batch. One bad row does not stop the others."""
     gestor = _get_gestor_or_403(gestor_id, "Apenas gestores podem convidar")
 
     if len(itens) == 0:
@@ -205,7 +205,7 @@ def criar_convites(gestor_id: str, itens: list[dict[str, Any]]) -> list[dict[str
     return resultados
 
 
-# ─── Gestor: listar, reenviar, cancelar ────────────────────────────────────────
+# ─── Manager: list, resend, cancel ─────────────────────────────────────────────
 
 
 def listar_convites(gestor_id: str, estado: str | None = None) -> list[Convite]:
@@ -262,7 +262,7 @@ def cancelar_convite(gestor_id: str, convite_id: str) -> None:
     )
 
 
-# ─── Pessoa convidada: consultar e concluir pelo link ──────────────────────────
+# ─── Invited person: look up and complete via the link ─────────────────────────
 
 
 def _convite_valido_por_token(token: str) -> Convite:
@@ -296,7 +296,7 @@ def consultar_por_token(token: str) -> dict[str, Any]:
 def concluir_convite(token: str, dados: dict[str, Any]) -> Aluno:
     convite = _convite_valido_por_token(token)
 
-    # O que a pessoa informa vale mais do que o que o gestor preencheu.
+    # What the person provides wins over what the manager filled in.
     nome = _validar_nome(_texto(dados, "nome") or convite.nome)
     cpf = _texto(dados, "cpf") or convite.cpf
     telefone = _texto(dados, "telefone") or convite.telefone
@@ -325,7 +325,7 @@ def concluir_convite(token: str, dados: dict[str, Any]) -> Aluno:
     if User.query.filter_by(cpf=cpf).first():
         raise ConflictError("Este CPF já está cadastrado.", field="cpf")
 
-    # Só conta como alteração quando o gestor tinha preenchido e a pessoa mudou.
+    # Only counts as a change when the manager had filled it in and the person changed it.
     alterados: list[str] = []
     if convite.nome and nome != convite.nome:
         alterados.append("nome")
@@ -359,7 +359,7 @@ def concluir_convite(token: str, dados: dict[str, Any]) -> Aluno:
         convite.estado = CONCLUIDO
         convite.concluido_em = _agora()
         convite.usuario_id = aluno.id
-        # Os dados pessoais agora moram no usuário.
+        # The personal data now lives on the user.
         convite.nome = None
         convite.cpf = None
         convite.telefone = None
@@ -374,19 +374,19 @@ def concluir_convite(token: str, dados: dict[str, Any]) -> Aluno:
     return aluno
 
 
-# ─── Pessoa convidada: PIN para quem digita o e-mail no app ───────────────────
+# ─── Invited person: PIN for those who type the e-mail in the app ──────────────
 
 
 def _hash_do_pin(convite: Convite, pin: str) -> str:
-    # O token do convite entra no hash para o PIN deixar de valer se o convite for reenviado.
+    # The invite token goes into the hash so the PIN stops working if the invite is resent.
     return hashlib.sha256(f"{convite.token}:{pin}".encode()).hexdigest()
 
 
 def _convite_pendente_do_email(email_bruto: str, travar: bool = False) -> Convite | None:
-    """Convite pendente e dentro da validade para o e-mail, ou None.
+    """Pending, unexpired invite for the e-mail, or None.
 
-    Com `travar`, a linha fica presa até o commit: palpites de PIN simultâneos
-    entram em fila e cada um conta uma tentativa, e pedidos de PIN simultâneos geram um só.
+    With `travar`, the row stays locked until commit: concurrent PIN guesses queue
+    up and each counts as an attempt, and concurrent PIN requests produce only one.
     """
     try:
         email = validate_email(email_bruto)
@@ -402,7 +402,7 @@ def _convite_pendente_do_email(email_bruto: str, travar: bool = False) -> Convit
 
 
 def _pin_bloqueado(convite: Convite, agora: datetime) -> bool:
-    """O PIN do convite está em pausa. Pausa vencida é desfeita aqui, com os erros zerados."""
+    """The invite PIN is locked. An expired lock is lifted here, with the errors reset."""
     if convite.pin_bloqueado_ate is None:
         return False
     if convite.pin_bloqueado_ate > agora:
@@ -413,7 +413,7 @@ def _pin_bloqueado(convite: Convite, agora: datetime) -> bool:
 
 
 def _enviar_pin(app: Flask, convite_id: str, email: str, pin: str) -> None:
-    """Roda numa thread de _envios_de_pin, fora da thread da requisição."""
+    """Runs in a _envios_de_pin thread, outside the request thread."""
     with app.app_context():
         try:
             send_email(
@@ -430,11 +430,11 @@ def _enviar_pin(app: Flask, convite_id: str, email: str, pin: str) -> None:
 
 
 def solicitar_pin(email_bruto: str) -> None:
-    """Envia um PIN ao e-mail habilitado. Nunca revela se o e-mail está habilitado.
+    """Send a PIN to the enabled e-mail. Never reveals whether the e-mail is enabled.
 
-    Um novo PIN só sai depois de PIN_INTERVALO_SEGUNDOS do anterior. O lock faz dois pedidos
-    simultâneos verem esse intervalo: o segundo encontra o PIN recém-gravado e não envia nada,
-    então fica um PIN válido e um e-mail só.
+    A new PIN only goes out PIN_INTERVALO_SEGUNDOS after the previous one. The lock
+    makes two concurrent requests see that interval: the second finds the PIN just
+    saved and sends nothing, so there is one valid PIN and a single e-mail.
     """
     convite = _convite_pendente_do_email(email_bruto, travar=True)
     if convite is None:
@@ -468,7 +468,7 @@ def solicitar_pin(email_bruto: str) -> None:
 
 
 def validar_pin(email_bruto: str, pin: str) -> str:
-    """Confere o PIN e devolve o token do convite, que abre a tela de completar o cadastro."""
+    """Check the PIN and return the invite token, which opens the complete-sign-up screen."""
     erro = ValidationError("PIN inválido ou expirado")
 
     convite = _convite_pendente_do_email(email_bruto, travar=True)
@@ -482,12 +482,12 @@ def validar_pin(email_bruto: str, pin: str) -> str:
 
     if not hmac.compare_digest(convite.pin_hash, _hash_do_pin(convite, pin.strip())):
         convite.pin_tentativas += 1
-        # Não zera com PIN novo: sem isso, um PIN por minuto dá 5 palpites/minuto por 7 dias.
+        # Not reset by a new PIN: otherwise one PIN per minute gives 5 guesses/minute for 7 days.
         convite.pin_erros_total += 1
         config = current_app.config
         bloqueou = convite.pin_erros_total >= config["CONVITE_PIN_MAX_ERROS_TOTAL"]
         if bloqueou:
-            # Pausa e não bloqueio definitivo: senão um atacante tranca o convidado de vez.
+            # A timed lock, not a permanent block: otherwise an attacker locks the invitee out.
             minutos = config["CONVITE_PIN_BLOQUEIO_MINUTOS"]
             convite.pin_bloqueado_ate = agora + timedelta(minutes=minutos)
         if convite.pin_tentativas >= PIN_MAX_TENTATIVAS or bloqueou:
@@ -505,12 +505,12 @@ def validar_pin(email_bruto: str, pin: str) -> str:
             )
         raise erro
 
-    _limpar_pin(convite)  # uso único
+    _limpar_pin(convite)  # single use
     db.session.commit()
     return convite.token
 
 
-# ─── Envio do e-mail (chamado pela tarefa do agendador) ────────────────────────
+# ─── E-mail sending (called by the scheduler task) ─────────────────────────────
 
 
 def _mail_configurado() -> bool:
@@ -551,9 +551,9 @@ def _enviar_email_do_convite(convite: Convite) -> None:
 
 
 def processar_envios() -> int:
-    """Envia os e-mails de convite pendentes. Devolve quantos saíram."""
+    """Send the pending invite e-mails. Returns how many went out."""
     if not _mail_configurado():
-        # Sem isso o envio "funcionaria" sem mandar nada e o convite ficaria como ENVIADO.
+        # Without this the send would "work" without sending anything and leave the invite ENVIADO.
         logger.warning("E-mail não configurado: convites continuam na fila de envio.")
         return 0
 
@@ -580,7 +580,7 @@ def processar_envios() -> int:
             if convite.envio_tentativas >= MAX_TENTATIVAS_ENVIO:
                 convite.envio_estado = FALHOU
             logger.exception("Falha ao enviar o convite %s", convite.id)
-        # Um commit por convite: se o processo cair, quem já saiu não é reenviado.
+        # One commit per invite: if the process dies, those already sent are not resent.
         db.session.commit()
 
     return enviados

@@ -41,8 +41,18 @@ def register_models(api):
         {"email": fields.String(required=True, description="Email para recuperação de senha")},
     )
 
+    reset_password_request = api.model(
+        "ResetPasswordRequest",
+        {
+            "token": fields.String(required=True, description="Token do link enviado por e-mail"),
+            "new_password": fields.String(required=True, description="Nova senha"),
+            "confirm_password": fields.String(required=True, description="Confirmação da senha"),
+        },
+    )
+
     return {
         "login_request": login_request,
         "token_response": token_response,
         "forgot_password_request": forgot_password_request,
+        "reset_password_request": reset_password_request,
     }

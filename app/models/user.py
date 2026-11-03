@@ -65,16 +65,16 @@ class Motorista(User):
     )
     cnh = db.Column(db.String(20), unique=True, nullable=False)
 
-    # Horário de trabalho definido pelo gestor. Nulo = sem restrição de horário/dia.
-    # Valores de DiaDaSemana ("SEG", "TER", ...).
+    # Working hours set by the manager. Null = no time/day restriction.
+    # Values from DiaDaSemana ("SEG", "TER", ...).
     horario_inicio = db.Column(db.Time, nullable=True)
     horario_fim = db.Column(db.Time, nullable=True)
     dias_trabalho = db.Column(ARRAY(db.String(3)), nullable=True)
 
-    # Fim do descanso obrigatório, gravado ao fim de uma viagem. Nulo = não deve descanso.
+    # End of the mandatory rest, saved when a trip ends. Null = no rest owed.
     descanso_ate = db.Column(db.DateTime(timezone=True), nullable=True)
-    # Calculado pelo service para a resposta (viagens + descanso_ate); não é coluna.
-    # __allow_unmapped__ deixa o SQLAlchemy ignorar essa anotação sem Mapped[].
+    # Computed by the service for the response (trips + descanso_ate); not a column.
+    # __allow_unmapped__ lets SQLAlchemy ignore this annotation without Mapped[].
     __allow_unmapped__ = True
     status_motorista: StatusMotorista | None = None
 
@@ -104,8 +104,8 @@ class Aluno(User):
     matricula = db.Column(db.String(50))
     foto_url = db.Column(db.String(255))
 
-    # Nomes de NecessidadeAcessibilidade. Lista de texto, não ENUM do Postgres, para
-    # incluir uma necessidade nova sem migration.
+    # NecessidadeAcessibilidade names. A text list, not a Postgres ENUM, so a new
+    # need can be added without a migration.
     necessidades_acessibilidade = db.Column(
         ARRAY(db.String(30)), nullable=False, default=list, server_default="{}"
     )

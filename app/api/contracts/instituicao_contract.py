@@ -2,6 +2,7 @@
 
 from flask_restx import fields
 
+from app.api.contracts.aluno_contract import endereco_input_fields
 from app.models.enum import TipoInstituicao
 
 
@@ -11,13 +12,11 @@ def register_models(api):
     instituicao_endereco_input = api.model(
         "InstituicaoEnderecoInput",
         {
-            "logradouro": fields.String(description="Logradouro"),
-            "numero": fields.String(description="Número"),
-            "bairro": fields.String(description="Bairro"),
-            "cidade": fields.String(description="Cidade"),
-            "cep": fields.String(description="CEP"),
-            "latitude": fields.Float(required=True, description="Latitude"),
-            "longitude": fields.Float(required=True, description="Longitude"),
+            **endereco_input_fields(),
+            "uf": fields.String(
+                pattern="^[A-Za-z]{2}$",
+                description="UF (2 letras); sem ela, vale o estado da organização",
+            ),
         },
     )
 
@@ -36,8 +35,14 @@ def register_models(api):
     instituicao_create_request = api.model(
         "InstituicaoCreateRequest",
         {
-            "nome": fields.String(required=True, description="Nome da instituição"),
-            "cnpj": fields.String(required=True, description="CNPJ"),
+            "nome": fields.String(
+                required=True, min_length=1, max_length=200, description="Nome da instituição"
+            ),
+            "cnpj": fields.String(
+                required=True,
+                description="CNPJ com ou sem máscara; gravado com 14 dígitos e único entre "
+                "todas as organizações",
+            ),
             "tipo": fields.String(
                 required=True,
                 enum=[t.name for t in TipoInstituicao],

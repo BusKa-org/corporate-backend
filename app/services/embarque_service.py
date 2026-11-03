@@ -1,17 +1,17 @@
-"""RF-15 a RF-18 — credencial de embarque, roteiro do motorista e sincronização.
+"""Boarding credential, driver itinerary and offline sync (RF-15 to RF-18).
 
-A credencial é a `CredencialEmbarque`: o app do aluno busca o segredo em
-`GET /v1/viagens/<id>/credencial-embarque` e desenha o QR `<credencial_id>.<codigo>`,
-com um código que muda a cada passo (`credencial_embarque_service`). Este módulo
-a emite na consolidação do buffer e concentra as regras que a consomem no
-embarque.
+The credential is `CredencialEmbarque`: the student app fetches the secret from
+`GET /v1/viagens/<id>/credencial-embarque` and draws the QR
+`<credencial_id>.<codigo>`, with a code that changes every step
+(`credencial_embarque_service`). This module issues it when the buffer is
+consolidated and holds the rules that consume it at boarding.
 
-Embarque por QR em dois passos (RF-17): a conferência confere a credencial e
-devolve o passageiro com a foto, sem embarcar ninguém; o embarque só é
-registrado quando o motorista confirma que a foto é da pessoa à sua frente.
-Se não for, ele recusa, fica uma ocorrência para o gestor e a credencial fica
-recusada: aquele QR não embarca mais ninguém nesta viagem. O passageiro real
-embarca pelo fallback manual, conferido pela foto da lista do ponto.
+QR boarding in two steps (RF-17): the check-in checks the credential and returns
+the passenger with the photo, boarding no one; boarding is only recorded when the
+driver confirms the photo is the person in front of them. If not, they reject it,
+an incident is opened for the manager and the credential is rejected: that QR
+boards no one else on this trip. The real passenger boards via the manual
+fallback, checked against the stop list photo.
 """
 
 import logging
@@ -36,15 +36,15 @@ logger = logging.getLogger(__name__)
 
 IdLike = str | uuid.UUID
 
-# Estados em que o veículo já saiu e o motorista opera o roteiro.
+# States where the vehicle has left and the driver runs the itinerary.
 EM_PERCURSO = (StatusViagem.EM_ANDAMENTO,)
-# A sincronização (RF-18) também aceita a viagem já encerrada: a fila offline
-# pode chegar depois que o motorista finalizou o percurso.
+# Sync (RF-18) also accepts a finished trip: the offline queue may arrive after
+# the driver ended the route.
 SINCRONIZAVEL = EM_PERCURSO + (StatusViagem.FINALIZADA,)
 
-# EMBARQUE_CONFIRMADO é o QR conferido e confirmado pelo motorista; RECUSA é o QR
-# recusado por ele. EMBARQUE é o tipo antigo, de antes da conferência da foto: fica
-# aceito no esquema só para ser recusado evento a evento com EVENTO_DESCONTINUADO.
+# EMBARQUE_CONFIRMADO is a QR checked and confirmed by the driver; RECUSA is a QR
+# they rejected. EMBARQUE is the old type, from before the photo check: it stays
+# in the schema only to be rejected event by event with EVENTO_DESCONTINUADO.
 TIPOS_EVENTO = (
     "EMBARQUE_CONFIRMADO",
     "EMBARQUE_MANUAL",
@@ -58,11 +58,11 @@ MOTIVOS_RECUSA = ("FOTO_NAO_CONFERE", "SEM_FOTO")
 
 
 class EmbarqueRecusado(AppError):
-    """RF-17: recusa de embarque.
+    """RF-17: boarding rejection.
 
-    O `code` distingue o motivo — o app do motorista precisa saber se a
-    credencial é desconhecida, de outra viagem, de outro ponto ou já usada,
-    porque a reação do motorista é diferente em cada caso.
+    The `code` tells the reason apart: the driver app needs to know whether the
+    credential is unknown, from another trip, from another stop or already used,
+    because the driver reacts differently in each case.
     """
 
     def __init__(self, message: str, code: str, status_code: int = 409):
@@ -77,7 +77,7 @@ def _uuid(valor: IdLike, rotulo: str) -> uuid.UUID:
 
 
 def _aware(momento: datetime | None) -> datetime:
-    """Carimbo do evento offline; sem fuso, assume UTC."""
+    """Offline event timestamp; without a time zone, assumes UTC."""
     if momento is None:
         return tempo.agora_utc()
     return momento if momento.tzinfo else momento.replace(tzinfo=UTC)
@@ -102,7 +102,7 @@ def _viagem_do_motorista(user_id: IdLike, viagem_id: IdLike, estados: tuple) -> 
 
 
 def _embarques(viagem: Viagem) -> list[AlunosConfirmados]:
-    """Quem o motorista espera embarcar: confirmados que não desistiram (RF-19)."""
+    """Who the driver expects to board: confirmed passengers who did not drop out (RF-19)."""
     return [c for c in viagem.alunos_confirmados if c.confirmacao]
 
 
@@ -112,21 +112,19 @@ def _foto(registro: AlunosConfirmados) -> dict[str, Any]:
 
 
 def _ponto_atual(viagem: Viagem) -> ViagemPonto | None:
-    """A parada que o veículo está atendendo: a primeira ainda não transposta."""
+    """The stop the vehicle is serving: the first one not yet passed."""
     return next((vp for vp in viagem.pontos_visitados if not vp.visitado), None)
 
 
-# ==========================================
-# RF-15 — emissão das credenciais
-# ==========================================
+# RF-15: credential issuing
 
 
 def consolidar_embarque(viagem: Viagem, confirmados: list[AlunosConfirmados]) -> int:
-    """Emite as credenciais da rodada e materializa o roteiro do motorista.
+    """Issue the round's credentials and materialize the driver's itinerary.
 
-    Chamada pela consolidação do buffer (RF-15), dentro da transação dela. Uma
-    credencial nova por passageiro confirmado: vale só para este aluno, nesta
-    viagem e neste ponto de embarque, e nunca é reaproveitada.
+    Called by the buffer consolidation (RF-15), inside its transaction. One new
+    credential per confirmed passenger: valid only for this student, on this trip
+    and at this boarding stop, and never reused.
     """
     _materializar_pontos(viagem)
 
@@ -139,10 +137,10 @@ def consolidar_embarque(viagem: Viagem, confirmados: list[AlunosConfirmados]) ->
 
 
 def _materializar_pontos(viagem: Viagem) -> None:
-    """Copia o circuito para `viagem_ponto`, que é onde o progresso é gravado.
+    """Copy the circuit into `viagem_ponto`, where progress is recorded.
 
-    A rodada sob demanda nasce sem pontos (ela não vem da grade de horários),
-    então o roteiro do RF-16 só existe a partir da consolidação.
+    The on-demand round is born without stops (it does not come from the
+    timetable), so the RF-16 itinerary only exists after consolidation.
     """
     if viagem.pontos_visitados:
         return
@@ -158,17 +156,15 @@ def _materializar_pontos(viagem: Viagem) -> None:
     db.session.flush()
 
 
-# ==========================================
-# RF-16 — roteiro do motorista
-# ==========================================
+# RF-16: driver itinerary
 
 
 def roteiro(user_id: IdLike, viagem_id: IdLike) -> dict[str, Any]:
-    """RF-16: paradas em ordem, com quantos embarcam e desembarcam em cada uma.
+    """RF-16: stops in order, with how many board and get off at each one.
 
-    Vai junto a matriz de permissões (credencial e foto de cada passageiro por
-    ponto), que é o que o app baixa antes da partida para conferir embarques
-    sem rede (RF-18). É também a lista que o motorista usa no fallback manual.
+    Includes the permission matrix (each passenger's credential and photo per
+    stop), which the app downloads before departure to check boardings offline
+    (RF-18). It is also the list the driver uses in the manual fallback.
     """
     viagem = _viagem_do_motorista(user_id, viagem_id, EM_PERCURSO)
     embarques = _embarques(viagem)
@@ -191,7 +187,7 @@ def roteiro(user_id: IdLike, viagem_id: IdLike) -> dict[str, Any]:
             passageiro = {
                 "aluno_id": str(c.aluno_id),
                 "nome": c.aluno.nome if c.aluno else None,
-                # O segredo deixa o app conferir o código do QR sem rede (RF-18).
+                # The secret lets the app check the QR code offline (RF-18).
                 "credencial_id": str(credencial.id) if credencial else None,
                 "qr_segredo": credencial.segredo if credencial else None,
                 "embarcou": c.embarcou,
@@ -230,11 +226,10 @@ def roteiro(user_id: IdLike, viagem_id: IdLike) -> dict[str, Any]:
 def avancar_ponto(
     user_id: IdLike, viagem_id: IdLike, ocorrido_em: datetime | None = None
 ) -> dict[str, Any]:
-    """RF-16: conclui a parada corrente e segue para a próxima.
+    """RF-16: completes the current stop and moves to the next one.
 
-    Marca a parada como transposta com o horário de chegada; a próxima não
-    transposta passa a ser o ponto corrente, e é contra ela que os embarques
-    são validados (RF-17).
+    Marks the stop as passed with the arrival time; the next unpassed stop becomes
+    the current one, and boardings are validated against it (RF-17).
     """
     viagem = _viagem_do_motorista(user_id, viagem_id, EM_PERCURSO)
 
@@ -252,9 +247,7 @@ def _marcar_visitado(vp: ViagemPonto, momento: datetime) -> None:
     vp.chegada_real = momento
 
 
-# ==========================================
-# RF-17 — validação do embarque
-# ==========================================
+# RF-17: boarding validation
 
 
 def _tolerancia() -> timedelta:
@@ -264,11 +257,11 @@ def _tolerancia() -> timedelta:
 def _credencial_do_qr(
     qr: str, viagem: Viagem, momento: datetime, conferir_codigo: bool = True
 ) -> CredencialEmbarque:
-    """Regras da credencial lida, as mesmas online e offline.
+    """Rules for the scanned credential, the same online and offline.
 
-    `momento` é o relógio do servidor online, ou o carimbo já limitado do evento
-    offline. A recusa não confere o código: ela só fecha a porta, e o código
-    pode ter girado enquanto o motorista olhava a foto.
+    `momento` is the server clock online, or the already-clamped offline event
+    timestamp. The rejection does not check the code: it only closes the door, and
+    the code may have rotated while the driver looked at the photo.
     """
     partes = credencial_embarque_service.separar_qr(qr)
     credencial = db.session.get(CredencialEmbarque, partes[0]) if partes else None
@@ -304,11 +297,11 @@ def _credencial_do_qr(
 
 
 def _travar_registro(viagem_id: uuid.UUID, aluno_id: uuid.UUID) -> AlunosConfirmados | None:
-    """Trava as credenciais e depois a linha do passageiro, sempre nessa ordem.
+    """Lock the credentials and then the passenger row, always in that order.
 
-    Duas confirmações simultâneas do mesmo passageiro se enfileiram aqui: a
-    segunda lê `embarcou`/`usado` já gravados pela primeira. A ordem fixa evita
-    deadlock entre o QR, o manual e a fila offline.
+    Two concurrent confirmations of the same passenger queue up here: the second
+    reads `embarcou`/`usado` already saved by the first. The fixed order avoids
+    deadlock between the QR, the manual flow and the offline queue.
     """
     db.session.query(CredencialEmbarque).filter_by(viagem_id=viagem_id, aluno_id=aluno_id).order_by(
         CredencialEmbarque.id
@@ -328,11 +321,11 @@ def _conferir(
     credencial: CredencialEmbarque | None,
     ponto_esperado: uuid.UUID | None,
 ) -> AlunosConfirmados:
-    """Recusas do RF-17, cada uma com seu código.
+    """RF-17 rejections, each with its own code.
 
-    `credencial` nula é o fallback manual, que não tem QR lido por trás.
-    `ponto_esperado` nulo dispensa a conferência de ponto: é o caso do evento
-    offline que não informa em qual parada o motorista estava.
+    A null `credencial` is the manual fallback, with no scanned QR behind it.
+    A null `ponto_esperado` skips the stop check: the case of an offline event
+    that does not say which stop the driver was at.
     """
     if registro is None or not registro.confirmacao:
         raise EmbarqueRecusado(
@@ -370,7 +363,7 @@ def _registrar_embarque(registro: AlunosConfirmados, momento: datetime) -> dict[
     registro.embarcou = True
     registro.embarcado_em = momento
 
-    # A credencial é de uso único, inclusive quando o embarque foi manual.
+    # The credential is single use, even when boarding was manual.
     credenciais = CredencialEmbarque.query.filter_by(
         viagem_id=registro.viagem_id, aluno_id=registro.aluno_id
     ).all()
@@ -413,10 +406,10 @@ def _embarque_por_qr(
     momento: datetime,
     ja_aplicado_ok: bool = False,
 ) -> dict[str, Any] | None:
-    """Confirma o embarque por QR, online ou da fila offline.
+    """Confirm QR boarding, online or from the offline queue.
 
-    Com `ja_aplicado_ok` (fila offline reenviada), um passageiro que já embarcou
-    devolve None em vez de recusar; uma credencial recusada recusa sempre.
+    With `ja_aplicado_ok` (resent offline queue), a passenger who already boarded
+    returns None instead of a rejection; a rejected credential always rejects.
     """
     credencial = _credencial_do_qr(qr, viagem, momento)
     registro = _travar_registro(viagem.id, credencial.aluno_id)
@@ -427,7 +420,7 @@ def _embarque_por_qr(
 
     registro = _conferir(registro, credencial, ponto_esperado)
 
-    # Sem foto não há o que conferir: o QR sozinho não embarca ninguém.
+    # Without a photo there is nothing to check: the QR alone boards no one.
     if _foto(registro)["sem_foto"]:
         raise EmbarqueRecusado(
             "Aluno sem foto cadastrada: embarque só pela lista do ponto, no fallback manual",
@@ -448,7 +441,7 @@ def _parada_em_atendimento(viagem: Viagem) -> ViagemPonto:
 
 
 def endpoint_descontinuado() -> None:
-    """`POST .../validacao` antigo, que embarcava na leitura. Falha alto para o app velho."""
+    """Old `POST .../validacao`, which boarded on scan. Fails loudly for the old app."""
     raise EmbarqueRecusado(
         "Esta versão do app do motorista não é mais suportada. Atualize o app para "
         "conferir a foto do passageiro antes de confirmar o embarque.",
@@ -458,12 +451,12 @@ def endpoint_descontinuado() -> None:
 
 
 def checkin_embarque(user_id: IdLike, viagem_id: IdLike, qr: str) -> dict[str, Any]:
-    """RF-17 passo 1: confere a credencial lida e devolve o passageiro com a foto.
+    """RF-17 step 1: checks the scanned credential and returns the passenger with the photo.
 
-    Só leitura: não embarca ninguém nem marca a credencial como usada. Uma
-    credencial fora do roteiro é recusada aqui, sem mostrar foto (fluxo
-    secundário 2). Sem foto cadastrada, volta `sem_foto` e o motorista segue
-    pelo fallback manual.
+    Read only: boards no one and does not mark the credential as used. A
+    credential outside the itinerary is rejected here, without showing a photo
+    (secondary flow 2). With no photo on file, returns `sem_foto` and the driver
+    uses the manual fallback.
     """
     viagem = _viagem_do_motorista(user_id, viagem_id, EM_PERCURSO)
     atual = _parada_em_atendimento(viagem)
@@ -486,10 +479,10 @@ def checkin_embarque(user_id: IdLike, viagem_id: IdLike, qr: str) -> dict[str, A
 
 
 def confirmar_embarque(user_id: IdLike, viagem_id: IdLike, qr: str) -> dict[str, Any]:
-    """RF-17 passo 2: a foto confere e o motorista confirma; o embarque é registrado.
+    """RF-17 step 2: the photo matches and the driver confirms; the boarding is recorded.
 
-    Refaz todas as conferências da leitura, com as linhas travadas: entre a
-    leitura e a confirmação o mesmo QR pode ter sido usado em outro aparelho.
+    Redoes all the scan checks with the rows locked: between the scan and the
+    confirmation the same QR may have been used on another device.
     """
     viagem = _viagem_do_motorista(user_id, viagem_id, EM_PERCURSO)
     atual = _parada_em_atendimento(viagem)
@@ -508,13 +501,13 @@ def recusar_embarque(
     motivo: str,
     observacao: str | None = None,
 ) -> dict[str, Any]:
-    """RF-17 fluxo secundário 1: a foto não é da pessoa e o motorista recusa.
+    """RF-17 secondary flow 1: the photo is not the person and the driver rejects.
 
-    O embarque não é registrado e a credencial fica recusada: o mesmo QR não
-    embarca mais ninguém nesta viagem, nem online nem pela fila offline. O
-    passageiro real, se aparecer, embarca pelo fallback manual depois de o
-    motorista conferir a foto da lista do ponto. A recusa vira ocorrência
-    aberta para o gestor. Não há como desfazer a recusa pela API.
+    The boarding is not recorded and the credential is rejected: the same QR boards
+    no one else on this trip, online or via the offline queue. The real passenger,
+    if they show up, boards via the manual fallback after the driver checks the
+    stop list photo. The rejection becomes an open incident for the manager. It
+    cannot be undone through the API.
     """
     viagem = _viagem_do_motorista(user_id, viagem_id, EM_PERCURSO)
     atual = _parada_em_atendimento(viagem)
@@ -563,12 +556,12 @@ def _registrar_recusa(
 
 
 def confirmar_manual(user_id: IdLike, viagem_id: IdLike, aluno_id: IdLike) -> dict[str, Any]:
-    """RF-17 fallback: falhou a leitura, o motorista acha o aluno na lista do ponto.
+    """RF-17 fallback: the scan failed, the driver finds the student in the stop's list.
 
-    O motorista confere o rosto pela foto da lista do ponto (o roteiro traz a
-    foto de cada passageiro). Não há credencial lida por trás, então cada uso
-    fica registrado como ocorrência, para o gestor auditar. É também o caminho
-    do passageiro real depois de uma recusa e do aluno sem foto.
+    The driver checks the face against the stop list photo (the itinerary carries
+    each passenger's photo). There is no scanned credential behind it, so each use
+    is recorded as an incident for the manager to audit. It is also the path for
+    the real passenger after a rejection and for a student with no photo.
     """
     viagem = _viagem_do_motorista(user_id, viagem_id, EM_PERCURSO)
     atual = _parada_em_atendimento(viagem)
@@ -612,35 +605,30 @@ def _embarque_manual(
     return resultado
 
 
-# ==========================================
-# RF-18 — sincronização em lote da fila offline
-# ==========================================
+# RF-18: batch sync of the offline queue
 
 
 def sincronizar(
     user_id: IdLike, viagem_id: IdLike, eventos: list[dict[str, Any]]
 ) -> dict[str, Any]:
-    """RF-18: aplica a fila que o app do motorista acumulou sem rede.
+    """RF-18: applies the queue the driver app accumulated offline.
 
-    Cada evento é aplicado na própria transação, e o resultado vem por evento:
-    um evento inválido não derruba o lote, e o app sabe exatamente o que pode
-    tirar da fila (§2.3.2).
+    Each event is applied in its own transaction and the result comes back per
+    event: an invalid event does not break the batch, and the app knows exactly
+    what it can remove from the queue (§2.3.2).
 
-    Os eventos são aplicados em ordem de `ocorrido_em` (empate: ordem da fila),
-    e os resultados saem nessa mesma ordem. Assim uma RECUSA anterior bloqueia o
-    EMBARQUE_CONFIRMADO do mesmo QR que veio depois, no mesmo lote ou num próximo.
+    Events are applied in `ocorrido_em` order (ties: queue order), and results come
+    out in that same order. So an earlier RECUSA blocks a later EMBARQUE_CONFIRMADO
+    of the same QR, in the same batch or a later one.
 
-    Idempotência sem tabela de eventos: o efeito de cada evento é uma mudança
-    de estado que já é observável (o passageiro embarcou, a parada foi
-    transposta), então reenviar o lote encontra o estado pronto e não faz nada.
-    As exceções são a posição e a recusa, que são append-only: o `id` da linha
-    (telemetria ou ocorrência) é derivado da viagem e do identificador do evento
-    (UUIDv5),
-    e a chave primária cuida da duplicata.
+    Idempotency without an events table: each event's effect is a state change that
+    is already observable (the passenger boarded, the stop was passed), so resending
+    the batch finds the state done and does nothing. The exceptions are position and
+    rejection, which are append-only: the row `id` (telemetry or incident) is derived
+    from the trip and the event identifier (UUIDv5), and the primary key handles duplicates.
 
-    Eventos chegam fora de ordem e atrasados, então valem pelo carimbo que
-    trazem, nunca pela hora em que chegaram; um carimbo no futuro além da
-    tolerância é recusado.
+    Events arrive out of order and late, so they count by the timestamp they carry,
+    never by arrival time; a timestamp in the future beyond the tolerance is rejected.
     """
     viagem = _viagem_do_motorista(user_id, viagem_id, SINCRONIZAVEL)
     limite = tempo.agora_utc() + _tolerancia()
@@ -712,7 +700,7 @@ def _aplicar_evento(
             evento.get("qr_token") or "", viagem, momento, conferir_codigo=False
         )
         registro = _travar_registro(viagem.id, credencial.aluno_id)
-        # De novo depois do lock: a mesma fila reenviada em paralelo pode ter gravado a recusa.
+        # Again after the lock: the same queue resent in parallel may have saved the rejection.
         if db.session.get(Ocorrencia, ocorrencia_id):
             return "ja_aplicado"
         if registro is None:
@@ -720,8 +708,8 @@ def _aplicar_evento(
                 "Passageiro não consta na lista de embarque desta viagem",
                 "PASSAGEIRO_NAO_PREVISTO",
             )
-        # Sem `_conferir`: o embarque manual do passageiro real pode vir antes, e
-        # a recusa ainda precisa chegar ao gestor e fechar o QR.
+        # No `_conferir`: the real passenger's manual boarding may come first, and the
+        # rejection still needs to reach the manager and close the QR.
         _registrar_recusa(
             viagem,
             registro,
@@ -763,9 +751,9 @@ def _aplicar_evento(
 
 
 def _id_do_evento(viagem: Viagem, evento: dict[str, Any]) -> uuid.UUID:
-    """Id estável do registro gravado pelo evento, para o reenvio da fila não duplicar.
+    """Stable id of the record saved by the event, so a resent queue does not duplicate.
 
-    Leva a viagem: o `evento_id` é do app e só é único dentro da fila da viagem.
+    Includes the trip: `evento_id` comes from the app and is only unique within the trip's queue.
     """
     return uuid.uuid5(uuid.NAMESPACE_OID, f"{viagem.id}:{evento.get('evento_id')}")
 
@@ -775,8 +763,8 @@ def _aplicar_posicao(viagem: Viagem, evento: dict[str, Any], momento: datetime) 
     if latitude is None or longitude is None:
         raise ValidationError("Evento de posição sem coordenadas")
 
-    # Trava a viagem: a mesma fila reenviada em paralelo não grava o rastro duas vezes
-    # nem troca a posição corrente por uma mais antiga.
+    # Lock the trip: the same queue resent in parallel neither saves the trail twice
+    # nor replaces the current position with an older one.
     db.session.query(Viagem).filter(Viagem.id == viagem.id).with_for_update(
         key_share=True
     ).populate_existing().one()
@@ -795,8 +783,8 @@ def _aplicar_posicao(viagem: Viagem, evento: dict[str, Any], momento: datetime) 
         )
     )
 
-    # A posição corrente do veículo é a mais recente pelo carimbo do evento, e
-    # não a que chegou por último — a fila offline vem fora de ordem.
+    # The vehicle's current position is the latest by event timestamp, not the
+    # last to arrive: the offline queue comes out of order.
     if viagem.motorista_gps_hora is None or viagem.motorista_gps_hora < momento:
         viagem.motorista_lat = latitude
         viagem.motorista_lon = longitude

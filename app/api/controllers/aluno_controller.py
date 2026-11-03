@@ -19,7 +19,7 @@ api = Namespace("alunos", description="Área do Aluno (App)")
 # API contracts (Swagger documentation)
 models = aluno_contract.register_models(api)
 
-# Validation / serialisation schemas (Marshmallow)
+# Validation schemas (Marshmallow)
 me_update_schema = AlunoMeUpdateRequestSchema()
 aluno_response_schema = AlunoResponseSchema()
 aluno_list_response_schema = AlunoListResponseSchema()
@@ -37,7 +37,7 @@ class AlunoMeResource(Resource):
     @api.response(200, "Success", models["aluno_response"])
     @jwt_required()
     def put(self) -> tuple[dict[str, Any], int]:
-        """Aluno atualiza seu perfil (Dados Pessoais + Endereço)"""
+        """Student updates their profile (personal data + address)"""
         user_id = get_jwt_identity()
         data = request.get_json(silent=True) or {}
         payload = me_update_schema.load(data)
@@ -53,7 +53,7 @@ class AlunoMeFotoResource(Resource):
     @api.response(200, "Success", models["aluno_response"])
     @jwt_required()
     def put(self) -> tuple[dict[str, Any], int]:
-        """Aluno envia a própria foto (multipart, campo `foto`)"""
+        """Student uploads their own photo (multipart, field `foto`)"""
         user_id = get_jwt_identity()
         arquivo = request.files.get("foto")
         if arquivo is None:
@@ -69,7 +69,7 @@ class AlunoFotoResource(Resource):
     @api.produces(["image/jpeg", "image/png", "image/webp"])
     @jwt_required()
     def get(self, aluno_id: str) -> Response:
-        """Foto do aluno (o próprio aluno, gestor da organização ou motorista da viagem)"""
+        """Student photo (the student, the organization's manager, or the trip's driver)"""
         user_id = get_jwt_identity()
         caminho, tipo = aluno_service.buscar_foto(user_id, aluno_id)
         return send_file(caminho, mimetype=tipo, max_age=0)
@@ -82,7 +82,7 @@ class AlunoListResource(Resource):
     @api.response(200, "Success", models["aluno_list_response"])
     @jwt_required()
     def get(self) -> tuple[dict[str, Any], int]:
-        """Gestor vê lista de alunos cadastrados"""
+        """Manager lists registered students"""
         from flask import request as flask_request
 
         user_id = get_jwt_identity()
@@ -105,7 +105,7 @@ class AlunoDetailResource(Resource):
     @api.response(200, "Success", models["aluno_response"])
     @jwt_required()
     def get(self, aluno_id: str) -> tuple[dict[str, Any], int]:
-        """(Gestor) Obtém detalhes completos de um aluno"""
+        """(Manager) Gets a student's full details"""
         gestor_id = get_jwt_identity()
         aluno = aluno_service.get_aluno_by_id(gestor_id, aluno_id)
         return aluno_response_schema.dump(aluno), 200

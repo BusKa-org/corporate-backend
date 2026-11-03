@@ -1,4 +1,4 @@
-"""Consentimento LGPD e exclusão de conta, pela API HTTP."""
+"""LGPD consent and account deletion, via the HTTP API."""
 
 import re
 from datetime import UTC, date, datetime, timedelta
@@ -41,7 +41,7 @@ def _excluir(aluno, email, senha):
     return aluno.client.delete("/v1/users/me", json={"email": email, "senha": senha})
 
 
-# ---------- consentimento ----------
+# ---------- consent ----------
 
 
 def test_aceitar_e_revogar_muda_o_estado(aluno):
@@ -82,7 +82,7 @@ def test_confirmar_presenca_bloqueia_sem_consentimento(aluno):
 
     aluno.client.post("/v1/consentimento", json={"versao": VERSAO_TERMO_VIGENTE})
     liberado = aluno.client.put(url, json={"confirmacao": False})
-    assert liberado.status_code == 404  # passou pelo bloqueio e não achou a viagem
+    assert liberado.status_code == 404  # passed the block and did not find the trip
 
 
 def test_credencial_de_embarque_bloqueia_sem_consentimento(aluno):
@@ -92,7 +92,7 @@ def test_credencial_de_embarque_bloqueia_sem_consentimento(aluno):
     assert aluno.client.get(url).status_code == 403
 
     aluno.client.post("/v1/consentimento", json={"versao": VERSAO_TERMO_VIGENTE})
-    assert aluno.client.get(url).status_code == 404  # passou pelo bloqueio e não achou a credencial
+    assert aluno.client.get(url).status_code == 404  # passed the block, no credential found
 
 
 def test_login_e_perfil_trazem_a_flag_de_consentimento_pendente(client, organizacao, _db):
@@ -109,7 +109,7 @@ def test_login_e_perfil_trazem_a_flag_de_consentimento_pendente(client, organiza
     assert perfil.get_json()["consentimento_pendente"] is True
 
 
-# ---------- exclusão de conta ----------
+# ---------- account deletion ----------
 
 
 def test_excluir_conta_com_senha_errada_ou_email_diferente(aluno):
@@ -157,7 +157,7 @@ def test_excluir_conta_cancela_solicitacao_e_viagem_sem_mais_ninguem(
     _db.session.expire_all()
     solicitacao = SolicitacaoViagem.query.filter_by(viagem_id=viagem_solicitada.id).one()
     assert solicitacao.status == StatusSolicitacao.CANCELADA
-    # Mesmo efeito do cancelamento normal: a viagem sem ninguém é cancelada e o motorista avisado.
+    # Same effect as a normal cancellation: the empty trip is cancelled and the driver notified.
     assert _db.session.get(Viagem, viagem_solicitada.id).status == StatusViagem.CANCELADA
     assert Notificacao.query.filter_by(usuario_id=motorista.user.id).count() == 1
 
@@ -180,7 +180,7 @@ def test_excluir_conta_no_buffer_devolve_o_trecho_e_nao_vira_passageiro(
     assert _db.session.get(SolicitacaoViagem, solicitacao.id).status == StatusSolicitacao.CANCELADA
     assert _db.session.get(Viagem, viagem_solicitada.id).status == StatusViagem.BUFFER_ABERTO
 
-    # O fechamento do buffer não transforma o aluno excluído em passageiro com credencial.
+    # Closing the buffer does not turn the deleted student into a passenger with a credential.
     buffer_service.fechar_buffers_expirados()
     assert AlunosConfirmados.query.filter_by(aluno_id=aluno.user.id).count() == 0
     assert CredencialEmbarque.query.filter_by(aluno_id=aluno.user.id).count() == 0
@@ -222,7 +222,7 @@ def test_token_da_conta_excluida_para_de_valer(
         (UserStatus.DISABLED, False),
         (UserStatus.PENDING_APPROVAL, False),
         (UserStatus.DELETED, False),
-        # O login aceita: é com esse token que o passageiro termina o cadastro.
+        # Login accepts: this is the token the passenger uses to finish sign-up.
         (UserStatus.PENDING_SIGNUP, True),
         (UserStatus.ACTIVE, True),
     ],
@@ -245,7 +245,7 @@ def test_token_de_usuario_que_nao_existe_mais(client, app):
 def test_aluno_excluido_nao_declara_mesmo_sem_a_checagem_do_token(
     aluno, viagem_buffer_aberto, pontos_circuito, _db
 ):
-    """Defesa em profundidade: o serviço recusa mesmo que o token passasse."""
+    """Defense in depth: the service refuses even if the token got through."""
     _db.session.add(
         SolicitacaoViagemFactory(viagem_id=viagem_buffer_aberto.id, aluno_id=aluno.user.id)
     )
@@ -338,7 +338,7 @@ def test_excluir_conta_anonimiza_e_preserva_historico(
     )
     assert ultimo_consentimento.acao == REVOGACAO
 
-    # Retenção legal: e-mail e CPF originais ficam por 10 anos, só na tabela restrita.
+    # Legal retention: the original e-mail and CPF stay for 10 years, only in the restricted table.
     assert excluido.cpf != cpf_original
     retido = _db.session.get(RetencaoLegal, aluno_id)
     assert retido.email == email_original
@@ -365,7 +365,7 @@ def test_conta_excluida_nao_faz_login_com_o_email_antigo(client, organizacao, _d
     assert login.status_code == 401
 
 
-# ---------- anonimização depois do prazo de retenção ----------
+# ---------- anonymization after the retention period ----------
 
 
 def test_job_troca_e_mail_e_cpf_vencidos_por_hash_e_nao_mexe_nos_outros(organizacao, _db):
