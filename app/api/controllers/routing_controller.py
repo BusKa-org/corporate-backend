@@ -10,6 +10,7 @@ from app.services import routing_service
 
 api = Namespace("routing", description="Roteamento e Cálculo de Rotas")
 
+# API contracts (Swagger documentation)
 models = routing_contract.register_models(api)
 
 _REQUIRED_PARAMS = ("origin_lat", "origin_lng", "dest_lat", "dest_lng")

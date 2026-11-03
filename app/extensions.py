@@ -37,14 +37,14 @@ def _chave_do_cliente() -> str:
 
 
 def _corpo() -> Mapping[str, Any]:
-    """JSON or form body, without failing and without consuming the view's body.
+    """JSON body, without failing and without consuming the view's body.
 
-    Flask caches get_json(silent=True) and the form, so the view reads the same body later.
+    Flask caches get_json(silent=True), so the view reads the same body later.
     """
     dados = request.get_json(silent=True)
     if isinstance(dados, dict):
         return dados
-    return request.form
+    return {}
 
 
 def _email_do_corpo() -> str | None:
@@ -58,12 +58,10 @@ def _email_do_corpo() -> str | None:
 
 
 def _token_da_requisicao() -> str | None:
-    """Invite token (in the URL) or password reset token (query string or body)."""
+    """Invite token (in the URL) or password reset token (JSON body)."""
     token = None
     if request.view_args:
         token = request.view_args.get("token")
-    if not token:
-        token = request.args.get("token")
     if not token:
         token = _corpo().get("token")
     if not isinstance(token, str):
