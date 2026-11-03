@@ -20,7 +20,7 @@ def test_verificar_viagens_24h(app, relogio):
             mock_viagem = MagicMock()
             mock_viagem.id = "viagem-123"
             mock_viagem.data = date(2026, 11, 3)
-            mock_viagem.horario_rota.horario_saida = time(9, 0)
+            mock_viagem.horario_rota.horario_saida = time(10, 0)
             mock_query.filter.return_value.all.return_value = [mock_viagem]
 
             mock_inscricao = MagicMock()
@@ -53,7 +53,7 @@ def test_verificar_viagens_10min(app, relogio):
             mock_viagem = MagicMock()
             mock_viagem.id = "viagem-123"
             mock_viagem.data = date(2026, 11, 2)
-            mock_viagem.horario_rota.horario_saida = time(10, 5)
+            mock_viagem.horario_rota.horario_saida = time(10, 15)
             mock_query.filter.return_value.all.return_value = [mock_viagem]
 
             mock_confirmado = MagicMock()
