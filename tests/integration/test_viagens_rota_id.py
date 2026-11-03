@@ -62,19 +62,24 @@ def test_listagem_do_gestor_inclui_viagem_sob_demanda(gestor, viagem_solicitada,
 
 
 def test_agenda_do_aluno_com_viagem_sob_demanda(
-    aluno, rota_sob_demanda, motorista, _db, horario_rota
+    aluno, rota_sob_demanda, motorista, _db, horario_rota, relogio
 ):
+    # 23:30 in Sao Paulo is already the next day in UTC: the agenda must keep the local day.
+    relogio.ajustar(datetime(2026, 11, 3, 2, 30, tzinfo=UTC))
+    hoje_local = date(2026, 11, 2)
     _db.session.add(RotaAluno(rota_id=rota_sob_demanda.id, aluno_id=aluno.user.id))
     _db.session.add(RotaAluno(rota_id=horario_rota.rota_id, aluno_id=aluno.user.id))
     fixa = ViagemFactory(
         rota_id=horario_rota.rota_id,
         horario_rota_id=horario_rota.id,
-        data=date.today(),
+        data=hoje_local,
         status=StatusViagem.AGENDADA,
     )
     _db.session.add(fixa)
     _db.session.commit()
-    sob_demanda = _viagem_sob_demanda(_db, rota_sob_demanda, motorista, StatusViagem.EM_ANDAMENTO)
+    sob_demanda = _viagem_sob_demanda(
+        _db, rota_sob_demanda, motorista, StatusViagem.EM_ANDAMENTO, hoje_local
+    )
 
     r = aluno.client.get("/v1/viagens/aluno/agenda")
     assert r.status_code == 200, r.get_data(as_text=True)
