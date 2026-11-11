@@ -1,17 +1,23 @@
 from marshmallow import fields, validate
 
+from app.core.config import (
+    OPERACAO_MINIMO_ALUNOS_MAX,
+    OPERACAO_MINIMO_ALUNOS_MIN,
+    OPERACAO_MINUTOS_MAX,
+)
 from app.schemas.common import BaseSchema
-
-MINUTOS_EM_UM_DIA = 1440
 
 
 class ParametrosOperacaoRequestSchema(BaseSchema):
-    minimo_alunos = fields.Integer(required=True, validate=validate.Range(min=1, max=1000))
+    minimo_alunos = fields.Integer(
+        required=True,
+        validate=validate.Range(min=OPERACAO_MINIMO_ALUNOS_MIN, max=OPERACAO_MINIMO_ALUNOS_MAX),
+    )
     pausa_entre_viagens_minutos = fields.Integer(
-        required=True, validate=validate.Range(min=0, max=MINUTOS_EM_UM_DIA)
+        required=True, validate=validate.Range(min=0, max=OPERACAO_MINUTOS_MAX)
     )
     antecedencia_motorista_minutos = fields.Integer(
-        required=True, validate=validate.Range(min=0, max=MINUTOS_EM_UM_DIA)
+        required=True, validate=validate.Range(min=0, max=OPERACAO_MINUTOS_MAX)
     )
 
 

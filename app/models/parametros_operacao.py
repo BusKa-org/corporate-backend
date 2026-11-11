@@ -18,6 +18,8 @@ class ParametrosOperacao(db.Model):
     )
     minimo_alunos = db.Column(db.Integer, nullable=False)
     pausa_entre_viagens_minutos = db.Column(db.Integer, nullable=False)
+    # shortcut: stored only, not enforced; enforce once the gestor defines what lead time means
+    # for on-demand trips.
     antecedencia_motorista_minutos = db.Column(db.Integer, nullable=False)
     updated_at = db.Column(
         db.DateTime(timezone=True), server_default=db.func.now(), onupdate=db.func.now()
