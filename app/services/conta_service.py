@@ -95,10 +95,12 @@ def _apagar_dados_sem_valor_estatistico(aluno_id) -> None:
 
 
 def excluir_conta(user_id: str, email: str, senha: str) -> None:
-    # Cheap pre-check so an already deleted account takes no locks; re-checked after the lock.
+    # Cheap pre-check so a deleted or non-student account takes no locks; re-checked after the lock.
     user = db.session.get(User, user_id)
     if user is None or user.status == UserStatus.DELETED:
         raise NotFoundError("Usuário não encontrado")
+    if user.role != UserRole.ALUNO:
+        raise ForbiddenError("Somente passageiros podem excluir a própria conta")
 
     # Same lock order as the rest of the system: vehicle and trip before the student.
     viagens_travadas = solicitacoes_service.travar_viagens_do_aluno(user_id)
