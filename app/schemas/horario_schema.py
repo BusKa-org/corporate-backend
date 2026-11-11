@@ -16,6 +16,7 @@ class HorarioCreateRequestSchema(BaseSchema):
     dias = fields.List(
         fields.String(validate=validate.OneOf(["SEG", "TER", "QUA", "QUI", "SEX", "SAB", "DOM"])),
         required=True,
+        validate=validate.Length(min=1, error="Selecione pelo menos um dia da semana"),
         metadata={"description": "Lista de dias da semana"},
     )
 

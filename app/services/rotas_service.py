@@ -95,7 +95,7 @@ def _get_rota_do_gestor(
         raise ForbiddenError(mensagem_permissao)
 
     rota = db.session.get(Rota, rota_id)
-    if not rota:
+    if not rota or not rota.ativa:
         raise NotFoundError("Rota não encontrada")
 
     if rota.organizacao_id != user.organizacao_id:
@@ -111,7 +111,7 @@ def list_all_rotas(user_id: str) -> list[Rota]:
         raise NotFoundError("Usuário não encontrado")
 
     logger.debug(f"User {user_id} listing routes for organizacao {user.organizacao_id}")
-    return Rota.query.filter_by(organizacao_id=user.organizacao_id).all()
+    return Rota.query.filter_by(organizacao_id=user.organizacao_id, ativa=True).all()
 
 
 def list_my_rotas(user_id: str) -> list[Rota]:
@@ -124,11 +124,11 @@ def list_my_rotas(user_id: str) -> list[Rota]:
         case UserRole.ALUNO:
             inscricoes = RotaAluno.query.filter_by(aluno_id=user.id).all()
             rota_ids = [i.rota_id for i in inscricoes]
-            return Rota.query.filter(Rota.id.in_(rota_ids)).all()
+            return Rota.query.filter(Rota.id.in_(rota_ids), Rota.ativa.is_(True)).all()
         case UserRole.MOTORISTA:
-            return Rota.query.filter_by(motorista_padrao_id=user.id).all()
+            return Rota.query.filter_by(motorista_padrao_id=user.id, ativa=True).all()
         case UserRole.GESTOR:
-            return Rota.query.filter_by(organizacao_id=user.organizacao_id).all()
+            return Rota.query.filter_by(organizacao_id=user.organizacao_id, ativa=True).all()
         case _:
             return []
 
@@ -397,12 +397,8 @@ def add_horario(gestor_id: str, rota_id: str, data: dict[str, Any]) -> HorarioRo
     """
     rota = _get_rota_fixa_do_gestor(gestor_id, rota_id)
 
-    dias_list = data.get("dias", [])
-    if not dias_list:
-        raise ValidationError("Selecione pelo menos um dia da semana")
-
     travar_rota(rota.id)
-    _garantir_horario_nao_duplicado(rota.id, data["horario_saida"], data["sentido"], dias_list)
+    _garantir_horario_nao_duplicado(rota.id, data["horario_saida"], data["sentido"], data["dias"])
 
     try:
         novo_horario = _criar_horario(rota.id, data)
@@ -439,20 +435,22 @@ def _get_horario_do_gestor(gestor_id: str, rota_id: str, horario_id: str) -> Hor
     return horario
 
 
-def _garantir_horario_sem_viagem_pendente(horario: HorarioRota, acao: str) -> None:
-    """Pending trips would move with the schedule. Past AGENDADA trips never leave
-    that status on their own, so only upcoming ones block; EM_ANDAMENTO always does.
+def _filtro_viagem_pendente() -> Any:
+    """Past AGENDADA trips never leave that status on their own, so only upcoming
+    ones are pending; a started trip always is.
     """
     hoje = tempo.agora_local().date()
+    return or_(
+        Viagem.status.in_(STATUS_VIAGEM_ATIVA),
+        and_(Viagem.status == StatusViagem.AGENDADA, Viagem.data >= hoje),
+    )
+
+
+def _garantir_horario_sem_viagem_pendente(horario: HorarioRota, acao: str) -> None:
+    """Pending trips would move with the schedule."""
     pendente = (
         db.session.query(Viagem.id)
-        .filter(
-            Viagem.horario_rota_id == horario.id,
-            or_(
-                Viagem.status == StatusViagem.EM_ANDAMENTO,
-                and_(Viagem.status == StatusViagem.AGENDADA, Viagem.data >= hoje),
-            ),
-        )
+        .filter(Viagem.horario_rota_id == horario.id, _filtro_viagem_pendente())
         .first()
     )
     if pendente:
@@ -479,10 +477,7 @@ def update_horario(
     Raises: ForbiddenError, NotFoundError, ValidationError, ConflictError, AppError
     """
     horario = _get_horario_do_gestor(gestor_id, rota_id, horario_id)
-
-    dias_list = data.get("dias", [])
-    if not dias_list:
-        raise ValidationError("Selecione pelo menos um dia da semana")
+    dias_list = data["dias"]
 
     _garantir_horario_sem_viagem_pendente(horario, "alterá-lo")
     _garantir_horario_nao_duplicado(
@@ -555,7 +550,7 @@ def get_horarios(user_id: str, rota_id: str) -> list:
         raise NotFoundError("Usuário não encontrado")
 
     rota = db.session.get(Rota, rota_id)
-    if not rota:
+    if not rota or not rota.ativa:
         raise NotFoundError("Rota não encontrada")
 
     if (
@@ -578,7 +573,7 @@ def get_by_id(user_id: str, rota_id: str) -> Rota:
         raise NotFoundError("Usuário não encontrado")
 
     rota = db.session.get(Rota, rota_id)
-    if not rota:
+    if not rota or not rota.ativa:
         raise NotFoundError("Rota não encontrada")
 
     if (
@@ -604,7 +599,7 @@ def update_rota(user_id: str, rota_id: str, data: dict[str, Any]) -> Rota:
         raise ForbiddenError("Permissão negada")
 
     rota = db.session.get(Rota, rota_id)
-    if not rota:
+    if not rota or not rota.ativa:
         raise NotFoundError("Rota não encontrada")
 
     if rota.organizacao_id != user.organizacao_id:
@@ -670,9 +665,9 @@ def update_rota(user_id: str, rota_id: str, data: dict[str, Any]) -> Rota:
 
 
 def delete_rota(user_id: str, rota_id: str) -> None:
-    """Delete a route.
+    """Delete a route; one with trips is only deactivated, so those trips keep it.
 
-    Raises: ForbiddenError, NotFoundError, AppError
+    Raises: ForbiddenError, NotFoundError, ConflictError, AppError
     """
     validate_uuid(user_id, "User ID")
     validate_uuid(rota_id, "Rota ID")
@@ -683,7 +678,7 @@ def delete_rota(user_id: str, rota_id: str) -> None:
         raise ForbiddenError("Permissão negada")
 
     rota = db.session.get(Rota, rota_id)
-    if not rota:
+    if not rota or not rota.ativa:
         raise NotFoundError("Rota não encontrada")
 
     if rota.organizacao_id != user.organizacao_id:
@@ -702,10 +697,28 @@ def delete_rota(user_id: str, rota_id: str) -> None:
         )
         raise ForbiddenError("Acesso negado")
 
+    travar_rota(rota.id)
+    viagens_da_rota = (
+        db.session.query(Viagem.id)
+        .outerjoin(HorarioRota, Viagem.horario_rota_id == HorarioRota.id)
+        .filter(or_(Viagem.rota_id == rota.id, HorarioRota.rota_id == rota.id))
+    )
+    if viagens_da_rota.filter(_filtro_viagem_pendente()).first():
+        raise ConflictError(
+            "Há viagens agendadas ou em andamento nesta rota; "
+            "cancele-as ou aguarde a finalização para removê-la"
+        )
+
     try:
         rota_nome = rota.nome
 
-        db.session.delete(rota)
+        # The trip FKs are SET NULL: deleting would wipe route, time and direction of past trips.
+        if viagens_da_rota.first():
+            rota.ativa = False
+            for horario in rota.grade_horarios:
+                horario.ativo = False
+        else:
+            db.session.delete(rota)
         db.session.commit()
 
         audit_logger.log_user_action(
@@ -729,7 +742,7 @@ def get_pontos_by_rota(user_id: str, rota_id: str) -> list[dict[str, Any]]:
         raise NotFoundError("Usuário não encontrado")
 
     rota = db.session.get(Rota, rota_id)
-    if not rota:
+    if not rota or not rota.ativa:
         raise NotFoundError("Rota não encontrada")
 
     rota_pontos = RotaPonto.query.filter_by(rota_id=rota_id).order_by(RotaPonto.ordem.asc()).all()

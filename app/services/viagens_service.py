@@ -317,15 +317,7 @@ def _resolver_horario(rota: Rota, dia: DiaDaSemana, horario_rota_id: Any) -> Hor
         raise NotFoundError("Horário não encontrado nesta rota")
 
     if not horario.ativo:
-        # A PUT may have versioned it after the client read it: take the active
-        # version with the same time and direction.
-        substituto = ativos_no_dia.filter(
-            HorarioRota.sentido == horario.sentido,
-            HorarioRota.horario_saida == horario.horario_saida,
-        ).first()
-        if not substituto:
-            raise NotFoundError("Horário não está mais ativo nesta rota")
-        return substituto
+        raise NotFoundError("Horário não está mais ativo; use o horário atual")
 
     for dia_operacao in horario.dias:
         if dia_operacao.dia == dia:
@@ -350,7 +342,7 @@ def gerar_viagem(user_id: str, data_input: dict) -> Viagem:
         raise ValidationError("Data é obrigatória")
 
     rota = db.session.get(Rota, rota_id)
-    if not rota:
+    if not rota or not rota.ativa:
         raise NotFoundError("Rota não encontrada")
 
     if rota.organizacao_id != user.organizacao_id:
@@ -378,6 +370,7 @@ def gerar_viagem(user_id: str, data_input: dict) -> Viagem:
             HorarioRota.sentido == horario_selecionado.sentido,
             HorarioRota.horario_saida == horario_selecionado.horario_saida,
             Viagem.data == data_viagem,
+            Viagem.status != StatusViagem.CANCELADA,
         )
         .first()
     )

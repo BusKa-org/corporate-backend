@@ -44,6 +44,9 @@ class Rota(db.Model):
         UUID(as_uuid=True), db.ForeignKey("onibus.id", ondelete="SET NULL")
     )
 
+    # A route with trips is deactivated instead of deleted, so its trips keep route and schedule.
+    ativa = db.Column(db.Boolean, nullable=False, default=True, server_default=db.true())
+
     created_at = db.Column(db.DateTime(timezone=True), server_default=db.func.now())
     updated_at = db.Column(
         db.DateTime(timezone=True), server_default=db.func.now(), onupdate=db.func.now()

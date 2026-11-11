@@ -7,7 +7,7 @@ import pytest
 
 from app.core.exceptions import ConflictError, NotFoundError, ValidationError
 from app.models.enum import DiaDaSemana, SentidoViagem, StatusViagem
-from app.models.rota import DiasOperacao, HorarioRota
+from app.models.rota import DiasOperacao, HorarioRota, Rota
 from app.models.viagem import Viagem
 from app.schemas.viagem_schema import ViagemResponseSchema
 from app.services import rotas_service, viagens_service
@@ -199,6 +199,9 @@ def test_criar_rota_aplica_as_regras_de_horario(gestor):
     assert _criar_rota(gestor, duplicados).status_code == 409
     invalido = [{"horario_saida": "06:00", "sentido": "IDA", "dias": ["XYZ"]}]
     assert _criar_rota(gestor, invalido).status_code == 400
+    sem_dias = _criar_rota(gestor, [{"horario_saida": "06:00", "sentido": "IDA", "dias": []}])
+    assert sem_dias.status_code == 400
+    assert "Selecione pelo menos um dia da semana" in sem_dias.get_data(as_text=True)
 
 
 def _gerar(gestor, rota, data=FUTURO, horario=None):
@@ -241,7 +244,7 @@ def test_gerar_viagem_valida_o_horario_informado(_db, gestor, rota, organizacao)
         _gerar(gestor, rota, horario=alheio)
 
 
-def test_gerar_viagem_com_horario_versionado_usa_a_versao_ativa(_db, gestor, rota, relogio):
+def test_gerar_viagem_com_horario_inativo_nao_encontrado(_db, gestor, rota, relogio):
     antigo = _horario(_db, rota, [DiaDaSemana.TER])
     _viagem(_db, antigo, StatusViagem.FINALIZADA)
     r = gestor.client.put(
@@ -249,7 +252,24 @@ def test_gerar_viagem_com_horario_versionado_usa_a_versao_ativa(_db, gestor, rot
     )
     novo_id = r.get_json()["id"]
 
-    assert str(_gerar(gestor, rota, horario=antigo).horario_rota_id) == novo_id
+    with pytest.raises(NotFoundError, match="não está mais ativo"):
+        _gerar(gestor, rota, horario=antigo)
+    assert str(_gerar(gestor, rota).horario_rota_id) == novo_id
+
+
+def test_viagem_cancelada_pode_ser_gerada_de_novo(_db, gestor, rota, relogio):
+    antigo = _horario(_db, rota, [DiaDaSemana.SEG])
+    _viagem(_db, antigo, StatusViagem.CANCELADA, data=FUTURO)
+    r = gestor.client.put(
+        _url(antigo), json={"horario_saida": "06:00", "sentido": "IDA", "dias": ["SEG", "TER"]}
+    )
+    novo_id = r.get_json()["id"]
+
+    r = gestor.client.post(
+        "/v1/viagens/",
+        json={"rota_id": str(rota.id), "data": str(FUTURO), "horario_rota_id": novo_id},
+    )
+    assert r.status_code == 201, r.get_data(as_text=True)
 
 
 def test_viagem_repetida_apos_versionar_horario_conflita(_db, gestor, rota, relogio):
@@ -321,3 +341,40 @@ def test_erro_interno_nao_vaza_detalhes(gestor, rota, monkeypatch):
     )
     assert r.status_code == 500
     assert "detalhe-interno-do-banco" not in r.get_data(as_text=True)
+
+
+def test_remover_rota_sem_viagens_apaga(_db, gestor, horario_rota):
+    assert gestor.client.delete(f"/v1/rotas/{horario_rota.rota_id}").status_code == 200
+    _db.session.expire_all()
+    assert _db.session.get(Rota, horario_rota.rota_id) is None
+
+
+def test_remover_rota_com_viagem_passada_so_desativa(_db, gestor, rota, relogio):
+    horario = _horario(_db, rota, [DiaDaSemana.SEG])
+    passada = _viagem(_db, horario, StatusViagem.FINALIZADA)
+
+    assert gestor.client.delete(f"/v1/rotas/{rota.id}").status_code == 200
+
+    _db.session.expire_all()
+    assert _db.session.get(Rota, rota.id).ativa is False
+    assert _db.session.get(HorarioRota, horario.id).ativo is False
+    viagem = _db.session.get(Viagem, passada.id)
+    assert viagem.rota_id == rota.id
+    assert viagem.horario_rota_id == horario.id
+    assert ViagemResponseSchema().dump(viagem)["horario_inicio"] == "06:00:00"
+
+    ids = []
+    for item in gestor.client.get("/v1/rotas/").get_json()["items"]:
+        ids.append(item["id"])
+    assert str(rota.id) not in ids
+    assert gestor.client.get(f"/v1/rotas/{rota.id}").status_code == 404
+    assert gestor.client.delete(f"/v1/rotas/{rota.id}").status_code == 404
+    with pytest.raises(NotFoundError):
+        _gerar(gestor, rota)
+
+
+def test_rota_com_viagem_pendente_nao_e_removida(_db, gestor, horario_rota, relogio):
+    _viagem(_db, horario_rota, StatusViagem.AGENDADA, data=FUTURO)
+    assert gestor.client.delete(f"/v1/rotas/{horario_rota.rota_id}").status_code == 409
+    _db.session.expire_all()
+    assert _db.session.get(Rota, horario_rota.rota_id).ativa is True

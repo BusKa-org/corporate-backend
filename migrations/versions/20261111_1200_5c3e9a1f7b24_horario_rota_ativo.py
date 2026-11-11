@@ -1,7 +1,8 @@
-"""horario_rota.ativo: retire schedules that already have trips instead of deleting them
+"""horario_rota.ativo, rota.ativa: retire schedules and routes that already have trips instead of deleting them
 
 Trips read horario_saida and sentido live from horario_rota, so editing or
-deleting a schedule rewrote or wiped past trips. Also fills viagem.rota_id for
+deleting a schedule rewrote or wiped past trips; deleting a route cascaded
+the same way. Also fills viagem.rota_id for
 legacy fixed trips that only point at their schedule.
 
 Revision ID: 5c3e9a1f7b24
@@ -27,6 +28,10 @@ def upgrade() -> None:
         "horario_rota",
         sa.Column("ativo", sa.Boolean(), nullable=False, server_default=sa.true()),
     )
+    op.add_column(
+        "rota",
+        sa.Column("ativa", sa.Boolean(), nullable=False, server_default=sa.true()),
+    )
     op.execute(
         "UPDATE viagem SET rota_id = horario_rota.rota_id FROM horario_rota "
         "WHERE viagem.horario_rota_id = horario_rota.id AND viagem.rota_id IS NULL"
@@ -35,4 +40,5 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     """Downgrade database schema. The rota_id backfill is kept: it is correct data."""
+    op.drop_column("rota", "ativa")
     op.drop_column("horario_rota", "ativo")
