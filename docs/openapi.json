@@ -1603,6 +1603,9 @@
       },
       "delete": {
         "responses": {
+          "409": {
+            "description": "Viagem pendente na rota"
+          },
           "200": {
             "description": "Success"
           }
@@ -1669,7 +1672,7 @@
             }
           },
           "409": {
-            "description": "Outro horário ativo no mesmo dia"
+            "description": "Horário idêntico (mesmo horário, sentido e dia) já ativo"
           }
         },
         "operationId": "add_rota_horario",
@@ -2749,7 +2752,7 @@
       "put": {
         "responses": {
           "409": {
-            "description": "Viagem pendente no horário ou outro horário no mesmo dia"
+            "description": "Viagem pendente no horário ou horário idêntico já ativo"
           },
           "404": {
             "description": "Horário não encontrado ou inativo"

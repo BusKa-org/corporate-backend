@@ -163,7 +163,7 @@ class RotaHorariosResource(Resource):
     @api.doc("add_rota_horario")
     @api.expect(models["rota_horario_create_request"])
     @api.response(201, "Created", models["rota_horario_response"])
-    @api.response(409, "Outro horário ativo no mesmo dia")
+    @api.response(409, "Horário idêntico (mesmo horário, sentido e dia) já ativo")
     @jwt_required()
     def post(self, id: str) -> tuple[dict[str, Any], int]:
         current_user = get_jwt_identity()
@@ -180,7 +180,7 @@ class RotaHorarioResource(Resource):
     @api.expect(models["rota_horario_create_request"])
     @api.response(200, "Success", models["rota_horario_response"])
     @api.response(404, "Horário não encontrado ou inativo")
-    @api.response(409, "Viagem pendente no horário ou outro horário no mesmo dia")
+    @api.response(409, "Viagem pendente no horário ou horário idêntico já ativo")
     @jwt_required()
     def put(self, id: str, horario_id: str) -> tuple[dict[str, Any], int]:
         """Replaces a schedule; one that already has trips is versioned under a new id."""
@@ -227,6 +227,7 @@ class RotaResource(Resource):
 
     @api.doc("delete_rota")
     @api.response(200, "Success")
+    @api.response(409, "Viagem pendente na rota")
     @jwt_required()
     def delete(self, id: str) -> tuple[dict[str, Any], int]:
         current_user_id = get_jwt_identity()
