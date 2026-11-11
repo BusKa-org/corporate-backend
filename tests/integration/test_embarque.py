@@ -420,6 +420,14 @@ def test_validacao_antiga_responde_410(rodada, motorista, aluno, _db):
 
 
 @pytest.mark.integration
+def test_validacao_antiga_responde_410_para_id_que_nao_e_uuid(motorista):
+    r = motorista.client.post("/v1/embarque/viagens/nao-e-uuid/validacao", json={})
+
+    assert r.status_code == 410
+    assert _codigo_erro(r) == "ENDPOINT_DESCONTINUADO"
+
+
+@pytest.mark.integration
 @pytest.mark.parametrize("passo", ["checkin", "confirmacao", "recusa"])
 @pytest.mark.parametrize(
     "qr",

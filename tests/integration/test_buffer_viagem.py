@@ -9,6 +9,7 @@ from app.models.consentimento import ACEITE, Consentimento
 from app.models.credencial_embarque import CredencialEmbarque
 from app.models.enum import StatusMotorista, StatusSolicitacao, StatusViagem, UserStatus
 from app.models.notificacao import Notificacao
+from app.models.parametros_operacao import ParametrosOperacao
 from app.models.viagem import AlunosConfirmados, Viagem
 from app.services import buffer_service, viagens_service
 from app.services.consentimento_service import VERSAO_TERMO_VIGENTE
@@ -170,6 +171,34 @@ def test_buffer_expirado_sem_trajeto_declarado_cancela_a_viagem(
     assert AlunosConfirmados.query.filter_by(viagem_id=viagem.id).count() == 0
     assert _notificacoes(motorista.user.id) == 1
     assert _notificacoes(aluno.user.id) == 0
+
+
+def test_buffer_expirado_abaixo_do_minimo_cancela_e_avisa(
+    _db, organizacao, viagem_solicitada, pontos_circuito, motorista, aluno, relogio
+):
+    _db.session.add(
+        ParametrosOperacao(
+            organizacao_id=organizacao.id,
+            minimo_alunos=2,
+            pausa_entre_viagens_minutos=0,
+            antecedencia_motorista_minutos=0,
+        )
+    )
+    solicitacao = viagem_solicitada.solicitacoes[0]
+    solicitacao.ponto_embarque_id = pontos_circuito[0].id
+    solicitacao.ponto_destino_id = pontos_circuito[2].id
+    _abrir_buffer(_db, viagem_solicitada, relogio.agora + timedelta(minutes=5))
+    relogio.avancar(minutes=6)
+
+    assert buffer_service.fechar_buffers_expirados() == 1
+
+    viagem = _db.session.get(Viagem, viagem_solicitada.id)
+    assert viagem.status == StatusViagem.CANCELADA
+    assert viagem.inicio_real is None
+    assert viagem.solicitacoes[0].status == StatusSolicitacao.CANCELADA
+    assert AlunosConfirmados.query.filter_by(viagem_id=viagem.id).count() == 0
+    assert _notificacoes(motorista.user.id) == 1
+    assert _notificacoes(aluno.user.id) == 1
 
 
 def test_buffer_nao_expirado_fica_intacto(_db, viagem_solicitada, relogio):

@@ -194,6 +194,9 @@ class AlunosConfirmados(db.Model):
 
     embarcado_em = db.Column(db.DateTime(timezone=True), nullable=True)
 
+    # Fixed trip dropout after departure; on-demand dropouts live in SolicitacaoViagem.
+    desistencia_em = db.Column(db.DateTime(timezone=True), nullable=True)
+
 
 class TelemetriaViagem(db.Model):
     __tablename__ = "telemetria_viagem"

@@ -7,8 +7,7 @@ from marshmallow import ValidationError as MarshmallowValidationError, fields, v
 from marshmallow.validate import OneOf, Range
 
 from app.models.enum import StatusViagem
-from app.schemas.common import BaseSchema
-from app.schemas.validators import validate_uuid4
+from app.schemas.common import BaseSchema, PaginacaoQuerySchema
 
 # -------------------------
 # Common helpers / fields
@@ -81,6 +80,7 @@ class ViagemCreateRequestSchema(BaseSchema):
 
     rota_id = fields.UUID(required=True)
     data = fields.Date(required=True)
+    horario_rota_id = fields.UUID(load_default=None, allow_none=True)
 
 
 class ViagemConfirmacaoRequestSchema(BaseSchema):
@@ -103,7 +103,14 @@ class ViagemAcaoRequestSchema(BaseSchema):
     acao = fields.String(required=True, validate=OneOf(["INICIAR", "FINALIZAR"]))
 
 
-class ViagemListQuerySchema(BaseSchema):
+class LocalizacaoRequestSchema(BaseSchema):
+    """POST /viagens/<id>/localizacao and /localizacao-aluno"""
+
+    latitude = fields.Float(required=True, validate=Range(min=-90, max=90))
+    longitude = fields.Float(required=True, validate=Range(min=-180, max=180))
+
+
+class ViagemListQuerySchema(PaginacaoQuerySchema):
     """GET /viagens?data_inicio=...&status=..."""
 
     # NOTE: these are query params, so everything comes as string.
@@ -111,12 +118,8 @@ class ViagemListQuerySchema(BaseSchema):
     data_fim = DateISOField(required=False, allow_none=True)
 
     status = EnumByNameField(StatusViagem, required=False, allow_none=True)
-    motorista_id = fields.String(required=False, allow_none=True, validate=validate_uuid4)
-    rota_id = fields.String(required=False, allow_none=True, validate=validate_uuid4)
-
-    # Optional pagination, so "total" stays correct once it is used
-    page = fields.Integer(required=False, load_default=1, validate=Range(min=1))
-    per_page = fields.Integer(required=False, load_default=20, validate=Range(min=1, max=100))
+    motorista_id = fields.UUID(required=False, allow_none=True)
+    rota_id = fields.UUID(required=False, allow_none=True)
 
     @validates_schema
     def validate_date_range(self, data: dict[str, Any], **kwargs) -> None:

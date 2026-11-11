@@ -6,10 +6,11 @@ from flask_jwt_extended import get_jwt_identity, jwt_required
 from flask_restx import Namespace, Resource, reqparse
 
 from app.api.contracts import dashboard_contract
-from app.schemas.dashboard_schema import PeriodoRelatorioQuerySchema
+from app.schemas.dashboard_schema import AusenciasQuerySchema, PeriodoRelatorioQuerySchema
 from app.services.dashboard_service import (
     exportar_indicadores_csv,
     indicadores_periodo,
+    listar_ausencias,
     obter_progresso_viagem,
     obter_telemetria_viagem,
     relatorio_periodo_gestor,
@@ -22,6 +23,7 @@ models = dashboard_contract.register_models(api)
 
 # Validation schemas (Marshmallow)
 periodo_query_schema = PeriodoRelatorioQuerySchema()
+ausencias_query_schema = AusenciasQuerySchema()
 
 relatorio_parser = reqparse.RequestParser()
 relatorio_parser.add_argument(
@@ -32,7 +34,7 @@ relatorio_parser.add_argument(
 )
 
 
-@api.route("/viagens/<string:viagem_id>/progresso")
+@api.route("/viagens/<uuid:viagem_id>/progresso")
 class ProgressoViagemResource(Resource):
     @api.doc("progresso_viagem")
     @api.marshal_list_with(models["ponto_progresso"], code=HTTPStatus.OK)
@@ -40,7 +42,7 @@ class ProgressoViagemResource(Resource):
     def get(self, viagem_id):
         """Gets a trip's progress (the fixed stops visited)."""
         current_user_id = get_jwt_identity()
-        progresso = obter_progresso_viagem(gestor_id=current_user_id, viagem_id=viagem_id)
+        progresso = obter_progresso_viagem(gestor_id=current_user_id, viagem_id=str(viagem_id))
         return progresso, 200
 
 
@@ -99,7 +101,7 @@ class IndicadoresExportacaoResource(Resource):
         )
 
 
-@api.route("/viagens/<string:viagem_id>/trajeto-real")
+@api.route("/viagens/<uuid:viagem_id>/trajeto-real")
 class TrajetoRealViagemResource(Resource):
     @api.doc("trajeto_real_viagem")
     @api.marshal_list_with(models["ponto_telemetria"], code=200)
@@ -107,5 +109,27 @@ class TrajetoRealViagemResource(Resource):
     def get(self, viagem_id):
         """Gets the full GPS trail (actual route) of a trip."""
         current_user_id = get_jwt_identity()
-        rastros = obter_telemetria_viagem(gestor_id=current_user_id, viagem_id=viagem_id)
+        rastros = obter_telemetria_viagem(gestor_id=current_user_id, viagem_id=str(viagem_id))
         return rastros, 200
+
+
+@api.route("/ausencias")
+class AusenciasResource(Resource):
+    @api.doc("listar_ausencias")
+    @api.param("inicio", "Início do período, inclusivo (YYYY-MM-DD)", _in="query", required=True)
+    @api.param("fim", "Fim do período, inclusivo (YYYY-MM-DD)", _in="query", required=True)
+    @api.param("page", "Página (padrão 1)", _in="query", type=int)
+    @api.param("per_page", "Itens por página (padrão 20, máximo 100)", _in="query", type=int)
+    @api.response(200, "Success", models["ausencias_lista"])
+    @jwt_required()
+    def get(self) -> tuple[dict[str, Any], int]:
+        """(Manager) Lists students who missed a confirmed trip or dropped out of it"""
+        filtros = ausencias_query_schema.load(request.args.to_dict())
+        dados = listar_ausencias(
+            gestor_id=get_jwt_identity(),
+            inicio=filtros["inicio"],
+            fim=filtros["fim"],
+            page=filtros["page"],
+            per_page=filtros["per_page"],
+        )
+        return dados, 200

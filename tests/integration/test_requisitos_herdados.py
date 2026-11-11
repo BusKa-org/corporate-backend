@@ -11,7 +11,8 @@ import pytest
 
 from app.models.enum import StatusViagem
 from app.models.password_reset import PasswordResetToken
-from app.models.viagem import AlunosConfirmados
+from app.models.viagem import AlunosConfirmados, TelemetriaViagem
+from tests.factories.user_factory import MotoristaFactory
 
 SENHA = "StrongPass123!"
 
@@ -147,6 +148,177 @@ def test_rf07_aluno_nao_confirmado_nao_ve_a_localizacao(
     viagem_futura_iniciada_com_motorista, aluno
 ):
     r = aluno.client.get(f"/v1/viagens/{viagem_futura_iniciada_com_motorista.id}/localizacao")
+    assert r.status_code == 403
+
+
+@pytest.mark.integration
+def test_rf07_gestor_da_organizacao_le_a_localizacao(
+    viagem_futura_iniciada_com_motorista, motorista, gestor
+):
+    viagem = viagem_futura_iniciada_com_motorista
+    envio = motorista.client.post(
+        f"/v1/viagens/{viagem.id}/localizacao",
+        json={"latitude": -7.2, "longitude": -35.9},
+    )
+    assert envio.status_code == 200, envio.get_data(as_text=True)
+
+    leitura = gestor.client.get(f"/v1/viagens/{viagem.id}/localizacao")
+    assert leitura.status_code == 200, leitura.get_data(as_text=True)
+    assert (leitura.get_json() or {})["longitude"] == pytest.approx(-35.9)
+
+
+@pytest.mark.integration
+def test_rf07_gestor_de_outra_organizacao_nao_ve_a_localizacao(
+    viagem_futura_iniciada_com_motorista, other_gestor
+):
+    r = other_gestor.client.get(
+        f"/v1/viagens/{viagem_futura_iniciada_com_motorista.id}/localizacao"
+    )
+    assert r.status_code == 403
+
+
+@pytest.mark.integration
+def test_rf07_gestor_de_outra_organizacao_nao_sonda_o_status_da_viagem(
+    viagem_futura_agendada_com_motorista, other_gestor
+):
+    r = other_gestor.client.get(
+        f"/v1/viagens/{viagem_futura_agendada_com_motorista.id}/localizacao"
+    )
+    assert r.status_code == 403
+
+
+@pytest.mark.integration
+def test_rf07_gestor_le_a_localizacao_de_viagem_sob_demanda(
+    _db, viagem_solicitada, motorista, gestor
+):
+    viagem_solicitada.status = StatusViagem.EM_ANDAMENTO
+    _db.session.commit()
+    envio = motorista.client.post(
+        f"/v1/viagens/{viagem_solicitada.id}/localizacao",
+        json={"latitude": -7.2, "longitude": -35.9},
+    )
+    assert envio.status_code == 200, envio.get_data(as_text=True)
+
+    leitura = gestor.client.get(f"/v1/viagens/{viagem_solicitada.id}/localizacao")
+    assert leitura.status_code == 200, leitura.get_data(as_text=True)
+    assert (leitura.get_json() or {})["latitude"] == pytest.approx(-7.2)
+
+
+@pytest.mark.integration
+def test_rf07_localizacao_com_id_invalido_e_recusada_no_roteamento(gestor, motorista):
+    # The <uuid:id> route converter rejects bad ids before the service runs.
+    assert gestor.client.get("/v1/viagens/abc/localizacao").status_code == 404
+    envio = motorista.client.post(
+        "/v1/viagens/abc/localizacao", json={"latitude": -7.2, "longitude": -35.9}
+    )
+    assert envio.status_code == 404
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    "corpo",
+    [
+        None,
+        {},
+        {"latitude": -7.2},
+        {"latitude": "abc", "longitude": -35.9},
+        {"latitude": 91, "longitude": -35.9},
+        {"latitude": -7.2, "longitude": -181},
+    ],
+)
+def test_rf07_localizacao_com_corpo_invalido_da_400(
+    _db, viagem_futura_iniciada_com_motorista, motorista, corpo
+):
+    viagem = viagem_futura_iniciada_com_motorista
+    r = motorista.client.post(f"/v1/viagens/{viagem.id}/localizacao", json=corpo)
+    assert r.status_code == 400, r.get_data(as_text=True)
+    assert r.get_json()["error"]["code"] == "VALIDATION_ERROR"
+    _assert_localizacao_intacta(_db, viagem)
+
+
+@pytest.mark.integration
+def test_rf07_localizacao_aluno_com_corpo_invalido_da_400(
+    viagem_futura_iniciada_com_motorista, aluno
+):
+    r = aluno.client.post(
+        f"/v1/viagens/{viagem_futura_iniciada_com_motorista.id}/localizacao-aluno",
+        json={"latitude": "abc"},
+    )
+    assert r.status_code == 400, r.get_data(as_text=True)
+
+
+@pytest.mark.integration
+def test_rf07_localizacao_de_viagem_sem_motorista_da_403(
+    _db, viagem_futura_iniciada_com_motorista, motorista
+):
+    viagem = viagem_futura_iniciada_com_motorista
+    viagem.motorista_id = None
+    _db.session.commit()
+
+    r = motorista.client.post(
+        f"/v1/viagens/{viagem.id}/localizacao", json={"latitude": -7.2, "longitude": -35.9}
+    )
+    assert r.status_code == 403, r.get_data(as_text=True)
+    _assert_localizacao_intacta(_db, viagem)
+
+
+def _assert_localizacao_intacta(_db, viagem):
+    _db.session.refresh(viagem)
+    assert viagem.motorista_lat is None
+    assert viagem.motorista_lon is None
+    assert TelemetriaViagem.query.filter_by(viagem_id=viagem.id).count() == 0
+
+
+@pytest.mark.integration
+def test_rf07_motorista_de_outra_organizacao_nao_publica_a_localizacao(
+    _db, viagem_futura_iniciada_com_motorista, other_motorista
+):
+    viagem = viagem_futura_iniciada_com_motorista
+    r = other_motorista.client.post(
+        f"/v1/viagens/{viagem.id}/localizacao", json={"latitude": -7.2, "longitude": -35.9}
+    )
+    assert r.status_code == 403
+    _assert_localizacao_intacta(_db, viagem)
+
+
+@pytest.mark.integration
+def test_rf07_motorista_nao_designado_nao_publica_a_localizacao(
+    _db, organizacao, viagem_futura_iniciada_com_motorista, motorista
+):
+    viagem = viagem_futura_iniciada_com_motorista
+    designado = MotoristaFactory(organizacao_id=organizacao.id)
+    _db.session.add(designado)
+    _db.session.commit()
+    viagem.motorista_id = designado.id
+    _db.session.commit()
+
+    r = motorista.client.post(
+        f"/v1/viagens/{viagem.id}/localizacao", json={"latitude": -7.2, "longitude": -35.9}
+    )
+    assert r.status_code == 403
+    _assert_localizacao_intacta(_db, viagem)
+
+
+@pytest.mark.integration
+def test_rf07_motorista_de_outra_organizacao_nao_sonda_o_status_da_viagem(
+    viagem_futura_agendada_com_motorista, other_motorista
+):
+    r = other_motorista.client.post(
+        f"/v1/viagens/{viagem_futura_agendada_com_motorista.id}/localizacao",
+        json={"latitude": -7.2, "longitude": -35.9},
+    )
+    assert r.status_code == 403
+    assert "AGENDADA" not in r.get_data(as_text=True)
+
+
+@pytest.mark.integration
+def test_rf07_aluno_nao_confirmado_nao_sonda_o_status_pela_localizacao_aluno(
+    viagem_futura_agendada_com_motorista, aluno
+):
+    r = aluno.client.post(
+        f"/v1/viagens/{viagem_futura_agendada_com_motorista.id}/localizacao-aluno",
+        json={"latitude": -7.2, "longitude": -35.9},
+    )
     assert r.status_code == 403
 
 

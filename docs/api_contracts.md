@@ -77,6 +77,76 @@ Response: `{id, onibus_id, motorista_id, motorista_nome, dia, hora_inicio, hora_
 | 404 | vehicle, driver or window (for that vehicle) not found |
 | 409 | overlaps another window of the same vehicle that day, or of the same driver on any vehicle that day |
 
+### Fixed route schedules (RF-05)
+
+| Method | Path | Who |
+|---|---|---|
+| `POST` | `/v1/rotas/<id>/horarios` | gestor |
+| `PUT` | `/v1/rotas/<id>/horarios/<horario_id>` | gestor |
+| `DELETE` | `/v1/rotas/<id>/horarios/<horario_id>` | gestor |
+
+`PUT` body is the same as `POST` and replaces the whole schedule:
+`{"horario_saida": "HH:MM", "sentido": "IDA"|"VOLTA"|"CIRCULAR", "dias": ["SEG", ...]}`.
+Repeated weekdays in `dias` are stored once; an empty `dias` returns 400.
+
+A route may have several active schedules on the same weekday (e.g. `IDA` 06:00 and
+`VOLTA` 17:00). Only an exact duplicate is rejected: same `sentido` and `horario_saida` as
+another active schedule of the route on one of the weekdays.
+
+The `horarios` list in `POST /v1/rotas/` follows the same rules: invalid `sentido`,
+`horario_saida` or weekday, or an empty `dias`, returns 400 (invalid weekdays used to be silently dropped),
+repeated weekdays are stored once, and exact duplicates (also inside the same request)
+return 409.
+
+Trips read their time and direction from the schedule, so a schedule that already has
+trips (any status) is never rewritten or deleted:
+
+- `PUT` on a schedule with trips deactivates it and creates a new one with the new values.
+  The response is the new schedule, with a **new `id`**; use it from then on. A schedule
+  with no trips is updated in place and keeps its `id`.
+- `DELETE` on a schedule with trips only deactivates it; one with no trips is deleted.
+- Inactive schedules no longer appear in `GET /v1/rotas/<id>/horarios` or in
+  `GET /v1/rotas/<id>`, trips are no longer generated from them, and `PUT`/`DELETE` on
+  them return 404. Their past trips keep `horario_rota_id`, `horario_inicio` and `tipo`.
+
+`sentido` in schedule responses (`POST`, `PUT`, `GET /v1/rotas/<id>/horarios`,
+`GET /v1/rotas/<id>`) is the plain value `"IDA"` / `"VOLTA"` / `"CIRCULAR"`. Before this
+change it came out as `"SentidoViagem.IDA"`; clients parsing that must switch.
+
+| Status | When |
+|---|---|
+| 400 | invalid body, same rules as creation; route is `SOB_DEMANDA` |
+| 403 | not a gestor; route from another organization |
+| 404 | route not found; schedule not in that route or inactive |
+| 409 | `PUT`/`DELETE`: the schedule has an `AGENDADA` trip dated today or later, or an `EM_ANDAMENTO` trip of any date |
+| 409 | `POST`/`PUT`: another active schedule of the route has the same `sentido` and `horario_saida` on one of the weekdays |
+
+### Fixed trip generation
+
+`POST /v1/viagens/` body: `{"rota_id": "<uuid>", "data": "YYYY-MM-DD", "horario_rota_id": "<uuid>"?}`.
+
+- Without `horario_rota_id`: uses the route's only active schedule on that weekday. If
+  there are several, returns 400 with them in `error.details.horarios`
+  (`[{id, sentido, horario_saida}]`); send one as `horario_rota_id`.
+- With `horario_rota_id`: it must belong to the route (404), be active (404, also right
+  after a `PUT` versioned it: use the new `id`) and run on that weekday (400).
+- 409 when the route already has a non-`CANCELADA` trip on that date with the same
+  `sentido` and `horario_saida`, whatever schedule version it came from. A cancelled slot
+  can be generated again.
+- 404 when the route was deactivated by `DELETE /v1/rotas/<id>`.
+
+### Route removal
+
+`DELETE /v1/rotas/<id>` (gestor): a route with no trips is deleted. A route with trips
+(any status) is only deactivated, together with its schedules, so past trips keep their
+route, time and direction. A deactivated route disappears from `GET /v1/rotas/` and
+`GET /v1/rotas/me`; `GET`/`PUT`/`DELETE` on it, its stops and schedules, trip generation
+and ride requests return 404.
+
+| Status | When |
+|---|---|
+| 409 | the route has an `AGENDADA` trip dated today or later, or a `SOLICITADA`, `BUFFER_ABERTO` or `EM_ANDAMENTO` trip of any date |
+
 ### Ride request (RF-10)
 
 `POST /v1/rotas/<id>/solicitacoes`: student with current LGPD consent. No body.
@@ -92,7 +162,7 @@ Returns 201 with `{id, viagem_id, status, created_at, viagem: {id, status, rota_
 | 400 | fixed route; route without a default vehicle; outside the window (the message lists today's hours, or says there is no operation today) |
 | 403 | no consent; not a student; route from another organization |
 | 404 | route not found |
-| 409 | student already has an active request (also the same trip twice) or is in a trip en route; vehicle en route; vehicle serving another route |
+| 409 | student already has an active request (also the same trip twice) or is in a trip en route; vehicle en route; vehicle serving another route; the window's driver is unavailable for a new trip (on another trip, resting/pausing, or off hours; the message says until when when known) |
 
 ### Active round of a route (RF-12, secondary flow)
 
@@ -118,11 +188,13 @@ for the normal idle case).
 
 | Status | When |
 |---|---|
-| 400 | fixed route; malformed id |
+| 400 | fixed route |
 | 403 | other organization; role without access |
-| 404 | route not found |
+| 404 | route not found; route id not a canonical UUID |
 
-Every on-demand endpoint returns 400 for a malformed id in the path.
+`/v1/rotas/<id>/solicitacoes` and `/v1/rotas/<id>/viagem-ativa` take the id through
+Werkzeug's `uuid` converter, so a malformed id returns 404 at routing (it was 400). The
+vehicle window ids under `/v1/onibus` still return 400 for a malformed id.
 
 ### Route declaration (RF-13, RF-14)
 
@@ -148,7 +220,7 @@ request, plus `ponto_embarque_id`, `ponto_destino_id`, `declarada_em`).
 | 400 | trip not in `BUFFER_ABERTO`; buffer over; stop not in the circuit; origin not before destination; same stop twice |
 | 401 | token of a deleted or inactive account (`TOKEN_REVOKED`) |
 | 403 | no consent; not a student; other organization; account not active |
-| 404 | trip not found |
+| 404 | trip not found; trip id not a canonical UUID |
 | 409 | no seat on the requested segments |
 
 ### Driver start (RF-11, RF-12)
@@ -160,9 +232,38 @@ consent and notifications on, with the minutes left in the buffer.
 
 | Status | When |
 |---|---|
-| 403 | not the trip's driver |
-| 404 | trip not found |
-| 409 | trip is not `SOLICITADA` |
+| 403 | not the trip's driver; driver in mandatory rest (`descanso_ate`, CTB message) or in the organization pause (`pausa_ate`, "pausa mínima entre viagens" message); both say when they can start, with the date when it is not today; or outside their working days/hours |
+| 404 | trip not found; trip id not a canonical UUID |
+| 409 | trip has no driver ("Viagem sem motorista atribuído"); trip is not `SOLICITADA`; fewer active requests than `minimo_alunos`; driver already has another trip `BUFFER_ABERTO` or `EM_ANDAMENTO` (both show the driver as `EM_ROTA`) |
+
+When the buffer closes (job), the trip is cancelled instead of going `EM_ANDAMENTO` if fewer
+than `minimo_alunos` students declared a route: their requests become `CANCELADA` and the
+students and the driver are notified.
+
+### Operation parameters (RF-10, RF-11)
+
+| Method | Path | Who |
+|---|---|---|
+| `GET` | `/v1/parametros-operacao` | gestor or motorista of the organization |
+| `PUT` | `/v1/parametros-operacao` | gestor |
+
+Body and response: `{minimo_alunos, pausa_entre_viagens_minutos, antecedencia_motorista_minutos}`
+(response adds `organizacao_id` and `updated_at`). All three are required on `PUT`.
+`minimo_alunos` is 1..1000; the minutes are 0..1440. Until the gestor saves them, `GET`
+returns the `OPERACAO_*_PADRAO` defaults with `updated_at: null`.
+These parameters apply to on-demand trips only. `minimo_alunos` is checked on
+`iniciar-percurso` and again when the buffer closes. `pausa_entre_viagens_minutos` is stored
+apart from the legal rest: when a started on-demand trip ends, `motorista.pausa_ate =
+fim_real + pausa` (`descanso_ate` keeps only the driving-hours rest). Only on-demand flows read
+`pausa_ate` (`iniciar-percurso` and choosing the driver for a new request); a fixed trip's
+`INICIAR` and the `EM_DESCANSO_OBRIGATORIO` status ignore it. `antecedencia_motorista_minutos`
+is stored only: ainda não aplicado; aguardando definição do gestor.
+A concurrent first `PUT` is an upsert (no 409), and every `PUT` refreshes `updated_at`.
+
+| Status | When |
+|---|---|
+| 400 | missing field, not a JSON integer (`true`, `3.0` and `"3"` are rejected), or out of range |
+| 403 | `GET`: student; `PUT`: not a gestor |
 
 ### Request cancellation (RF-19)
 
@@ -180,7 +281,8 @@ Returns 200 with the request (same shape as above).
 |---|---|
 | 400 | trip `FINALIZADA` / `CANCELADA` |
 | 403 | not a student |
-| 404 | trip not found, or the student has no active request on it |
+| 404 | trip not found, or the student has no active request on it; trip id not a canonical UUID |
+| 409 | trip `EM_ANDAMENTO` and the student already boarded |
 
 ### Scheduler jobs
 
@@ -200,11 +302,41 @@ Only run in the scheduler process (`RUN_SCHEDULER`).
 ### Changes to existing endpoints
 
 - `POST /v1/viagens/` on an on-demand route returns 400 (trips come from requests).
+- `POST /v1/rotas/<id>/pontos` and `DELETE /v1/rotas/<id>/pontos/<ponto_id>` return 400
+  when `<id>` is not a UUID (it was not validated before), like the other route endpoints.
   On success it now returns 201 with the serialized trip (before, it returned the raw ORM object).
-- `PUT /v1/viagens/<id>/confirmacao` on an on-demand trip returns 400.
+- `PUT /v1/viagens/<id>/confirmacao` on an on-demand trip returns 400. Once a fixed trip is no
+  longer `AGENDADA` the attendance is kept as the trip's record, with one exception:
+  `{"confirmacao": false}` on an `EM_ANDAMENTO` trip is a dropout (200): it sets
+  `confirmacao = false` and `desistencia_em`, so the student leaves the boarding list,
+  approach notices and auto-checkin, and the driver gets the same "Desistência de passageiro"
+  notice as on-demand trips; resending it keeps the first `desistencia_em`. A student who was
+  not confirmed gets 200 with no change (no `desistencia_em`). It returns 409 if the student
+  already boarded. Everything else after
+  `AGENDADA` (`confirmacao: true` on `EM_ANDAMENTO`, any change on `FINALIZADA`/`CANCELADA`)
+  returns 409.
 - `PUT /v1/viagens/<id>/cancelar` returns 403 for a trip of another organization, and
   also cancels and notifies the active requests of the trip.
 - Trip listings, the student agenda and the dashboard include on-demand trips.
+- Every `/v1/viagens/<id>/...` route (`declaracao`, `pontos-embarque`,
+  `credencial-embarque`, `confirmacao`, `acao`, `cancelar`, `localizacao`,
+  `localizacao-aluno`, `solicitacao`, `iniciar-percurso`), every
+  `/v1/embarque/viagens/<viagem_id>/...` route (`roteiro`, `roteiro/avancar`, `validacao`,
+  `checkin`, `confirmacao`, `recusa`, `manual`, `sincronizacao`) and
+  `GET /v1/dashboard/viagens/<viagem_id>/progresso` and `/trajeto-real` take the id through
+  Werkzeug's `uuid` converter. A malformed id returns 404 at routing (it was 400, or a 500 on some routes).
+  The converter only matches the canonical hyphenated form, so a hyphenless or braced
+  UUID also returns 404.
+- `GET /v1/viagens/?rota_id=&motorista_id=`: any spelling Python's `uuid.UUID` accepts
+  (hyphenless, braced, `urn:uuid:`) is normalized before filtering; anything else is 400.
+- `POST /v1/viagens/<id>/localizacao`: body `{"latitude": -90..90, "longitude":
+  -180..180}`, both required numbers; a missing or invalid body returns 400
+  (`VALIDATION_ERROR`). 403 unless the caller is the trip's driver (also when the trip
+  has no driver, so the assignment does not leak), and authorization runs before the
+  status check.
+- `POST /v1/viagens/<id>/localizacao-aluno`: same body validation (400). A student not
+  confirmed on the trip now gets 403 before the status check; on a trip that is not
+  running this was 400 before.
 
 ### Replaced endpoints from dev's first on-demand version
 
@@ -381,6 +513,30 @@ Devolve a imagem (`image/jpeg`, `image/png` ou `image/webp`).
   `AGENDADA` ou `EM_ANDAMENTO` em que o aluno confirmou presença, ou de uma rodada
   `BUFFER_ABERTO` em que o aluno já declarou trajeto. Os demais: 403.
 - `aluno_id` que não é UUID: 400. Aluno inexistente ou sem foto: 404.
+
+## Ausências e desistências
+
+### `GET /v1/dashboard/ausencias?inicio=YYYY-MM-DD&fim=YYYY-MM-DD&page=1&per_page=20`
+
+Gestor lista os alunos da sua organização que faltaram ou desistiram de uma viagem no
+período (datas inclusivas, pela data da viagem). Outro papel: 403.
+
+- `AUSENCIA`: aluno confirmado (`alunos_confirmados.confirmacao`) que não embarcou numa
+  viagem `FINALIZADA`.
+- `DESISTENCIA`: aluno que não embarcou e desistiu após a partida, em viagem não
+  `CANCELADA`. Viagem fixa: `alunos_confirmados.desistencia_em`. Viagem sob demanda:
+  solicitação `DESISTENCIA` (RF-19), uma linha por viagem e aluno mesmo com solicitações
+  repetidas (vale a mais recente). Cancelamento antes da partida devolve a vaga e não aparece.
+- `registrado_em` não muda depois: `AUSENCIA` usa o fim da viagem (`fim_real`);
+  `DESISTENCIA` usa a hora da desistência (`desistencia_em`, ou `cancelada_em` da
+  solicitação). Sem esses valores, cai na partida prevista em hora local
+  (`data` + `horario_saida`, ou `data` às 00:00 em viagem sob demanda), então nunca é nulo.
+- Calculado dos dados existentes, sem tabela nova. Ordem: data desc, nome do aluno, e
+  `viagem_id`/`aluno_id`/`tipo` para desempate estável entre páginas.
+- Resposta: `{items, total, page, per_page}`; cada item tem `tipo`, `aluno_id`,
+  `aluno_nome`, `foto_url`, `viagem_id`, `rota_nome`, `data`, `registrado_em`.
+  `page` >= 1, `per_page` de 1 a 100; fora disso, ou `inicio` > `fim`, ou sem as datas: 400.
+  Página além da última: `items` vazio e `total` real.
 
 ## Acessibilidade do aluno
 
