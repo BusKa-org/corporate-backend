@@ -26,6 +26,7 @@ from app.models.enum import (
     StatusViagem,
     TipoViagem,
     UserRole,
+    UserStatus,
 )
 from app.models.geo import Ponto
 from app.models.rota import DiasOperacao, HorarioRota, Rota, RotaAluno, RotaPonto
@@ -37,10 +38,12 @@ from app.models.viagem import (
     Viagem,
     ViagemPonto,
 )
+from app.services import capacidade_service
 from app.services.notificacao_service import NotificacaoService
 from app.tasks.viagem_tasks import realizar_auto_checkin
 from app.utils import audit_logger, tempo
 from app.utils.geo_utils import calcular_distancia_metros
+from app.utils.validators import validate_uuid
 
 logger = logging.getLogger(__name__)
 
@@ -169,6 +172,7 @@ def confirmar_presenca_aluno(
         db.session.execute(
             select(User.id).where(User.id == aluno.usuario_id).with_for_update(key_share=True)
         )
+        capacidade_service.exigir_conta_ativa(aluno.usuario_id)
         registro = db.session.get(
             AlunosConfirmados, (viagem.id, aluno.usuario_id), populate_existing=True
         )
@@ -275,6 +279,21 @@ def listar_pontos_embarque(user_id: str, viagem_id: str) -> list[dict]:
     return resultado
 
 
+def _exigir_motorista_ativo(motorista_id: Any, organizacao_id: Any) -> None:
+    """Lock the driver row first: a concurrent deactivation either sees the new trip or wins."""
+    motorista_uuid = validate_uuid(str(motorista_id), "ID do motorista")
+    db.session.execute(
+        select(User.id).where(User.id == motorista_uuid).with_for_update(key_share=True)
+    )
+    motorista = db.session.get(Motorista, motorista_uuid, populate_existing=True)
+    if not motorista:
+        raise NotFoundError("Motorista não encontrado")
+    if motorista.organizacao_id != organizacao_id:
+        raise ValidationError("Motorista não pertence à organização da rota")
+    if motorista.status != UserStatus.ACTIVE:
+        raise ValidationError("Motorista sem cadastro ativo")
+
+
 def gerar_viagem(user_id: str, data_input: dict) -> Viagem:
     """Generate ONE trip for ONE specific route (manual mode).
 
@@ -326,6 +345,8 @@ def gerar_viagem(user_id: str, data_input: dict) -> Viagem:
         )
 
     with transactional():
+        if motorista_id:
+            _exigir_motorista_ativo(motorista_id, rota.organizacao_id)
         nova_viagem = Viagem(
             data=data_viagem,
             horario_rota_id=horario_selecionado.id,

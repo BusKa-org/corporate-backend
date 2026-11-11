@@ -320,3 +320,31 @@ def test_janelas_sobrepostas_criadas_ao_mesmo_tempo(app, _db, gestor, onibus, mo
     assert status_de(respostas) == [201, 409]
     _db.session.expire_all()
     assert _db.session.query(JanelaDisponibilidade).filter_by(onibus_id=onibus.id).count() == 1
+
+
+def test_desativar_motorista_e_criar_janela_ao_mesmo_tempo(app, _db, gestor, onibus, motorista):
+    def desativar():
+        return app.test_client().post(
+            f"/v1/users/{motorista.user.id}/desativar", headers=gestor.headers
+        )
+
+    def criar_janela():
+        return app.test_client().post(
+            f"/v1/onibus/{onibus.id}/janelas",
+            json={
+                "motorista_id": str(motorista.user.id),
+                "dia": "SEG",
+                "hora_inicio": "08:00",
+                "hora_fim": "12:00",
+            },
+            headers=gestor.headers,
+        )
+
+    respostas = ao_mesmo_tempo(app, [desativar, criar_janela])
+
+    # Whichever locks the driver first wins; never a disabled driver with a window.
+    assert status_de(respostas) in ([200, 400], [201, 409])
+    _db.session.expire_all()
+    desativado = _db.session.get(User, motorista.user.id).status == UserStatus.DISABLED
+    tem_janela = _db.session.query(JanelaDisponibilidade).filter_by(onibus_id=onibus.id).count()
+    assert desativado != bool(tem_janela)

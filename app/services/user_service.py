@@ -19,8 +19,9 @@ from app.core.exceptions import (
 from app.models.base import db
 from app.models.enum import StatusViagem, UserRole, UserStatus
 from app.models.onibus import JanelaDisponibilidade
+from app.models.rota import Rota
 from app.models.user import Aluno, Gestor, Motorista, User
-from app.models.viagem import AlunosConfirmados, Viagem
+from app.models.viagem import Viagem
 from app.services import solicitacoes_service
 from app.services.viagens_service import motoristas_em_viagem, status_motorista
 from app.utils import (
@@ -33,8 +34,6 @@ from app.utils import (
 )
 
 logger = logging.getLogger(__name__)
-
-EM_VIAGEM = "A conta está em uma viagem em andamento. Aguarde o fim da viagem."
 
 
 def _require_active(user: User) -> None:
@@ -392,56 +391,6 @@ def _get_conta_gerenciavel(gestor: Gestor, user_id: str, roles: tuple[UserRole, 
     return user
 
 
-def _travar_viagens_das_solicitacoes(aluno_id: Any) -> dict[Any, Viagem]:
-    # Imported here: conta_service -> aluno_service -> user_service would be circular.
-    from app.services import conta_service
-
-    viagens_travadas: dict[Any, Viagem] = {}
-    for solicitacao in conta_service._solicitacoes_ativas(aluno_id):
-        viagem = solicitacoes_service.travar_viagem(solicitacao.viagem)
-        viagens_travadas[viagem.id] = viagem
-    return viagens_travadas
-
-
-def _liberar_aluno(aluno: Aluno, viagens_travadas: dict[Any, Viagem]) -> None:
-    """Free the student's seats (RF-19) so a disabled account does not hold capacity."""
-    from app.services import conta_service
-
-    if conta_service._tem_viagem_em_andamento(aluno.id):
-        raise ConflictError(EM_VIAGEM)
-
-    # With the account locked no new request appears; re-read the existing ones.
-    solicitacoes = conta_service._solicitacoes_ativas(aluno.id)
-    for solicitacao in solicitacoes:
-        travada = viagens_travadas.get(solicitacao.viagem_id)
-        if travada is None:
-            # Joined a trip between the read and the lock; locking it now would invert the order.
-            raise ConflictError("As solicitações do passageiro mudaram. Tente novamente.")
-        if travada.status == StatusViagem.EM_ANDAMENTO:
-            raise ConflictError(EM_VIAGEM)
-    for solicitacao in solicitacoes:
-        solicitacoes_service.cancelar_na_viagem_travada(
-            aluno, viagens_travadas[solicitacao.viagem_id]
-        )
-
-    # Fixed-route attendance: same effect as the student cancelling the confirmation.
-    confirmacoes = (
-        db.session.query(AlunosConfirmados)
-        .join(Viagem, Viagem.id == AlunosConfirmados.viagem_id)
-        .filter(
-            AlunosConfirmados.aluno_id == aluno.id,
-            AlunosConfirmados.confirmacao.is_(True),
-            Viagem.status == StatusViagem.AGENDADA,
-            Viagem.data >= tempo.agora_local().date(),
-        )
-        .all()
-    )
-    for registro in confirmacoes:
-        registro.confirmacao = False
-        registro.ponto_embarque_id = None
-        registro.ponto_destino_id = None
-
-
 def _exigir_motorista_sem_compromissos(motorista_id: Any) -> None:
     """The gestor reassigns trips and windows first; a disabled driver cannot run them."""
     em_andamento = (
@@ -450,7 +399,7 @@ def _exigir_motorista_sem_compromissos(motorista_id: Any) -> None:
         .first()
     )
     if em_andamento:
-        raise ConflictError(EM_VIAGEM)
+        raise ConflictError(solicitacoes_service.EM_VIAGEM)
 
     viagem_futura = (
         db.session.query(Viagem.id)
@@ -474,6 +423,20 @@ def _exigir_motorista_sem_compromissos(motorista_id: Any) -> None:
             "antes de desativá-lo"
         )
 
+    rotas = (
+        db.session.query(Rota.nome)
+        .filter(Rota.motorista_padrao_id == motorista_id)
+        .order_by(Rota.nome)
+        .all()
+    )
+    if rotas:
+        nomes: list[str] = []
+        for rota in rotas:
+            nomes.append(rota.nome)
+        raise ConflictError(
+            "Defina outro motorista padrão nas rotas antes de desativá-lo: " + ", ".join(nomes)
+        )
+
 
 def _mudar_status(
     gestor_id: str,
@@ -493,18 +456,20 @@ def _mudar_status(
 
     try:
         viagens_travadas: dict[Any, Viagem] = {}
-        if para == UserStatus.DISABLED and user.role == UserRole.ALUNO:
+        if para == UserStatus.DISABLED and isinstance(user, Aluno):
             # Same lock order as the rest of the system: vehicle and trip before the student.
-            viagens_travadas = _travar_viagens_das_solicitacoes(user.id)
+            viagens_travadas = solicitacoes_service.travar_viagens_do_aluno(user.id)
 
-        db.session.execute(select(User.id).where(User.id == user.id).with_for_update())
+        db.session.execute(
+            select(User.id).where(User.id == user.id).with_for_update(key_share=True)
+        )
         db.session.refresh(user)
         if user.status not in de:
             raise ConflictError(msg_conflito)
 
         if para == UserStatus.DISABLED:
             if isinstance(user, Aluno):
-                _liberar_aluno(user, viagens_travadas)
+                solicitacoes_service.liberar_aluno(user, viagens_travadas)
             else:
                 _exigir_motorista_sem_compromissos(user.id)
             # Stop push notifications; the app registers a new token on the next login.

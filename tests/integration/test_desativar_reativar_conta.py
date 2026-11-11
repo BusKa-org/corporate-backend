@@ -1,10 +1,12 @@
-from datetime import timedelta
+from datetime import date, timedelta
 
 import pytest
 
+from app.core.exceptions import ForbiddenError, ValidationError
 from app.models.enum import StatusSolicitacao, StatusViagem, UserStatus
 from app.models.user import User
 from app.models.viagem import AlunosConfirmados, SolicitacaoViagem, Viagem
+from app.services import solicitacoes_service, viagens_service
 from tests.factories.user_factory import SENHA_PADRAO, AlunoFactory, GestorFactory
 from tests.factories.viagem_factory import AlunosConfirmadosFactory, ViagemFactory
 
@@ -165,3 +167,79 @@ def test_desativar_aluno_libera_solicitacoes_e_confirmacoes(
     assert _db.session.get(Viagem, viagem_solicitada.id).status == StatusViagem.CANCELADA
     assert _db.session.get(AlunosConfirmados, (agendada.id, aluno.user.id)).confirmacao is False
     assert _db.session.get(User, aluno.user.id).fcm_token is None
+
+
+@pytest.mark.integration
+def test_desativar_motorista_padrao_de_rota_retorna_409_com_as_rotas(gestor, motorista, rota):
+    r = gestor.client.post(f"/v1/users/{motorista.user.id}/desativar")
+    assert r.status_code == 409, r.get_data(as_text=True)
+    assert rota.nome in r.get_json()["error"]["message"]
+
+
+@pytest.mark.integration
+def test_viagem_iniciada_ao_travar_a_confirmacao_fixa_retorna_409(
+    _db, gestor, aluno, viagem_futura_agendada_com_motorista, monkeypatch
+):
+    _db.session.add(
+        AlunosConfirmadosFactory(
+            viagem_id=viagem_futura_agendada_com_motorista.id,
+            aluno_id=aluno.user.id,
+            confirmacao=True,
+        )
+    )
+    _db.session.commit()
+    travar_original = solicitacoes_service.travar_viagem
+
+    def travar_e_iniciar(viagem):
+        # The trip started (and committed) just before this lock was granted.
+        travada = travar_original(viagem)
+        travada.status = StatusViagem.EM_ANDAMENTO
+        return travada
+
+    monkeypatch.setattr(solicitacoes_service, "travar_viagem", travar_e_iniciar)
+
+    r = gestor.client.post(f"/v1/users/{aluno.user.id}/desativar")
+    assert r.status_code == 409, r.get_data(as_text=True)
+    _db.session.expire_all()
+    assert _db.session.get(User, aluno.user.id).status == UserStatus.ACTIVE
+
+
+@pytest.mark.integration
+def test_aluno_desativado_nao_confirma_presenca(
+    _db, aluno, rota_aluno, rota_ponto, viagem_futura_agendada_com_motorista, dia_operacao, ponto
+):
+    aluno.user.status = UserStatus.DISABLED
+    _db.session.commit()
+
+    with pytest.raises(ForbiddenError):
+        viagens_service.confirmar_presenca_aluno(
+            str(aluno.user.id),
+            viagem_futura_agendada_com_motorista.id,
+            {"confirmacao": True, "ponto_embarque_id": ponto.id},
+        )
+
+
+@pytest.mark.integration
+def test_gerar_viagem_com_motorista_desativado_e_rejeitada(
+    _db, gestor, motorista, rota, dia_operacao
+):
+    motorista.user.status = UserStatus.DISABLED
+    _db.session.commit()
+
+    with pytest.raises(ValidationError, match="sem cadastro ativo"):
+        viagens_service.gerar_viagem(
+            str(gestor.user.id),
+            {"rota_id": rota.id, "data": date(2026, 11, 2), "motorista_id": motorista.user.id},
+        )
+
+
+@pytest.mark.integration
+def test_solicitacao_nao_vai_para_motorista_desativado(
+    _db, aluno, motorista, rota_sob_demanda, janela, relogio
+):
+    motorista.user.status = UserStatus.DISABLED
+    _db.session.commit()
+
+    r = aluno.client.post(f"/v1/rotas/{rota_sob_demanda.id}/solicitacoes")
+    assert r.status_code == 400, r.get_data(as_text=True)
+    assert Viagem.query.filter_by(rota_id=rota_sob_demanda.id).count() == 0

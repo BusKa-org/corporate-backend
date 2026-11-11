@@ -99,13 +99,17 @@ def criar_janela(user_id: str, onibus_id: str, data: dict[str, Any]) -> JanelaDi
         raise NotFoundError("Motorista não encontrado")
     if motorista.organizacao_id != onibus.organizacao_id:
         raise ValidationError("Motorista não pertence à organização do veículo")
-    if motorista.status != UserStatus.ACTIVE:
-        raise ValidationError("Motorista sem cadastro ativo")
 
     with transactional():
         # Lock vehicle and driver so concurrent creations cannot slip past the conflict check
         db.session.execute(select(Onibus.id).where(Onibus.id == onibus.id).with_for_update())
-        db.session.execute(select(User.id).where(User.id == motorista.id).with_for_update())
+        db.session.execute(
+            select(User.id).where(User.id == motorista.id).with_for_update(key_share=True)
+        )
+        # Re-read after the lock: a concurrent deactivation may have just committed.
+        db.session.refresh(motorista)
+        if motorista.status != UserStatus.ACTIVE:
+            raise ValidationError("Motorista sem cadastro ativo")
 
         if _existe_sobreposicao(
             JanelaDisponibilidade.onibus_id == onibus.id, dia, hora_inicio, hora_fim

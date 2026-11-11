@@ -7,26 +7,25 @@ linked to an id without personal data. Whatever has no statistical value is dele
 import hashlib
 import logging
 import secrets
-import uuid
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 from werkzeug.security import check_password_hash
 
-from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError, UnauthorizedError
+from app.core.exceptions import ForbiddenError, NotFoundError, UnauthorizedError
 from app.core.transaction import transactional
 from app.models.base import db
 from app.models.consentimento import REVOGACAO, Consentimento
 from app.models.credencial_embarque import CredencialEmbarque
-from app.models.enum import StatusSolicitacao, StatusViagem, UserRole, UserStatus
+from app.models.enum import StatusViagem, UserRole, UserStatus
 from app.models.geo import Endereco, Ponto
 from app.models.notificacao import Notificacao
 from app.models.password_reset import PasswordResetToken
 from app.models.retencao_legal import RetencaoLegal
 from app.models.rota import RotaAluno
 from app.models.user import Aluno, User
-from app.models.viagem import AlunosConfirmados, SolicitacaoViagem, Viagem
-from app.services import solicitacoes_service, viagens_service
+from app.models.viagem import AlunosConfirmados, Viagem
+from app.services import solicitacoes_service
 from app.services.aluno_service import apagar_foto
 from app.services.consentimento_service import VERSAO_TERMO_VIGENTE
 from app.utils import audit_logger
@@ -38,24 +37,6 @@ logger = logging.getLogger(__name__)
 # equipe, sem validação jurídica formal. Passado o prazo, e-mail e CPF viram hashes.
 ANOS_DE_RETENCAO = 10
 LIMITE_ANONIMIZACAO_POR_EXECUCAO = 500
-EM_VIAGEM = (
-    "Você está em uma viagem em andamento. Conclua ou cancele a participação "
-    "antes de excluir a conta."
-)
-
-
-def _tem_viagem_em_andamento(aluno_id) -> bool:
-    registro = (
-        db.session.query(AlunosConfirmados)
-        .join(Viagem, Viagem.id == AlunosConfirmados.viagem_id)
-        .filter(
-            AlunosConfirmados.aluno_id == aluno_id,
-            AlunosConfirmados.confirmacao.is_(True),
-            Viagem.status == StatusViagem.EM_ANDAMENTO,
-        )
-        .first()
-    )
-    return registro is not None
 
 
 def _anonimizar(user: User) -> None:
@@ -109,27 +90,9 @@ def _apagar_dados_sem_valor_estatistico(aluno_id) -> None:
     ).delete(synchronize_session=False)
 
 
-def _solicitacoes_ativas(aluno_id) -> list[SolicitacaoViagem]:
-    return (
-        db.session.query(SolicitacaoViagem)
-        .join(Viagem, Viagem.id == SolicitacaoViagem.viagem_id)
-        .filter(
-            SolicitacaoViagem.aluno_id == aluno_id,
-            SolicitacaoViagem.status == StatusSolicitacao.ATIVA,
-            Viagem.status.in_(viagens_service.ESTADOS_ATIVOS_SOB_DEMANDA),
-        )
-        .order_by(SolicitacaoViagem.viagem_id)
-        .populate_existing()
-        .all()
-    )
-
-
 def excluir_conta(user_id: str, email: str, senha: str) -> None:
     # Same lock order as the rest of the system: vehicle and trip before the student.
-    viagens_travadas: dict[uuid.UUID, Viagem] = {}
-    for solicitacao in _solicitacoes_ativas(user_id):
-        viagem = solicitacoes_service.travar_viagem(solicitacao.viagem)
-        viagens_travadas[viagem.id] = viagem
+    viagens_travadas = solicitacoes_service.travar_viagens_do_aluno(user_id)
 
     # Lock the account: a second simultaneous request waits and already sees it anonymized.
     db.session.execute(select(User.id).where(User.id == user_id).with_for_update(key_share=True))
@@ -151,30 +114,12 @@ def excluir_conta(user_id: str, email: str, senha: str) -> None:
         )
         raise UnauthorizedError("Credenciais inválidas")
 
-    if _tem_viagem_em_andamento(user.id):
-        raise ConflictError(EM_VIAGEM)
-
-    # With the account locked no new request appears; re-read the existing ones.
-    solicitacoes = _solicitacoes_ativas(user.id)
-    for solicitacao in solicitacoes:
-        travada = viagens_travadas.get(solicitacao.viagem_id)
-        if travada is None:
-            # Joined a trip between the read and the lock: it cannot be locked now without
-            # inverting the lock order.
-            raise ConflictError("Sua solicitação de viagem mudou. Tente novamente.")
-        if travada.status == StatusViagem.EM_ANDAMENTO:
-            raise ConflictError(EM_VIAGEM)
-
     email_original = user.email
     aluno_id = user.id
 
     with transactional():
-        # Same effect as DELETE /v1/viagens/<id>/solicitacao: gives the leg back and
-        # cancels the trip left with no one.
-        for solicitacao in solicitacoes:
-            solicitacoes_service.cancelar_na_viagem_travada(
-                user, viagens_travadas[solicitacao.viagem_id]
-            )
+        # Raises 409 while in a trip; else gives the legs back like the student cancelling.
+        solicitacoes_service.liberar_aluno(user, viagens_travadas)
         _apagar_ponto_casa(user)
         _apagar_dados_sem_valor_estatistico(aluno_id)
         db.session.add(
