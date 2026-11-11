@@ -41,6 +41,7 @@ from app.services.notificacao_service import NotificacaoService
 from app.tasks.viagem_tasks import realizar_auto_checkin
 from app.utils import audit_logger, tempo
 from app.utils.geo_utils import calcular_distancia_metros
+from app.utils.validators import validate_uuid
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +77,18 @@ def _rota_id_da_viagem(viagem: Viagem):
     if viagem.horario_rota:
         return viagem.horario_rota.rota_id
     return None
+
+
+def _exigir_viagem_da_organizacao(
+    viagem: Viagem, user: User, mensagem: str = "Acesso negado"
+) -> None:
+    """Raise ForbiddenError unless the trip's route belongs to the user's organização."""
+    rota_id = _rota_id_da_viagem(viagem)
+    if rota_id is None:
+        raise ForbiddenError(mensagem)
+    rota = db.session.get(Rota, rota_id)
+    if not rota or rota.organizacao_id != user.organizacao_id:
+        raise ForbiddenError(mensagem)
 
 
 def _popular_dados_da_viagem(viagem_obj: Viagem, rota_obj: Rota) -> None:
@@ -646,9 +659,7 @@ def cancelar_viagem(user_id: str, viagem_id: str) -> dict[str, Any]:
     if not viagem:
         raise NotFoundError("Viagem não encontrada")
 
-    rota = db.session.get(Rota, _rota_id_da_viagem(viagem))
-    if not rota or rota.organizacao_id != user.organizacao_id:
-        raise ForbiddenError("Acesso negado")
+    _exigir_viagem_da_organizacao(viagem, user)
 
     if viagem.status in (StatusViagem.FINALIZADA, StatusViagem.CANCELADA):
         raise ValidationError(f"Não é possível cancelar uma viagem com status {viagem.status.name}")
@@ -788,21 +799,18 @@ def atualizar_localizacao(user_id: str, viagem_id: str, data: dict) -> dict:
 def obter_localizacao_onibus(user_id: str, viagem_id: str) -> dict:
     """Return the bus's current location (driver GPS) for a trip in progress.
 
-    The student (confirmed on the trip) or the trip's driver may query it.
+    The student (confirmed on the trip), the trip's driver or a manager of the
+    trip's organization may query it.
     """
     user = db.session.get(User, user_id)
     if not user:
         raise ForbiddenError("Acesso negado")
 
-    viagem = db.session.get(Viagem, viagem_id)
+    viagem = db.session.get(Viagem, validate_uuid(viagem_id, "ID da viagem"))
     if not viagem:
         raise NotFoundError("Viagem não encontrada")
 
-    if viagem.status != StatusViagem.EM_ANDAMENTO:
-        raise ValidationError(
-            "A localização do ônibus só está disponível enquanto a viagem está em andamento."
-        )
-
+    # Authorize before the status check so outsiders cannot probe a trip's state.
     if user.role == UserRole.MOTORISTA:
         if viagem.motorista_id != user.id:
             raise ForbiddenError("Apenas o motorista desta viagem pode consultar a localização.")
@@ -812,9 +820,21 @@ def obter_localizacao_onibus(user_id: str, viagem_id: str) -> dict:
             raise ForbiddenError(
                 "Você precisa estar confirmado nesta viagem para ver a localização do ônibus."
             )
+    elif user.role == UserRole.GESTOR:
+        _exigir_viagem_da_organizacao(
+            viagem,
+            user,
+            "Apenas gestores da organização desta viagem podem consultar a localização.",
+        )
     else:
         raise ForbiddenError(
-            "Apenas alunos confirmados ou o motorista podem consultar a localização do ônibus."
+            "Apenas alunos confirmados, o motorista ou o gestor podem consultar a localização"
+            " do ônibus."
+        )
+
+    if viagem.status != StatusViagem.EM_ANDAMENTO:
+        raise ValidationError(
+            "A localização do ônibus só está disponível enquanto a viagem está em andamento."
         )
 
     return {

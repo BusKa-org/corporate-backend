@@ -2605,7 +2605,7 @@
             }
           }
         },
-        "summary": "(Student/Driver) Gets the bus's current location (trip in progress)",
+        "summary": "(Student/Driver/Manager) Gets the bus's current location (trip in progress)",
         "operationId": "obter_localizacao_onibus",
         "tags": [
           "viagens"
