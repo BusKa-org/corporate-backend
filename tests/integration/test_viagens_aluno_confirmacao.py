@@ -3,6 +3,7 @@ from datetime import date, timedelta
 import pytest
 
 from app.models.enum import StatusViagem
+from app.models.viagem import AlunosConfirmados
 from tests.factories.viagem_factory import AlunosConfirmadosFactory, ViagemFactory
 
 
@@ -126,3 +127,23 @@ def test_confirmar_presenca_bloqueada_se_em_outra_viagem_em_andamento(
         json={"confirmacao": True, "ponto_embarque_id": str(rota_ponto.ponto_id)},
     )
     assert r.status_code == esperado, r.get_data(as_text=True)
+
+
+@pytest.mark.parametrize(
+    "status", [StatusViagem.EM_ANDAMENTO, StatusViagem.FINALIZADA, StatusViagem.CANCELADA]
+)
+def test_presenca_nao_muda_depois_que_a_viagem_saiu_de_agendada(
+    _db, aluno, rota_aluno, viagem_futura_agendada_com_motorista, status
+):
+    viagem = viagem_futura_agendada_com_motorista
+    _db.session.add(
+        AlunosConfirmadosFactory(viagem_id=viagem.id, aluno_id=aluno.user.id, confirmacao=True)
+    )
+    viagem.status = status
+    _db.session.commit()
+
+    r = aluno.client.put(f"/v1/viagens/{viagem.id}/confirmacao", json={"confirmacao": False})
+
+    assert r.status_code == 409, r.get_data(as_text=True)
+    _db.session.expire_all()
+    assert _db.session.get(AlunosConfirmados, (viagem.id, aluno.user.id)).confirmacao is True

@@ -169,6 +169,20 @@ def confirmar_presenca_aluno(
         db.session.execute(
             select(User.id).where(User.id == aluno.usuario_id).with_for_update(key_share=True)
         )
+        # Locked so INICIAR cannot slip in between: once the trip left, the attendance is
+        # evidence (no-show/boarding) and must not be rewritten by the student.
+        viagem = (
+            db.session.query(Viagem)
+            .filter(Viagem.id == viagem.id)
+            .with_for_update(key_share=True)
+            .populate_existing()
+            .one()
+        )
+        if viagem.status != StatusViagem.AGENDADA:
+            raise ConflictError(
+                f"Não é possível alterar a presença em uma viagem com status {viagem.status.name}"
+            )
+
         registro = db.session.get(
             AlunosConfirmados, (viagem.id, aluno.usuario_id), populate_existing=True
         )
