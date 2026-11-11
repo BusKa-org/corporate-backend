@@ -1,8 +1,9 @@
 import pytest
+from flask_jwt_extended import create_access_token
 
 from app.models.enum import UserStatus
-from app.services.consentimento_service import VERSAO_TERMO_VIGENTE
-from tests.factories.user_factory import GestorFactory, MotoristaFactory
+from app.services.consentimento_service import CONSENTIMENTO_OBRIGATORIO, VERSAO_TERMO_VIGENTE
+from tests.factories.user_factory import SENHA_PADRAO, GestorFactory, MotoristaFactory
 
 
 def _novo_motorista(_db, organizacao_id):
@@ -196,3 +197,59 @@ def test_id_invalido_e_400_mesmo_com_gestor_nao_ativo(_db, gestor):
     _db.session.commit()
 
     assert _ativar(gestor, "nao-e-uuid").status_code == 400
+
+
+def test_gestor_nao_ativo_nao_convida(_db, gestor):
+    gestor.user.status = UserStatus.PENDING_SIGNUP
+    _db.session.commit()
+
+    r = gestor.client.post("/v1/convites", json={"convites": [{"email": "x@org.test"}]})
+
+    assert r.status_code == 403
+    assert "conta ativa" in r.get_json()["error"]["message"]
+
+
+@pytest.fixture()
+def motorista_sem_termo(app, _db, organizacao):
+    m = MotoristaFactory(organizacao_id=organizacao.id)
+    _db.session.add(m)
+    _db.session.commit()
+    with app.app_context():
+        token = create_access_token(identity=str(m.id))
+    return m, {"Authorization": f"Bearer {token}"}
+
+
+def test_motorista_sem_termo_cuida_da_propria_conta(client, motorista_sem_termo):
+    _, headers = motorista_sem_termo
+
+    r = client.post(
+        "/v1/users/change-password",
+        json={"current_password": SENHA_PADRAO, "new_password": "OutraSenha123!"},
+        headers=headers,
+    )
+    assert r.status_code == 200, r.get_json()
+    r = client.patch("/v1/users/me", json={"nome": "Novo Nome"}, headers=headers)
+    assert r.status_code == 200, r.get_json()
+    r = client.patch("/v1/users/fcm-token", json={"fcm_token": "abc"}, headers=headers)
+    assert r.status_code == 200, r.get_json()
+
+
+def test_motorista_sem_termo_chega_na_exclusao_de_conta(client, motorista_sem_termo):
+    m, headers = motorista_sem_termo
+
+    r = client.delete(
+        "/v1/users/me", json={"email": m.email, "senha": SENHA_PADRAO}, headers=headers
+    )
+
+    # The deletion rule answers (drivers cannot self-delete), not the consent hook.
+    assert r.status_code == 403
+    assert r.get_json()["error"]["message"] != CONSENTIMENTO_OBRIGATORIO
+
+
+def test_liberacao_do_termo_e_por_caminho_exato(client, motorista_sem_termo):
+    _, headers = motorista_sem_termo
+
+    r = client.get("/v1/consentimento/outra-coisa", headers=headers)
+
+    assert r.status_code == 403
+    assert r.get_json()["error"]["message"] == CONSENTIMENTO_OBRIGATORIO

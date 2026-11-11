@@ -12,6 +12,7 @@ from app.models.notificacao import Notificacao
 from app.models.viagem import AlunosConfirmados, Viagem
 from app.services import buffer_service, viagens_service
 from app.services.consentimento_service import VERSAO_TERMO_VIGENTE
+from tests.conftest import aceitar_termo
 from tests.factories.user_factory import AlunoFactory, GestorFactory, MotoristaFactory
 
 
@@ -42,11 +43,16 @@ def test_outro_motorista_recebe_403(_db, viagem_solicitada, organizacao, client,
     outro = MotoristaFactory(organizacao_id=organizacao.id)
     _db.session.add(outro)
     _db.session.commit()
+    aceitar_termo(_db, outro.id)
     token = create_access_token(identity=str(outro.id))
 
     resp = client.post(_url(viagem_solicitada.id), headers={"Authorization": f"Bearer {token}"})
 
     assert resp.status_code == 403
+    # The ownership check, not the consent hook.
+    assert resp.get_json()["error"]["message"] == (
+        "Apenas o motorista da viagem pode iniciar o percurso"
+    )
 
 
 def test_gestor_recebe_403(gestor, viagem_solicitada):

@@ -423,8 +423,12 @@ O motorista criado pelo gestor nasce `PENDING_SIGNUP`; esta rota o passa para `A
 A ordem das checagens é a mesma de `desativar`/`reativar`.
 
 A ativação não registra aceite do termo (RF-09). Todo motorista sem o aceite da versão
-vigente recebe 403 em qualquer rota autenticada, exceto `/v1/auth/*`, `/v1/consentimento`
-e `GET /v1/users/me`, até aceitar o termo em `POST /v1/consentimento`.
+vigente recebe 403 em qualquer rota autenticada, exceto `/v1/auth/*`, `/v1/consentimento`,
+`/v1/users/me` (GET, PATCH, DELETE), `/v1/users/change-password` e `/v1/users/fcm-token`
+(caminhos exatos), até aceitar o termo em `POST /v1/consentimento`.
+
+Criar, reenviar e cancelar convites e resolver ocorrências também exigem gestor `ACTIVE`
+(403 caso contrário), como as mudanças de conta.
 
 | Status | When |
 |---|---|

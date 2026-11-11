@@ -21,8 +21,15 @@ VERSAO_TERMO_VIGENTE = "1.0"
 CONSENTIMENTO_OBRIGATORIO = (
     "É necessário aceitar o termo de uso e a política de privacidade para continuar"
 )
-# What a driver without consent can still reach: log in, read the terms state, accept them.
-ROTAS_LIVRES_PARA_MOTORISTA = ("/v1/auth/", "/v1/consentimento")
+# What a driver without consent can still reach: auth, the terms themselves and self-service
+# (LGPD: deleting or editing the account must not depend on accepting the terms).
+# Exact paths, so a new route under one of them is blocked until listed here.
+ROTAS_LIVRES_PARA_MOTORISTA = (
+    "/v1/consentimento",
+    "/v1/users/me",
+    "/v1/users/change-password",
+    "/v1/users/fcm-token",
+)
 
 
 def consentimento_pendente(user_id: str) -> bool:
@@ -96,9 +103,9 @@ def exigir_consentimento_do_motorista() -> None:
     whatever the status and however the account became ACTIVE (e.g. gestor activation).
     """
     # CORS preflight carries no token, and flask-jwt-extended skips it.
-    if request.method == "OPTIONS" or request.path.startswith(ROTAS_LIVRES_PARA_MOTORISTA):
+    if request.method == "OPTIONS" or request.path.startswith("/v1/auth/"):
         return
-    if request.method == "GET" and request.path == "/v1/users/me":
+    if request.path in ROTAS_LIVRES_PARA_MOTORISTA:
         return
     try:
         verify_jwt_in_request(optional=True)

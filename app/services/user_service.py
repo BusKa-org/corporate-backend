@@ -1,6 +1,7 @@
 """User service - CRUD operations, driver creation, password management."""
 
 import logging
+import uuid
 from datetime import UTC, datetime
 from typing import Any, cast
 
@@ -50,12 +51,12 @@ def _get_gestor_or_403(
     message: str = "Apenas gestores podem executar esta ação",
     require_active: bool = False,
 ) -> Gestor:
-    """`require_active` is for account mutations: a pending or disabled gestor only reads."""
+    """`require_active` is for mutations: a pending or disabled gestor only reads."""
     user = _get_user_or_404(user_id)
     if user.role != UserRole.GESTOR:
         raise ForbiddenError(message)
     if require_active and user.status != UserStatus.ACTIVE:
-        raise ForbiddenError("Apenas gestores com conta ativa podem gerenciar contas")
+        raise ForbiddenError("Apenas gestores com conta ativa podem executar esta ação")
     return cast(Gestor, user)
 
 
@@ -385,10 +386,12 @@ def delete_motorista(gestor_id: str, motorista_id: str) -> None:
         )
 
 
-def _get_conta_gerenciavel(gestor: Gestor, user_id: str, roles: tuple[UserRole, ...]) -> User:
-    if str(user_id) == str(gestor.id):
+def _get_conta_gerenciavel(gestor: Gestor, user_id: uuid.UUID, roles: tuple[UserRole, ...]) -> User:
+    if user_id == gestor.id:
         raise ValidationError("Você não pode alterar a situação da sua própria conta")
-    user = _get_user_or_404(user_id)
+    user = db.session.get(User, user_id)
+    if not user:
+        raise NotFoundError("Usuário não encontrado")
     # Organization first: another org's gestor gets the same 403 whatever the role or status.
     if user.organizacao_id != gestor.organizacao_id:
         raise ForbiddenError("Proibido alterar contas de outra organização")
@@ -459,11 +462,11 @@ def _mudar_status(
 ) -> User:
     """Gestor moves an account of its organization from one of `de` to `para`."""
     # A bad id is always 400, before any check on the caller.
-    validate_uuid(user_id, "User ID")
+    user_uuid = validate_uuid(user_id, "User ID")
     gestor = _get_gestor_or_403(
         gestor_id, "Apenas gestores podem alterar a situação de contas", require_active=True
     )
-    user = _get_conta_gerenciavel(gestor, user_id, roles)
+    user = _get_conta_gerenciavel(gestor, user_uuid, roles)
     # Cheap answer before locking the student's trips; re-checked under the lock below.
     if user.status not in de:
         raise ConflictError(msg_conflito)
