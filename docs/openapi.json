@@ -1307,18 +1307,6 @@
           "onibus"
         ]
       },
-      "delete": {
-        "responses": {
-          "200": {
-            "description": "Success"
-          }
-        },
-        "summary": "Removes a bus",
-        "operationId": "delete_onibus",
-        "tags": [
-          "onibus"
-        ]
-      },
       "patch": {
         "responses": {
           "200": {
@@ -1340,6 +1328,18 @@
             }
           }
         ],
+        "tags": [
+          "onibus"
+        ]
+      },
+      "delete": {
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "Removes a bus",
+        "operationId": "delete_onibus",
         "tags": [
           "onibus"
         ]
@@ -1420,6 +1420,57 @@
         "operationId": "delete_janela",
         "tags": [
           "onibus"
+        ]
+      }
+    },
+    "/v1/parametros-operacao": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/ParametrosOperacaoResponse"
+            }
+          },
+          "403": {
+            "description": "Não é gestor nem motorista"
+          }
+        },
+        "summary": "On-demand operation parameters of the logged-in user's organization",
+        "operationId": "get_parametros_operacao",
+        "tags": [
+          "parametros-operacao"
+        ]
+      },
+      "put": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/ParametrosOperacaoResponse"
+            }
+          },
+          "400": {
+            "description": "Valores inválidos"
+          },
+          "403": {
+            "description": "Não é gestor"
+          }
+        },
+        "summary": "Saves the organization's on-demand operation parameters (gestor)",
+        "operationId": "put_parametros_operacao",
+        "parameters": [
+          {
+            "name": "payload",
+            "required": true,
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/ParametrosOperacaoRequest"
+            }
+          }
+        ],
+        "tags": [
+          "parametros-operacao"
         ]
       }
     },
@@ -1603,6 +1654,9 @@
       },
       "delete": {
         "responses": {
+          "409": {
+            "description": "Viagem pendente na rota"
+          },
           "200": {
             "description": "Success"
           }
@@ -1662,6 +1716,9 @@
       },
       "post": {
         "responses": {
+          "409": {
+            "description": "Horário idêntico (mesmo horário, sentido e dia) já ativo"
+          },
           "201": {
             "description": "Created",
             "schema": {
@@ -1670,6 +1727,71 @@
           }
         },
         "operationId": "add_rota_horario",
+        "parameters": [
+          {
+            "name": "payload",
+            "required": true,
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/RotaHorarioCreateRequest"
+            }
+          }
+        ],
+        "tags": [
+          "rotas"
+        ]
+      }
+    },
+    "/v1/rotas/{id}/horarios/{horario_id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "horario_id",
+          "in": "path",
+          "required": true,
+          "type": "string"
+        }
+      ],
+      "delete": {
+        "responses": {
+          "409": {
+            "description": "Viagem pendente no horário"
+          },
+          "404": {
+            "description": "Horário não encontrado ou inativo"
+          },
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "Removes a schedule; one that already has trips is only deactivated",
+        "operationId": "delete_rota_horario",
+        "tags": [
+          "rotas"
+        ]
+      },
+      "put": {
+        "responses": {
+          "409": {
+            "description": "Viagem pendente no horário ou horário idêntico já ativo"
+          },
+          "404": {
+            "description": "Horário não encontrado ou inativo"
+          },
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/RotaHorarioResponse"
+            }
+          }
+        },
+        "summary": "Replaces a schedule; one that already has trips is versioned under a new id",
+        "operationId": "update_rota_horario",
         "parameters": [
           {
             "name": "payload",
@@ -2075,6 +2197,37 @@
           "users"
         ]
       },
+      "patch": {
+        "responses": {
+          "200": {
+            "description": "Updated",
+            "schema": {
+              "$ref": "#/definitions/UserResponse"
+            }
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "409": {
+            "description": "Conflict"
+          }
+        },
+        "summary": "Updates the logged-in user's profile (nome, telefone, receber_notificacoes, cnh)",
+        "operationId": "update_my_profile",
+        "parameters": [
+          {
+            "name": "payload",
+            "required": true,
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/UpdateProfileRequest"
+            }
+          }
+        ],
+        "tags": [
+          "users"
+        ]
+      },
       "delete": {
         "responses": {
           "200": {
@@ -2100,37 +2253,6 @@
             "in": "body",
             "schema": {
               "$ref": "#/definitions/ExcluirContaRequest"
-            }
-          }
-        ],
-        "tags": [
-          "users"
-        ]
-      },
-      "patch": {
-        "responses": {
-          "200": {
-            "description": "Updated",
-            "schema": {
-              "$ref": "#/definitions/UserResponse"
-            }
-          },
-          "400": {
-            "description": "Validation error"
-          },
-          "409": {
-            "description": "Conflict"
-          }
-        },
-        "summary": "Updates the logged-in user's profile (nome, telefone, receber_notificacoes, cnh)",
-        "operationId": "update_my_profile",
-        "parameters": [
-          {
-            "name": "payload",
-            "required": true,
-            "in": "body",
-            "schema": {
-              "$ref": "#/definitions/UpdateProfileRequest"
             }
           }
         ],
@@ -2605,7 +2727,7 @@
             }
           }
         },
-        "summary": "(Student/Driver) Gets the bus's current location (trip in progress)",
+        "summary": "(Student/Driver/Manager) Gets the bus's current location (trip in progress)",
         "operationId": "obter_localizacao_onibus",
         "tags": [
           "viagens"
@@ -2725,57 +2847,6 @@
         ],
         "tags": [
           "viagens"
-        ]
-      }
-    },
-    "/v1/parametros-operacao": {
-      "get": {
-        "responses": {
-          "200": {
-            "description": "Success",
-            "schema": {
-              "$ref": "#/definitions/ParametrosOperacaoResponse"
-            }
-          },
-          "403": {
-            "description": "Não é gestor nem motorista"
-          }
-        },
-        "summary": "On-demand operation parameters of the logged-in user's organization",
-        "operationId": "get_parametros_operacao",
-        "tags": [
-          "parametros-operacao"
-        ]
-      },
-      "put": {
-        "responses": {
-          "200": {
-            "description": "Success",
-            "schema": {
-              "$ref": "#/definitions/ParametrosOperacaoResponse"
-            }
-          },
-          "400": {
-            "description": "Valores inválidos"
-          },
-          "403": {
-            "description": "Não é gestor"
-          }
-        },
-        "summary": "Saves the organization's on-demand operation parameters (gestor)",
-        "operationId": "put_parametros_operacao",
-        "parameters": [
-          {
-            "name": "payload",
-            "required": true,
-            "in": "body",
-            "schema": {
-              "$ref": "#/definitions/ParametrosOperacaoRequest"
-            }
-          }
-        ],
-        "tags": [
-          "parametros-operacao"
         ]
       }
     }
@@ -3077,23 +3148,6 @@
       },
       "type": "object"
     },
-    "ExcluirContaRequest": {
-      "required": [
-        "email",
-        "senha"
-      ],
-      "properties": {
-        "email": {
-          "type": "string",
-          "description": "E-mail da conta"
-        },
-        "senha": {
-          "type": "string",
-          "description": "Senha atual"
-        }
-      },
-      "type": "object"
-    },
     "UpdateProfileRequest": {
       "properties": {
         "nome": {
@@ -3111,6 +3165,23 @@
         "cnh": {
           "type": "string",
           "description": "CNH (apenas motoristas)"
+        }
+      },
+      "type": "object"
+    },
+    "ExcluirContaRequest": {
+      "required": [
+        "email",
+        "senha"
+      ],
+      "properties": {
+        "email": {
+          "type": "string",
+          "description": "E-mail da conta"
+        },
+        "senha": {
+          "type": "string",
+          "description": "Senha atual"
         }
       },
       "type": "object"
@@ -4715,6 +4786,10 @@
         "data": {
           "type": "string",
           "description": "Data (YYYY-MM-DD)"
+        },
+        "horario_rota_id": {
+          "type": "string",
+          "description": "UUID do horário; obrigatório quando a rota tem mais de um horário ativo no dia da semana"
         }
       },
       "type": "object"

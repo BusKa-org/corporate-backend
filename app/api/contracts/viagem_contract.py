@@ -11,6 +11,12 @@ def register_models(api):
         {
             "rota_id": fields.String(required=True, description="UUID da rota"),
             "data": fields.String(required=True, description="Data (YYYY-MM-DD)"),
+            "horario_rota_id": fields.String(
+                description=(
+                    "UUID do horário; obrigatório quando a rota tem mais de um horário "
+                    "ativo no dia da semana"
+                )
+            ),
         },
     )
 

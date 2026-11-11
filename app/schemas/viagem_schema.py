@@ -81,6 +81,7 @@ class ViagemCreateRequestSchema(BaseSchema):
 
     rota_id = fields.UUID(required=True)
     data = fields.Date(required=True)
+    horario_rota_id = fields.UUID(load_default=None, allow_none=True)
 
 
 class ViagemConfirmacaoRequestSchema(BaseSchema):
