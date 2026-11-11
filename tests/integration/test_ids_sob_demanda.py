@@ -33,7 +33,6 @@ def test_id_malformado_retorna_400(request, onibus, ator, metodo, caminho):
         ("aluno", "get", "/v1/rotas/nao-e-uuid/viagem-ativa"),
         ("motorista", "get", "/v1/embarque/viagens/nao-e-uuid/roteiro"),
         ("motorista", "post", "/v1/embarque/viagens/nao-e-uuid/roteiro/avancar"),
-        ("motorista", "post", "/v1/embarque/viagens/nao-e-uuid/validacao"),
         ("motorista", "post", "/v1/embarque/viagens/nao-e-uuid/checkin"),
         ("motorista", "post", "/v1/embarque/viagens/nao-e-uuid/confirmacao"),
         ("motorista", "post", "/v1/embarque/viagens/nao-e-uuid/recusa"),

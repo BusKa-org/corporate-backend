@@ -85,11 +85,12 @@ class AvancarPontoResource(Resource):
         return roteiro_response_schema.dump(roteiro), 200
 
 
-@api.route("/viagens/<uuid:viagem_id>/validacao")
+# <string:...> on purpose: the id is never read, so any id (even a non-UUID) gets the 410.
+@api.route("/viagens/<string:viagem_id>/validacao")
 class ValidacaoDescontinuadaResource(Resource):
     @api.doc("validar_embarque_descontinuado")
     @api.response(410, "ENDPOINT_DESCONTINUADO: use /checkin e depois /confirmacao")
-    def post(self, viagem_id: UUID) -> tuple[dict[str, Any], int]:
+    def post(self, viagem_id: str) -> tuple[dict[str, Any], int]:
         """Deprecated: boarded on scan, without checking the photo (RF-17)"""
         embarque_service.endpoint_descontinuado()
         return {}, 410
