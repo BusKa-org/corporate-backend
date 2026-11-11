@@ -1,6 +1,6 @@
 """On-demand trip request (RF-10) and cancellation (RF-19), via the HTTP API."""
 
-from datetime import UTC, datetime, time
+from datetime import UTC, datetime, time, timedelta
 
 import pytest
 from flask_jwt_extended import create_access_token
@@ -8,7 +8,7 @@ from flask_jwt_extended import create_access_token
 from app.models.consentimento import ACEITE, REVOGACAO, Consentimento
 from app.models.enum import DiaDaSemana, StatusSolicitacao, StatusViagem, TipoViagem
 from app.models.notificacao import Notificacao
-from app.models.viagem import SolicitacaoViagem, Viagem
+from app.models.viagem import AlunosConfirmados, SolicitacaoViagem, Viagem
 from app.services.consentimento_service import VERSAO_TERMO_VIGENTE
 from tests.conftest import Actor, AuthenticatedClient
 from tests.factories.onibus_factory import JanelaDisponibilidadeFactory
@@ -187,6 +187,34 @@ def test_primeira_solicitacao_cria_viagem_e_notifica_motorista(
     assert _notificacoes(motorista.user.id) == 1
 
 
+def test_motorista_em_descanso_rejeita_nova_viagem(
+    _db, aluno, motorista, rota_sob_demanda, janela, relogio
+):
+    motorista.user.descanso_ate = relogio.agora + timedelta(minutes=10)
+    _db.session.commit()
+
+    r = _solicitar(aluno, rota_sob_demanda)
+
+    assert r.status_code == 409
+    mensagem = r.get_json()["error"]["message"]
+    assert "motorista desta rota está indisponível" in mensagem
+    assert "Poderá dirigir novamente" in mensagem
+    assert Viagem.query.count() == 0
+
+
+def test_motorista_em_pausa_rejeita_nova_viagem(
+    _db, aluno, motorista, rota_sob_demanda, janela, relogio
+):
+    motorista.user.pausa_ate = relogio.agora + timedelta(minutes=10)
+    _db.session.commit()
+
+    r = _solicitar(aluno, rota_sob_demanda)
+
+    assert r.status_code == 409
+    assert "pausa mínima entre viagens" in r.get_json()["error"]["message"]
+    assert Viagem.query.count() == 0
+
+
 def test_segundo_aluno_entra_na_mesma_viagem_sem_nova_notificacao(
     aluno, segundo_aluno, motorista, rota_sob_demanda, janela, relogio
 ):
@@ -318,6 +346,23 @@ def test_cancela_depois_do_inicio_vira_desistencia(
     assert r.get_json()["status"] == "DESISTENCIA"
     assert r.get_json()["viagem"]["status"] == "EM_ANDAMENTO"
     assert _notificacoes(motorista.user.id) == 1
+
+
+def test_nao_desiste_depois_de_embarcar(_db, aluno, viagem_solicitada, relogio):
+    viagem_solicitada.status = StatusViagem.EM_ANDAMENTO
+    _db.session.add(
+        AlunosConfirmados(
+            viagem_id=viagem_solicitada.id, aluno_id=aluno.user.id, confirmacao=True, embarcou=True
+        )
+    )
+    _db.session.commit()
+
+    r = _cancelar(aluno, viagem_solicitada.id)
+
+    assert r.status_code == 409, r.get_data(as_text=True)
+    solicitacao = SolicitacaoViagem.query.filter_by(viagem_id=viagem_solicitada.id).one()
+    assert solicitacao.status == StatusSolicitacao.ATIVA
+    assert solicitacao.cancelada_em is None
 
 
 def test_cancela_duas_vezes_retorna_404(aluno, viagem_solicitada, relogio):

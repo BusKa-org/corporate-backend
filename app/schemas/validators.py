@@ -2,7 +2,6 @@
 
 import re
 import uuid
-from typing import Any
 
 from marshmallow import ValidationError as MarshmallowValidationError
 
@@ -112,26 +111,6 @@ def validate_cnh(value: str, field_name: str = "CNH") -> str:
         raise MarshmallowValidationError(f"{field_name} inválida (todos os dígitos são iguais)")
 
     return raw_cnh
-
-
-def validate_pagination(page: Any, per_page: Any, max_per_page: int = 100) -> tuple[int, int]:
-    """Validate pagination parameters and return (page, per_page) as integers."""
-    try:
-        page_int = int(page) if page else 1
-        per_page_int = int(per_page) if per_page else 20
-    except (ValueError, TypeError):
-        raise MarshmallowValidationError("Parâmetros de paginação devem ser números inteiros")
-
-    if page_int < 1:
-        raise MarshmallowValidationError("Número da página deve ser maior ou igual a 1")
-
-    if per_page_int < 1:
-        raise MarshmallowValidationError("Items por página deve ser maior ou igual a 1")
-
-    if per_page_int > max_per_page:
-        raise MarshmallowValidationError(f"Items por página não pode exceder {max_per_page}")
-
-    return page_int, per_page_int
 
 
 def validate_coordinates(

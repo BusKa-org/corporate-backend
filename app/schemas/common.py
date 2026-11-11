@@ -1,6 +1,7 @@
 from typing import Any
 
-from marshmallow import EXCLUDE, Schema, pre_load
+from marshmallow import EXCLUDE, Schema, fields, pre_load
+from marshmallow.validate import Range
 
 
 class BaseSchema(Schema):
@@ -31,3 +32,10 @@ class BaseSchema(Schema):
         if not isinstance(data, (dict, list)):
             return data
         return self._normalize(data)
+
+
+class PaginacaoQuerySchema(BaseSchema):
+    """Shared ?page=&per_page= query params."""
+
+    page = fields.Integer(required=False, load_default=1, validate=Range(min=1))
+    per_page = fields.Integer(required=False, load_default=20, validate=Range(min=1, max=100))

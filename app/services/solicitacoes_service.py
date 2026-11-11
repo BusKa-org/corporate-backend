@@ -10,7 +10,7 @@ from app.models.base import db
 from app.models.enum import StatusSolicitacao, StatusViagem, TipoViagem, UserRole, UserStatus
 from app.models.onibus import Onibus
 from app.models.rota import Rota
-from app.models.user import Aluno, User
+from app.models.user import Aluno, Motorista, User
 from app.models.viagem import AlunosConfirmados, SolicitacaoViagem, Viagem
 from app.services import capacidade_service, janelas_service, viagens_service
 from app.services.notificacao_service import NotificacaoService
@@ -27,17 +27,23 @@ def _buscar_aluno(user_id: str) -> Aluno:
     return aluno
 
 
-# shortcut: once PR #16 merges, check disponibilidade_motorista(motorista, agora) here and refuse
-# (with livre_a_partir_de in the message) so a request never goes to a resting or off-hours driver.
 def _escolher_motorista(janela):
-    """The window's driver, or None if the account is not ACTIVE. Locks the driver row."""
+    """The window's driver, or None if the account is not ACTIVE. Locks the driver row.
+
+    An active driver on another trip, resting, paused or off hours is refused.
+    """
     # Locked so a concurrent deactivation either sees this trip or runs before the re-read.
     db.session.execute(
         select(User.id).where(User.id == janela.motorista_id).with_for_update(key_share=True)
     )
-    motorista = db.session.get(User, janela.motorista_id, populate_existing=True)
+    motorista = db.session.get(Motorista, janela.motorista_id, populate_existing=True)
     if motorista is None or motorista.status != UserStatus.ACTIVE:
         return None
+    pode, motivo, _ = viagens_service.disponibilidade_motorista(
+        motorista, tempo.agora_utc(), considerar_pausa=True
+    )
+    if not pode:
+        raise ConflictError(f"O motorista desta rota está indisponível no momento. {motivo}")
     return janela.motorista_id
 
 
@@ -61,7 +67,7 @@ def solicitar_viagem(user_id: str, rota_id: str) -> SolicitacaoViagem:
     aluno = _buscar_aluno(user_id)
 
     rota = db.session.get(Rota, validate_uuid(rota_id, "ID da rota"))
-    if not rota:
+    if not rota or not rota.ativa:
         raise NotFoundError("Rota não encontrada")
 
     if rota.organizacao_id != aluno.organizacao_id:
@@ -332,21 +338,26 @@ def cancelar_na_viagem_travada(aluno: Aluno, viagem: Viagem) -> SolicitacaoViage
             f"Não é possível cancelar a solicitação de uma viagem com status {viagem.status.name}"
         )
 
-    solicitacao.cancelada_em = tempo.agora_utc()
-
     if viagem.status == StatusViagem.EM_ANDAMENTO:
+        # Locked like embarque_service._travar_registro so a boarding in flight cannot slip
+        # past this check. No deadlock: boarding locks credentials and this row, never the trip.
+        passageiro = (
+            db.session.query(AlunosConfirmados)
+            .filter_by(viagem_id=viagem.id, aluno_id=aluno.usuario_id)
+            .with_for_update()
+            .populate_existing()
+            .one_or_none()
+        )
+        if passageiro and passageiro.embarcou:
+            raise ConflictError("Você já embarcou nesta viagem e não pode mais desistir dela")
+
+        solicitacao.cancelada_em = tempo.agora_utc()
         # The seat is not reopened: the vehicle already left counting on the passenger.
         solicitacao.status = StatusSolicitacao.DESISTENCIA
         # Leaves the driver's boarding list (RF-16/RF-17).
-        passageiro = db.session.get(AlunosConfirmados, (viagem.id, aluno.usuario_id))
         if passageiro:
             passageiro.confirmacao = False
-        if viagem.motorista_id:
-            NotificacaoService._criar_notificacao_interna(
-                usuario_id=viagem.motorista_id,
-                titulo="Desistência de passageiro",
-                mensagem=f"O passageiro {aluno.nome} desistiu da viagem em andamento.",
-            )
+        viagens_service.notificar_desistencia_ao_motorista(viagem, aluno)
         return solicitacao
 
     if viagem.status not in (StatusViagem.SOLICITADA, StatusViagem.BUFFER_ABERTO):
@@ -354,6 +365,7 @@ def cancelar_na_viagem_travada(aluno: Aluno, viagem: Viagem) -> SolicitacaoViage
             f"Não é possível cancelar a solicitação de uma viagem com status {viagem.status.name}"
         )
 
+    solicitacao.cancelada_em = tempo.agora_utc()
     # The load vector only counts ATIVA requests: cancelling already gives the leg back (RF-14).
     solicitacao.status = StatusSolicitacao.CANCELADA
     db.session.flush()
@@ -415,7 +427,7 @@ def buscar_rodada_ativa(user_id: str, rota_id: str) -> dict:
         raise ForbiddenError("Acesso negado")
 
     rota = db.session.get(Rota, validate_uuid(rota_id, "ID da rota"))
-    if not rota:
+    if not rota or not rota.ativa:
         raise NotFoundError("Rota não encontrada")
 
     if rota.organizacao_id != user.organizacao_id:

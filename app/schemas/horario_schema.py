@@ -1,5 +1,8 @@
-from marshmallow import fields, validate
+from typing import Any
 
+from marshmallow import fields, post_load, validate
+
+from app.models.enum import SentidoViagem
 from app.schemas.common import BaseSchema
 
 
@@ -13,14 +16,24 @@ class HorarioCreateRequestSchema(BaseSchema):
     dias = fields.List(
         fields.String(validate=validate.OneOf(["SEG", "TER", "QUA", "QUI", "SEX", "SAB", "DOM"])),
         required=True,
+        validate=validate.Length(min=1, error="Selecione pelo menos um dia da semana"),
         metadata={"description": "Lista de dias da semana"},
     )
+
+    @post_load
+    def remover_dias_repetidos(self, data: dict[str, Any], **kwargs: Any) -> dict[str, Any]:
+        dias_unicos: list[str] = []
+        for dia in data["dias"]:
+            if dia not in dias_unicos:
+                dias_unicos.append(dia)
+        data["dias"] = dias_unicos
+        return data
 
 
 class HorarioResponseSchema(BaseSchema):
     id = fields.String()
     horario_saida = fields.Time()
-    sentido = fields.String()
+    sentido = fields.Enum(SentidoViagem)
     dias = fields.Method("get_dias")
 
     def get_dias(self, obj):

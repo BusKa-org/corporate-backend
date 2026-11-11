@@ -44,6 +44,9 @@ class Rota(db.Model):
         UUID(as_uuid=True), db.ForeignKey("onibus.id", ondelete="SET NULL")
     )
 
+    # A route with trips is deactivated instead of deleted, so its trips keep route and schedule.
+    ativa = db.Column(db.Boolean, nullable=False, default=True, server_default=db.true())
+
     created_at = db.Column(db.DateTime(timezone=True), server_default=db.func.now())
     updated_at = db.Column(
         db.DateTime(timezone=True), server_default=db.func.now(), onupdate=db.func.now()
@@ -59,6 +62,11 @@ class Rota(db.Model):
 
     grade_horarios = relationship(
         "HorarioRota", back_populates="rota", cascade="all, delete-orphan"
+    )
+    grade_horarios_ativos = relationship(
+        "HorarioRota",
+        primaryjoin="and_(Rota.id == HorarioRota.rota_id, HorarioRota.ativo.is_(True))",
+        viewonly=True,
     )
     alunos_inscritos = relationship("RotaAluno", backref="rota", cascade="all, delete-orphan")
 
@@ -96,6 +104,9 @@ class HorarioRota(db.Model):
 
     horario_saida = db.Column(db.Time, nullable=False)
     sentido = db.Column(db.Enum(SentidoViagem, name="sentido_viagem"), nullable=False)
+    # Trips read time and direction live from here, so a schedule with trips is
+    # retired (ativo=False) instead of edited or deleted.
+    ativo = db.Column(db.Boolean, nullable=False, default=True, server_default=db.true())
 
     rota = relationship("Rota", back_populates="grade_horarios")
 
