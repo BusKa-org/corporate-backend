@@ -1,5 +1,6 @@
 from marshmallow import fields, validate
 
+from app.models.enum import SentidoViagem
 from app.schemas.common import BaseSchema
 
 
@@ -20,7 +21,7 @@ class HorarioCreateRequestSchema(BaseSchema):
 class HorarioResponseSchema(BaseSchema):
     id = fields.String()
     horario_saida = fields.Time()
-    sentido = fields.String()
+    sentido = fields.Enum(SentidoViagem)
     dias = fields.Method("get_dias")
 
     def get_dias(self, obj):
