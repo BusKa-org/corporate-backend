@@ -125,9 +125,9 @@ consent and notifications on, with the minutes left in the buffer.
 
 | Status | When |
 |---|---|
-| 403 | not the trip's driver; driver still inside `pausa_entre_viagens_minutos` after their last trip ended (the message says when they can start) |
+| 403 | not the trip's driver; driver in mandatory rest or pause (`descanso_ate`; the message says when they can start, with the date when it is not today) or outside their working days/hours |
 | 404 | trip not found |
-| 409 | trip is not `SOLICITADA`; fewer active requests than `minimo_alunos` |
+| 409 | trip is not `SOLICITADA`; fewer active requests than `minimo_alunos`; driver already has a trip `EM_ANDAMENTO` |
 
 ### Operation parameters (RF-10, RF-11)
 
@@ -140,8 +140,11 @@ Body and response: `{minimo_alunos, pausa_entre_viagens_minutos, antecedencia_mo
 (response adds `organizacao_id` and `updated_at`). All three are required on `PUT`.
 `minimo_alunos` is 1..1000; the minutes are 0..1440. Until the gestor saves them, `GET`
 returns the `OPERACAO_*_PADRAO` defaults with `updated_at: null`.
-`minimo_alunos` and `pausa_entre_viagens_minutos` are checked on `iniciar-percurso`;
-`antecedencia_motorista_minutos` is stored only, not enforced yet.
+`minimo_alunos` is checked on `iniciar-percurso`. `pausa_entre_viagens_minutos` is folded into
+the driver's rest: when a started trip ends, `descanso_ate` becomes the later of the
+driving-hours rest and `fim_real + pausa`, so the driver shows `EM_DESCANSO_OBRIGATORIO`
+and the usual 403 applies. `antecedencia_motorista_minutos` is stored only, not enforced yet.
+A concurrent first `PUT` is an upsert (no 409), and every `PUT` refreshes `updated_at`.
 
 | Status | When |
 |---|---|
