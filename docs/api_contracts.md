@@ -46,19 +46,36 @@ Response: `{id, onibus_id, motorista_id, motorista_nome, dia, hora_inicio, hora_
 
 | Method | Path | Who |
 |---|---|---|
+| `POST` | `/v1/rotas/<id>/horarios` | gestor |
 | `PUT` | `/v1/rotas/<id>/horarios/<horario_id>` | gestor |
 | `DELETE` | `/v1/rotas/<id>/horarios/<horario_id>` | gestor |
 
-`PUT` body is the same as `POST /v1/rotas/<id>/horarios` and replaces the whole schedule:
+`PUT` body is the same as `POST` and replaces the whole schedule:
 `{"horario_saida": "HH:MM", "sentido": "IDA"|"VOLTA"|"CIRCULAR", "dias": ["SEG", ...]}`.
-`DELETE` keeps past trips: they lose `horario_rota_id` but keep `rota_id`.
+Repeated weekdays in `dias` are stored once.
+
+Trips read their time and direction from the schedule, so a schedule that already has
+trips (any status) is never rewritten or deleted:
+
+- `PUT` on a schedule with trips deactivates it and creates a new one with the new values.
+  The response is the new schedule, with a **new `id`**; use it from then on. A schedule
+  with no trips is updated in place and keeps its `id`.
+- `DELETE` on a schedule with trips only deactivates it; one with no trips is deleted.
+- Inactive schedules no longer appear in `GET /v1/rotas/<id>/horarios` or in
+  `GET /v1/rotas/<id>`, trips are no longer generated from them, and `PUT`/`DELETE` on
+  them return 404. Their past trips keep `horario_rota_id`, `horario_inicio` and `tipo`.
+
+`sentido` in schedule responses (`POST`, `PUT`, `GET /v1/rotas/<id>/horarios`,
+`GET /v1/rotas/<id>`) is the plain value `"IDA"` / `"VOLTA"` / `"CIRCULAR"`. Before this
+change it came out as `"SentidoViagem.IDA"`; clients parsing that must switch.
 
 | Status | When |
 |---|---|
-| 400 | invalid body, same rules as creation |
+| 400 | invalid body, same rules as creation; route is `SOB_DEMANDA` |
 | 403 | not a gestor; route from another organization |
-| 404 | route not found, or schedule not in that route |
-| 409 | the schedule has a trip that is not `FINALIZADA` / `CANCELADA` |
+| 404 | route not found; schedule not in that route or inactive |
+| 409 | `PUT`/`DELETE`: the schedule has a trip dated today or later that is not `FINALIZADA` / `CANCELADA` |
+| 409 | `POST`/`PUT`: another active schedule of the route already runs on one of the weekdays (trip generation picks one schedule per route and weekday, whatever the direction) |
 
 ### Ride request (RF-10)
 
