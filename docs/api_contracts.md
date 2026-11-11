@@ -24,15 +24,19 @@ On `desativar`:
 - a passenger's active on-demand requests are cancelled with the RF-19 rules (the leg goes
   back to capacity, a trip left with no one is cancelled) and confirmations on future
   scheduled trips are withdrawn;
-- a driver with a future trip (`AGENDADA`, `SOLICITADA`, `BUFFER_ABERTO`) or any
-  availability window is refused with 409: the gestor reassigns them first.
+- a driver with a future trip (`AGENDADA`, `SOLICITADA`, `BUFFER_ABERTO`), any
+  availability window, or set as `motorista_padrao` of a route (the message lists the
+  routes) is refused with 409: the gestor reassigns them first.
+
+A disabled driver gets no new work: window creation, manual trip creation and the
+on-demand driver choice re-check that the driver is `ACTIVE` after locking the driver row.
 
 | Status | When |
 |---|---|
 | 400 | `id` is not a UUID; target is the gestor's own account |
 | 403 | caller is not a gestor; account from another organization (any role or status) |
 | 404 | user not found, not a passenger/driver, or deleted |
-| 409 | `desativar` on an account that is not `ACTIVE`, or on one in a trip `EM_ANDAMENTO`, or on a driver with future trips/windows; `reativar` on one that is not `DISABLED` |
+| 409 | `desativar` on an account that is not `ACTIVE`, or on one in a trip `EM_ANDAMENTO`, or on a driver with future trips/windows/default routes; `reativar` on one that is not `DISABLED` |
 
 ## On-demand trip lifecycle (RF-05, RF-10 to RF-19)
 
