@@ -254,35 +254,6 @@ def update_motorista(gestor_id: str, motorista_id: str, data: dict[str, Any]) ->
     return motorista
 
 
-def ativar_motorista(gestor_id: str, motorista_id: str) -> Motorista:
-    """Gestor approves a newly created driver of the same organizacao (RF-02, RF-06)."""
-    gestor = _get_gestor_or_403(gestor_id, "Apenas gestores podem ativar motoristas")
-
-    user = _get_user_or_404(motorista_id)
-    if user.role != UserRole.MOTORISTA:
-        raise NotFoundError("Motorista não encontrado")
-    if user.organizacao_id != gestor.organizacao_id:
-        raise ForbiddenError("Proibido ativar motoristas de outra organização")
-    motorista = cast(Motorista, user)
-
-    # Only approves a pending signup; reactivating a disabled account is a separate flow.
-    if motorista.status not in (UserStatus.PENDING_SIGNUP, UserStatus.PENDING_APPROVAL):
-        raise ConflictError("Somente motoristas com cadastro pendente podem ser ativados")
-
-    motorista.status = UserStatus.ACTIVE
-    if motorista.signup_completed_at is None:
-        motorista.signup_completed_at = datetime.now(UTC)
-    db.session.commit()
-    audit_logger.log_user_action(
-        action="ativar_motorista",
-        user_id=gestor_id,
-        resource_type="motorista",
-        resource_id=motorista_id,
-    )
-    _preencher_status_motoristas([motorista])
-    return motorista
-
-
 def change_password(user_id: str, data: dict[str, Any]) -> None:
     """Change user password (requires current password verification)."""
     user = _get_user_or_404(user_id)
@@ -515,6 +486,9 @@ def _mudar_status(
 ) -> User:
     """Gestor moves an account of its organization from one of `de` to `para`."""
     gestor = _get_gestor_or_403(gestor_id, "Apenas gestores podem alterar a situação de contas")
+    # shortcut: only these endpoints require an ACTIVE gestor; the shared lookup breaks
+    # dashboard callers, revisit when every gestor flow enforces it.
+    _require_active(gestor)
     user = _get_conta_gerenciavel(gestor, user_id, roles)
 
     try:
@@ -554,6 +528,21 @@ def _mudar_status(
     )
     _preencher_status_motoristas([user])
     return user
+
+
+def ativar_motorista(gestor_id: str, motorista_id: str) -> Motorista:
+    """Gestor approves a newly created driver of the same organizacao (RF-02, RF-06)."""
+    # Only approves a pending signup; reactivating a disabled account is reativar_conta.
+    user = _mudar_status(
+        gestor_id,
+        motorista_id,
+        de=(UserStatus.PENDING_SIGNUP, UserStatus.PENDING_APPROVAL),
+        para=UserStatus.ACTIVE,
+        msg_conflito="Somente motoristas com cadastro pendente podem ser ativados",
+        action="ativar_motorista",
+        roles=(UserRole.MOTORISTA,),
+    )
+    return cast(Motorista, user)
 
 
 def desativar_conta(gestor_id: str, user_id: str) -> User:
