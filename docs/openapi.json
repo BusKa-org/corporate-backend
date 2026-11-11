@@ -528,6 +528,51 @@
         ]
       }
     },
+    "/v1/dashboard/ausencias": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/AusenciasLista"
+            }
+          }
+        },
+        "summary": "(Manager) Lists students who missed a confirmed trip or dropped out of it",
+        "operationId": "listar_ausencias",
+        "parameters": [
+          {
+            "type": "integer",
+            "in": "query",
+            "description": "Itens por página (padrão 20, máximo 100)",
+            "name": "per_page"
+          },
+          {
+            "type": "integer",
+            "in": "query",
+            "description": "Página (padrão 1)",
+            "name": "page"
+          },
+          {
+            "required": true,
+            "in": "query",
+            "description": "Fim do período, inclusivo (YYYY-MM-DD)",
+            "name": "fim",
+            "type": "string"
+          },
+          {
+            "required": true,
+            "in": "query",
+            "description": "Início do período, inclusivo (YYYY-MM-DD)",
+            "name": "inicio",
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "dashboard"
+        ]
+      }
+    },
     "/v1/dashboard/indicadores": {
       "get": {
         "responses": {
@@ -2946,6 +2991,65 @@
     }
   ],
   "definitions": {
+    "Ausencia": {
+      "properties": {
+        "tipo": {
+          "type": "string",
+          "description": "AUSENCIA: confirmou e não embarcou; DESISTENCIA: cancelou após a partida",
+          "example": "AUSENCIA",
+          "enum": [
+            "AUSENCIA",
+            "DESISTENCIA"
+          ]
+        },
+        "aluno_id": {
+          "type": "string"
+        },
+        "aluno_nome": {
+          "type": "string"
+        },
+        "foto_url": {
+          "type": "string",
+          "description": "URL da foto do aluno; nulo sem foto"
+        },
+        "viagem_id": {
+          "type": "string"
+        },
+        "rota_nome": {
+          "type": "string"
+        },
+        "data": {
+          "type": "string",
+          "description": "Data da viagem (YYYY-MM-DD)"
+        },
+        "registrado_em": {
+          "type": "string",
+          "description": "Fim da viagem (ausência; sem fim registrado, a última atualização dela) ou hora do cancelamento (desistência), ISO"
+        }
+      },
+      "type": "object"
+    },
+    "AusenciasLista": {
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Ausencia"
+          }
+        },
+        "total": {
+          "type": "integer",
+          "description": "Total de registros no período"
+        },
+        "page": {
+          "type": "integer"
+        },
+        "per_page": {
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
     "LoginRequest": {
       "required": [
         "email",

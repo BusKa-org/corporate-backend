@@ -5,7 +5,8 @@ from datetime import date
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import Float, Select, and_, case, cast, func, select
+from flask import current_app
+from sqlalchemy import Float, Select, Time, and_, case, cast, func, literal, select, union_all
 from sqlalchemy.orm import aliased
 
 from app.core.exceptions import NotFoundError
@@ -14,6 +15,7 @@ from app.models.enum import StatusSolicitacao, StatusViagem
 from app.models.geo import Ponto
 from app.models.onibus import Onibus
 from app.models.rota import HorarioRota, Rota
+from app.models.user import Aluno
 from app.models.viagem import (
     AlunosConfirmados,
     SolicitacaoViagem,
@@ -494,3 +496,129 @@ def exportar_indicadores_csv(gestor_id: str, inicio: date, fim: date) -> str:
         escritor.writerows(linhas)
 
     return buffer.getvalue()
+
+
+def listar_ausencias(gestor_id: str, inicio: date, fim: date, page: int, per_page: int) -> dict:
+    """Students who missed a trip they were confirmed on, or dropped out after it left.
+
+    Derived, not stored: a no-show is an `alunos_confirmados` row still confirmed
+    but not boarded on a finished trip. A dropout is `alunos_confirmados.desistencia_em`
+    on a fixed trip, or a DESISTENCIA request (RF-19) on an on-demand one; both clear
+    `confirmacao`, so nobody is listed twice.
+    Unlike the RF-21 indicators this list names students, so it is manager only.
+
+    `registrado_em` never moves after the fact: the trip's end for a no-show and the
+    dropout time for a dropout (`desistencia_em`, or the request's `cancelada_em`, never
+    its `created_at`), falling back to the scheduled departure in local time
+    (the trip date at 00:00 for on-demand trips), which is never null.
+    """
+    gestor = _get_gestor_or_403(gestor_id, "Apenas gestores podem visualizar ausências")
+    organizacao_id = gestor.organizacao_id
+
+    partida_prevista = func.timezone(
+        current_app.config["TIMEZONE"],
+        Viagem.data + func.coalesce(HorarioRota.horario_saida, cast("00:00", Time)),
+    )
+
+    def ausencias_do_periodo(tipo: str, aluno_id, registrado_em) -> Select:
+        """Shared columns, route join and org/period filters of every UNION branch."""
+        return juntar_rota(
+            select(
+                literal(tipo).label("tipo"),
+                aluno_id.label("aluno_id"),
+                Viagem.id.label("viagem_id"),
+                Viagem.data.label("data"),
+                Rota.nome.label("rota_nome"),
+                func.coalesce(registrado_em, partida_prevista).label("registrado_em"),
+            ).select_from(Viagem)
+        ).where(
+            Rota.organizacao_id == organizacao_id,
+            Viagem.data >= inicio,
+            Viagem.data <= fim,
+            Viagem.status != StatusViagem.CANCELADA,
+        )
+
+    nao_embarcou = (
+        ausencias_do_periodo("AUSENCIA", AlunosConfirmados.aluno_id, Viagem.fim_real)
+        .join(AlunosConfirmados, AlunosConfirmados.viagem_id == Viagem.id)
+        .where(
+            Viagem.status == StatusViagem.FINALIZADA,
+            AlunosConfirmados.confirmacao.is_(True),
+            AlunosConfirmados.embarcou.is_(False),
+        )
+    )
+
+    desistiu_fixa = (
+        ausencias_do_periodo(
+            "DESISTENCIA", AlunosConfirmados.aluno_id, AlunosConfirmados.desistencia_em
+        )
+        .join(AlunosConfirmados, AlunosConfirmados.viagem_id == Viagem.id)
+        .where(
+            AlunosConfirmados.desistencia_em.is_not(None),
+            AlunosConfirmados.embarcou.is_(False),
+        )
+    )
+
+    # One row per (trip, student) even if old data holds several DESISTENCIA requests.
+    desistencias = (
+        select(
+            SolicitacaoViagem.viagem_id,
+            SolicitacaoViagem.aluno_id,
+            func.max(SolicitacaoViagem.cancelada_em).label("registrado_em"),
+        )
+        .where(SolicitacaoViagem.status == StatusSolicitacao.DESISTENCIA)
+        .group_by(SolicitacaoViagem.viagem_id, SolicitacaoViagem.aluno_id)
+        .subquery()
+    )
+    desistiu_sob_demanda = (
+        ausencias_do_periodo("DESISTENCIA", desistencias.c.aluno_id, desistencias.c.registrado_em)
+        .join(desistencias, desistencias.c.viagem_id == Viagem.id)
+        .outerjoin(
+            AlunosConfirmados,
+            and_(
+                AlunosConfirmados.viagem_id == Viagem.id,
+                AlunosConfirmados.aluno_id == desistencias.c.aluno_id,
+            ),
+        )
+        # Rows from before the cancel flow refused dropping out after boarding.
+        .where(AlunosConfirmados.embarcou.is_not(True))
+    )
+
+    ausencias = union_all(nao_embarcou, desistiu_fixa, desistiu_sob_demanda).subquery()
+
+    total = db.session.execute(
+        select(func.count())
+        .select_from(ausencias)
+        .join(Aluno, Aluno.usuario_id == ausencias.c.aluno_id)
+    ).scalar_one()
+
+    linhas = db.session.execute(
+        select(ausencias, Aluno.nome, Aluno.foto_url)
+        .join(Aluno, Aluno.usuario_id == ausencias.c.aluno_id)
+        .order_by(
+            ausencias.c.data.desc(),
+            Aluno.nome,
+            ausencias.c.viagem_id,
+            ausencias.c.aluno_id,
+            ausencias.c.tipo,
+        )
+        .limit(per_page)
+        .offset((page - 1) * per_page)
+    ).all()
+
+    items: list[dict] = []
+    for linha in linhas:
+        items.append(
+            {
+                "tipo": linha.tipo,
+                "aluno_id": str(linha.aluno_id),
+                "aluno_nome": linha.nome,
+                "foto_url": linha.foto_url,
+                "viagem_id": str(linha.viagem_id),
+                "rota_nome": linha.rota_nome,
+                "data": linha.data.isoformat(),
+                "registrado_em": linha.registrado_em.isoformat(),
+            }
+        )
+
+    return {"items": items, "total": total, "page": page, "per_page": per_page}

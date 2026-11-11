@@ -179,11 +179,33 @@ def confirmar_presenca_aluno(
         if not horario:
             raise NotFoundError("Horário da viagem não encontrado")
 
-        # Lock the student before reading the record: a double tap waits for the first and
-        # finds the record already created (200, same result) instead of hitting the PK (409).
+        # Trip before student, the system-wide lock order (travar_viagem, excluir_conta).
+        # FOR SHARE: confirmers of one trip run in parallel, but INICIAR's FOR UPDATE waits.
+        viagem = (
+            db.session.query(Viagem)
+            .filter(Viagem.id == viagem.id)
+            .with_for_update(read=True)
+            .populate_existing()
+            .one()
+        )
+        # A double tap waits for the first and finds the record already created (200,
+        # same result) instead of hitting the PK (409).
         db.session.execute(
             select(User.id).where(User.id == aluno.usuario_id).with_for_update(key_share=True)
         )
+
+        if viagem.status == StatusViagem.EM_ANDAMENTO and not confirmacao:
+            desistencia = _desistir_apos_partida(viagem, aluno)
+            if desistencia is not None:
+                return desistencia
+            # Never confirmed: falls through to the plain unconfirm, a 200 as before.
+        # Once the trip left, attendance is evidence (no-show/boarding) and only a dropout
+        # may still change it.
+        elif viagem.status != StatusViagem.AGENDADA:
+            raise ConflictError(
+                f"Não é possível alterar a presença em uma viagem com status {viagem.status.name}"
+            )
+
         registro = db.session.get(
             AlunosConfirmados, (viagem.id, aluno.usuario_id), populate_existing=True
         )
@@ -243,6 +265,44 @@ def confirmar_presenca_aluno(
             registro.ponto_destino_id = None
 
         return registro
+
+
+def notificar_desistencia_ao_motorista(viagem: Viagem, aluno: Aluno) -> None:
+    """Tells the driver a passenger dropped out of a trip in progress (fixed or on-demand)."""
+    if viagem.motorista_id:
+        NotificacaoService._criar_notificacao_interna(
+            usuario_id=viagem.motorista_id,
+            titulo="Desistência de passageiro",
+            mensagem=f"O passageiro {aluno.nome} desistiu da viagem em andamento.",
+        )
+
+
+def _desistir_apos_partida(viagem: Viagem, aluno: Aluno) -> AlunosConfirmados | None:
+    """Fixed trip dropout after departure: leaves the boarding list, the dashboard lists it.
+
+    Returns None when the student has no attendance row, so the caller keeps the old 200.
+    """
+    # Same row lock as boarding (embarque_service._travar_registro): either the boarding
+    # or the dropout wins, never both.
+    registro = (
+        db.session.query(AlunosConfirmados)
+        .filter_by(viagem_id=viagem.id, aluno_id=aluno.usuario_id)
+        .with_for_update()
+        .populate_existing()
+        .one_or_none()
+    )
+    if registro is None:
+        return None
+    if registro.embarcou:
+        raise ConflictError("Você já embarcou nesta viagem e não pode mais desistir dela")
+    # Already unconfirmed (or a repeated dropout): idempotent, keeps the first desistencia_em.
+    if not registro.confirmacao:
+        return registro
+
+    registro.confirmacao = False
+    registro.desistencia_em = _agora()
+    notificar_desistencia_ao_motorista(viagem, aluno)
+    return registro
 
 
 def listar_pontos_embarque(user_id: str, viagem_id: str) -> list[dict]:

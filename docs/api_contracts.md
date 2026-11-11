@@ -245,6 +245,7 @@ Returns 200 with the request (same shape as above).
 | 400 | trip `FINALIZADA` / `CANCELADA` |
 | 403 | not a student |
 | 404 | trip not found, or the student has no active request on it |
+| 409 | trip `EM_ANDAMENTO` and the student already boarded |
 
 ### Scheduler jobs
 
@@ -267,7 +268,16 @@ Only run in the scheduler process (`RUN_SCHEDULER`).
 - `POST /v1/rotas/<id>/pontos` and `DELETE /v1/rotas/<id>/pontos/<ponto_id>` return 400
   when `<id>` is not a UUID (it was not validated before), like the other route endpoints.
   On success it now returns 201 with the serialized trip (before, it returned the raw ORM object).
-- `PUT /v1/viagens/<id>/confirmacao` on an on-demand trip returns 400.
+- `PUT /v1/viagens/<id>/confirmacao` on an on-demand trip returns 400. Once a fixed trip is no
+  longer `AGENDADA` the attendance is kept as the trip's record, with one exception:
+  `{"confirmacao": false}` on an `EM_ANDAMENTO` trip is a dropout (200): it sets
+  `confirmacao = false` and `desistencia_em`, so the student leaves the boarding list,
+  approach notices and auto-checkin, and the driver gets the same "Desistência de passageiro"
+  notice as on-demand trips; resending it keeps the first `desistencia_em`. A student who was
+  not confirmed gets 200 with no change (no `desistencia_em`). It returns 409 if the student
+  already boarded. Everything else after
+  `AGENDADA` (`confirmacao: true` on `EM_ANDAMENTO`, any change on `FINALIZADA`/`CANCELADA`)
+  returns 409.
 - `PUT /v1/viagens/<id>/cancelar` returns 403 for a trip of another organization, and
   also cancels and notifies the active requests of the trip.
 - Trip listings, the student agenda and the dashboard include on-demand trips.
@@ -447,6 +457,30 @@ Devolve a imagem (`image/jpeg`, `image/png` ou `image/webp`).
   `AGENDADA` ou `EM_ANDAMENTO` em que o aluno confirmou presença, ou de uma rodada
   `BUFFER_ABERTO` em que o aluno já declarou trajeto. Os demais: 403.
 - `aluno_id` que não é UUID: 400. Aluno inexistente ou sem foto: 404.
+
+## Ausências e desistências
+
+### `GET /v1/dashboard/ausencias?inicio=YYYY-MM-DD&fim=YYYY-MM-DD&page=1&per_page=20`
+
+Gestor lista os alunos da sua organização que faltaram ou desistiram de uma viagem no
+período (datas inclusivas, pela data da viagem). Outro papel: 403.
+
+- `AUSENCIA`: aluno confirmado (`alunos_confirmados.confirmacao`) que não embarcou numa
+  viagem `FINALIZADA`.
+- `DESISTENCIA`: aluno que não embarcou e desistiu após a partida, em viagem não
+  `CANCELADA`. Viagem fixa: `alunos_confirmados.desistencia_em`. Viagem sob demanda:
+  solicitação `DESISTENCIA` (RF-19), uma linha por viagem e aluno mesmo com solicitações
+  repetidas (vale a mais recente). Cancelamento antes da partida devolve a vaga e não aparece.
+- `registrado_em` não muda depois: `AUSENCIA` usa o fim da viagem (`fim_real`);
+  `DESISTENCIA` usa a hora da desistência (`desistencia_em`, ou `cancelada_em` da
+  solicitação). Sem esses valores, cai na partida prevista em hora local
+  (`data` + `horario_saida`, ou `data` às 00:00 em viagem sob demanda), então nunca é nulo.
+- Calculado dos dados existentes, sem tabela nova. Ordem: data desc, nome do aluno, e
+  `viagem_id`/`aluno_id`/`tipo` para desempate estável entre páginas.
+- Resposta: `{items, total, page, per_page}`; cada item tem `tipo`, `aluno_id`,
+  `aluno_nome`, `foto_url`, `viagem_id`, `rota_nome`, `data`, `registrado_em`.
+  `page` >= 1, `per_page` de 1 a 100; fora disso, ou `inicio` > `fim`, ou sem as datas: 400.
+  Página além da última: `items` vazio e `total` real.
 
 ## Acessibilidade do aluno
 

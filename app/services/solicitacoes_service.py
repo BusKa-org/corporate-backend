@@ -202,21 +202,26 @@ def cancelar_na_viagem_travada(aluno: Aluno, viagem: Viagem) -> SolicitacaoViage
             f"Não é possível cancelar a solicitação de uma viagem com status {viagem.status.name}"
         )
 
-    solicitacao.cancelada_em = tempo.agora_utc()
-
     if viagem.status == StatusViagem.EM_ANDAMENTO:
+        # Locked like embarque_service._travar_registro so a boarding in flight cannot slip
+        # past this check. No deadlock: boarding locks credentials and this row, never the trip.
+        passageiro = (
+            db.session.query(AlunosConfirmados)
+            .filter_by(viagem_id=viagem.id, aluno_id=aluno.usuario_id)
+            .with_for_update()
+            .populate_existing()
+            .one_or_none()
+        )
+        if passageiro and passageiro.embarcou:
+            raise ConflictError("Você já embarcou nesta viagem e não pode mais desistir dela")
+
+        solicitacao.cancelada_em = tempo.agora_utc()
         # The seat is not reopened: the vehicle already left counting on the passenger.
         solicitacao.status = StatusSolicitacao.DESISTENCIA
         # Leaves the driver's boarding list (RF-16/RF-17).
-        passageiro = db.session.get(AlunosConfirmados, (viagem.id, aluno.usuario_id))
         if passageiro:
             passageiro.confirmacao = False
-        if viagem.motorista_id:
-            NotificacaoService._criar_notificacao_interna(
-                usuario_id=viagem.motorista_id,
-                titulo="Desistência de passageiro",
-                mensagem=f"O passageiro {aluno.nome} desistiu da viagem em andamento.",
-            )
+        viagens_service.notificar_desistencia_ao_motorista(viagem, aluno)
         return solicitacao
 
     if viagem.status not in (StatusViagem.SOLICITADA, StatusViagem.BUFFER_ABERTO):
@@ -224,6 +229,7 @@ def cancelar_na_viagem_travada(aluno: Aluno, viagem: Viagem) -> SolicitacaoViage
             f"Não é possível cancelar a solicitação de uma viagem com status {viagem.status.name}"
         )
 
+    solicitacao.cancelada_em = tempo.agora_utc()
     # The load vector only counts ATIVA requests: cancelling already gives the leg back (RF-14).
     solicitacao.status = StatusSolicitacao.CANCELADA
     db.session.flush()
