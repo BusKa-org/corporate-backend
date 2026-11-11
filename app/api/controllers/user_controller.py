@@ -194,13 +194,13 @@ class MotoristaAtivarResource(Resource):
     @api.doc(
         "ativar_motorista",
         responses={
-            200: "Ativado",
+            400: "ID inválido",
             403: "Forbidden",
             404: "Not found",
             409: "Cadastro não está pendente",
         },
     )
-    @api.response(200, "Success", models["user_response"])
+    @api.response(200, "Motorista ativado", models["user_response"])
     @jwt_required()
     def post(self, motorista_id: str) -> tuple[dict[str, Any], int]:
         """Manager activates a newly created driver"""

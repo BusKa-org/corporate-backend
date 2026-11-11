@@ -30,7 +30,7 @@ On `desativar`:
 | Status | When |
 |---|---|
 | 400 | `id` is not a UUID; target is the gestor's own account |
-| 403 | caller is not a gestor; account from another organization (any role or status) |
+| 403 | caller is not a gestor, or the gestor is not `ACTIVE`; account from another organization (any role or status) |
 | 404 | user not found, not a passenger/driver, or deleted |
 | 409 | `desativar` on an account that is not `ACTIVE`, or on one in a trip `EM_ANDAMENTO`, or on a driver with future trips/windows; `reativar` on one that is not `DISABLED` |
 
@@ -415,9 +415,10 @@ O motorista criado pelo gestor nasce `PENDING_SIGNUP`; esta rota o passa para `A
 
 | Status | When |
 |---|---|
-| 403 | não é gestor; motorista de outra organização |
-| 404 | motorista não encontrado |
-| 409 | cadastro não está pendente (já `ACTIVE`, ou `DISABLED`/`DELETED`) |
+| 400 | `motorista_id` não é um UUID |
+| 403 | não é gestor ou o gestor não está `ACTIVE`; conta de outra organização (qualquer papel ou status) |
+| 404 | não encontrado, não é motorista, ou motorista `DELETED` |
+| 409 | cadastro não está pendente (já `ACTIVE`, ou `DISABLED`) |
 
 ## Rate limit
 
