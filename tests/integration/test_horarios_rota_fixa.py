@@ -1,10 +1,11 @@
 """RF-05: gestor updates and removes a fixed route's schedule."""
 
+import uuid
 from datetime import date, time
 
 import pytest
 
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import ConflictError, NotFoundError, ValidationError
 from app.models.enum import DiaDaSemana, SentidoViagem, StatusViagem
 from app.models.rota import DiasOperacao, HorarioRota
 from app.models.viagem import Viagem
@@ -141,19 +142,139 @@ def test_dias_repetidos_gravados_uma_vez(gestor, rota):
     assert r.get_json()["dias"] == ["TER"]
 
 
-def test_dois_horarios_ativos_no_mesmo_dia_conflitam(_db, gestor, rota):
-    seg = _horario(_db, rota, [DiaDaSemana.SEG])
-    ter = _horario(_db, rota, [DiaDaSemana.TER])
-
-    # Trip generation matches by weekday only, so even another direction conflicts.
+def test_ida_e_volta_no_mesmo_dia_sao_permitidas(_db, gestor, rota):
+    _horario(_db, rota, [DiaDaSemana.SEG, DiaDaSemana.TER])
     r = gestor.client.post(
         f"/v1/rotas/{rota.id}/horarios",
-        json={"horario_saida": "18:00", "sentido": "VOLTA", "dias": ["SEG"]},
+        json={"horario_saida": "17:00", "sentido": "VOLTA", "dias": ["SEG", "TER"]},
+    )
+    assert r.status_code == 201, r.get_data(as_text=True)
+
+
+def test_horario_identico_conflita(_db, gestor, rota):
+    _horario(_db, rota, [DiaDaSemana.SEG])
+    outro = _horario(_db, rota, [DiaDaSemana.TER], saida=time(7, 0))
+
+    r = gestor.client.post(
+        f"/v1/rotas/{rota.id}/horarios",
+        json={"horario_saida": "06:00", "sentido": "IDA", "dias": ["SEG", "QUA"]},
     )
     assert r.status_code == 409
-    assert gestor.client.put(_url(ter), json={**NOVO, "dias": ["SEG"]}).status_code == 409
-    # Re-saving a schedule on its own days is not a conflict.
-    assert gestor.client.put(_url(seg), json={**NOVO, "dias": ["SEG"]}).status_code == 200
+    duplicado = {"horario_saida": "06:00", "sentido": "IDA", "dias": ["SEG"]}
+    assert gestor.client.put(_url(outro), json=duplicado).status_code == 409
+    # Same time, other direction, is a different schedule.
+    assert gestor.client.put(_url(outro), json={**duplicado, "sentido": "VOLTA"}).status_code == 200
+
+
+def test_resalvar_horario_nos_proprios_dias_nao_conflita(_db, gestor, rota):
+    seg = _horario(_db, rota, [DiaDaSemana.SEG])
+    r = gestor.client.put(
+        _url(seg), json={"horario_saida": "06:00", "sentido": "IDA", "dias": ["SEG", "TER"]}
+    )
+    assert r.status_code == 200, r.get_data(as_text=True)
+
+
+def _criar_rota(gestor, horarios):
+    return gestor.client.post("/v1/rotas/", json={"nome": "Circuito", "horarios": horarios})
+
+
+def test_criar_rota_aplica_as_regras_de_horario(gestor):
+    r = _criar_rota(
+        gestor,
+        [
+            {"horario_saida": "06:00", "sentido": "IDA", "dias": ["SEG", "SEG"]},
+            {"horario_saida": "17:00", "sentido": "VOLTA", "dias": ["SEG"]},
+        ],
+    )
+    assert r.status_code == 201, r.get_data(as_text=True)
+    horarios = gestor.client.get(f"/v1/rotas/{r.get_json()['id']}/horarios").get_json()["items"]
+    assert len(horarios) == 2
+    for h in horarios:
+        assert h["dias"] == ["SEG"]
+
+    duplicados = [
+        {"horario_saida": "06:00", "sentido": "IDA", "dias": ["SEG"]},
+        {"horario_saida": "06:00", "sentido": "IDA", "dias": ["SEG", "TER"]},
+    ]
+    assert _criar_rota(gestor, duplicados).status_code == 409
+    invalido = [{"horario_saida": "06:00", "sentido": "IDA", "dias": ["XYZ"]}]
+    assert _criar_rota(gestor, invalido).status_code == 400
+
+
+def _gerar(gestor, rota, data=FUTURO, horario=None):
+    entrada = {"rota_id": rota.id, "data": data}
+    if horario is not None:
+        entrada["horario_rota_id"] = horario.id
+    return viagens_service.gerar_viagem(str(gestor.user.id), entrada)
+
+
+def test_gerar_viagem_com_varios_horarios_no_dia_exige_horario(_db, gestor, rota):
+    ida = _horario(_db, rota, [DiaDaSemana.SEG])
+    volta = _horario(_db, rota, [DiaDaSemana.SEG], saida=time(17, 0), sentido=SentidoViagem.VOLTA)
+
+    r = gestor.client.post("/v1/viagens/", json={"rota_id": str(rota.id), "data": str(FUTURO)})
+    assert r.status_code == 400
+    opcoes = r.get_json()["error"]["details"]["horarios"]
+    assert [o["id"] for o in opcoes] == [str(ida.id), str(volta.id)]
+
+    r = gestor.client.post(
+        "/v1/viagens/",
+        json={"rota_id": str(rota.id), "data": str(FUTURO), "horario_rota_id": str(volta.id)},
+    )
+    assert r.status_code == 201, r.get_data(as_text=True)
+    assert r.get_json()["tipo"] == "VOLTA"
+    assert _gerar(gestor, rota, horario=ida).horario_rota_id == ida.id
+
+
+def test_gerar_viagem_valida_o_horario_informado(_db, gestor, rota, organizacao):
+    ter = _horario(_db, rota, [DiaDaSemana.TER])
+    with pytest.raises(ValidationError):
+        _gerar(gestor, rota, horario=ter)
+
+    outra = RotaFactory(
+        organizacao_id=organizacao.id, motorista_padrao_id=None, veiculo_padrao_id=None
+    )
+    _db.session.add(outra)
+    _db.session.commit()
+    alheio = _horario(_db, outra, [DiaDaSemana.SEG])
+    with pytest.raises(NotFoundError):
+        _gerar(gestor, rota, horario=alheio)
+
+
+def test_gerar_viagem_com_horario_versionado_usa_a_versao_ativa(_db, gestor, rota, relogio):
+    antigo = _horario(_db, rota, [DiaDaSemana.TER])
+    _viagem(_db, antigo, StatusViagem.FINALIZADA)
+    r = gestor.client.put(
+        _url(antigo), json={"horario_saida": "06:00", "sentido": "IDA", "dias": ["SEG"]}
+    )
+    novo_id = r.get_json()["id"]
+
+    assert str(_gerar(gestor, rota, horario=antigo).horario_rota_id) == novo_id
+
+
+def test_viagem_repetida_apos_versionar_horario_conflita(_db, gestor, rota, relogio):
+    antigo = _horario(_db, rota, [DiaDaSemana.SEG])
+    _viagem(_db, antigo, StatusViagem.FINALIZADA, data=FUTURO)
+    r = gestor.client.put(
+        _url(antigo), json={"horario_saida": "06:00", "sentido": "IDA", "dias": ["SEG", "TER"]}
+    )
+    assert r.get_json()["id"] != str(antigo.id)
+
+    with pytest.raises(ConflictError):
+        _gerar(gestor, rota)
+
+
+def test_viagem_em_andamento_de_data_passada_bloqueia(gestor, _db, horario_rota, relogio):
+    _viagem(_db, horario_rota, StatusViagem.EM_ANDAMENTO, data=PASSADO)
+    assert gestor.client.put(_url(horario_rota), json=NOVO).status_code == 409
+    assert gestor.client.delete(_url(horario_rota)).status_code == 409
+
+
+def test_pontos_com_rota_id_invalido(gestor):
+    r = gestor.client.post("/v1/rotas/nao-e-uuid/pontos", json={"pontos": []})
+    assert r.status_code == 400
+    r = gestor.client.delete(f"/v1/rotas/nao-e-uuid/pontos/{uuid.uuid4()}")
+    assert r.status_code == 400
 
 
 def test_rota_sob_demanda_nao_tem_horario(gestor, horario_rota, rota_sob_demanda):

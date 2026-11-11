@@ -4,7 +4,7 @@ import logging
 from typing import Any
 
 from flask import current_app
-from sqlalchemy import or_
+from sqlalchemy import and_, or_, select
 
 from app.core.exceptions import (
     AppError,
@@ -212,26 +212,20 @@ def create_rota(gestor_id: str, data: dict[str, Any]) -> Rota:
                     rota_ponto = RotaPonto(rota_id=rota.id, ponto_id=novo_ponto.id, ordem=ordem)
                     db.session.add(rota_ponto)
 
-        if "horarios" in data:
-            for h_data in data["horarios"]:
-                novo_horario = HorarioRota(
-                    rota_id=rota.id,
-                    horario_saida=h_data["horario_saida"],
-                    sentido=h_data["sentido"],
-                )
-                db.session.add(novo_horario)
-                db.session.flush()
-
-                dias_list = h_data.get("dias", [])
-                for dia_str in dias_list:
-                    if dia_str in ["SEG", "TER", "QUA", "QUI", "SEX", "SAB", "DOM"]:
-                        novo_dia = DiasOperacao(horario_rota_id=novo_horario.id, dia=dia_str)
-                        db.session.add(novo_dia)
+        # No travar_rota here: the new route is invisible to other transactions until commit.
+        for h_data in data.get("horarios", []):
+            _garantir_horario_nao_duplicado(
+                rota.id, h_data["horario_saida"], h_data["sentido"], h_data["dias"]
+            )
+            _criar_horario(rota.id, h_data)
 
         db.session.commit()
 
         return rota
 
+    except AppError:
+        db.session.rollback()
+        raise
     except Exception as e:
         db.session.rollback()
         logger.error(f"Error creating route: {e}")
@@ -342,19 +336,30 @@ def _get_rota_fixa_do_gestor(gestor_id: str, rota_id: str) -> Rota:
     return rota
 
 
-def _garantir_sem_sobreposicao(
-    rota_id: Any, dias: list[str], ignorar_horario_id: Any = None
-) -> None:
-    """Trip generation picks the first active schedule by route and weekday only
-    (not direction), so a second one on the same weekday would never be used.
+def travar_rota(rota_id: Any) -> None:
+    """Lock order for schedule edits and trip generation: this Rota row first, held
+    until commit. NO KEY UPDATE, so inserts referencing the route are not blocked.
     """
+    db.session.execute(select(Rota.id).where(Rota.id == rota_id).with_for_update(key_share=True))
+
+
+def _garantir_horario_nao_duplicado(
+    rota_id: Any, horario_saida: Any, sentido: str, dias: list[str], ignorar_horario_id: Any = None
+) -> None:
+    """Rejects an active schedule with the same direction and time on any of the weekdays."""
+    dias_enum: list[DiaDaSemana] = []
+    for dia_str in dias:
+        dias_enum.append(DiaDaSemana(dia_str))
+
     query = (
         db.session.query(DiasOperacao.dia)
         .join(HorarioRota, DiasOperacao.horario_rota_id == HorarioRota.id)
         .filter(
             HorarioRota.rota_id == rota_id,
             HorarioRota.ativo.is_(True),
-            DiasOperacao.dia.in_([DiaDaSemana(d) for d in dias]),
+            HorarioRota.sentido == SentidoViagem(sentido),
+            HorarioRota.horario_saida == horario_saida,
+            DiasOperacao.dia.in_(dias_enum),
         )
     )
     if ignorar_horario_id is not None:
@@ -362,7 +367,15 @@ def _garantir_sem_sobreposicao(
 
     conflito = query.first()
     if conflito:
-        raise ConflictError(f"Já existe um horário nesta rota em {conflito[0].value}")
+        raise ConflictError(
+            f"Já existe um horário {sentido} às {horario_saida.strftime('%H:%M')} "
+            f"nesta rota em {conflito[0].value}"
+        )
+
+
+def _preencher_dias(horario: HorarioRota, dias: list[str]) -> None:
+    for dia_str in dias:
+        horario.dias.append(DiasOperacao(dia=DiaDaSemana(dia_str)))
 
 
 def _criar_horario(rota_id: Any, data: dict[str, Any]) -> HorarioRota:
@@ -371,8 +384,7 @@ def _criar_horario(rota_id: Any, data: dict[str, Any]) -> HorarioRota:
         horario_saida=data.get("horario_saida"),
         sentido=SentidoViagem(data.get("sentido")),
     )
-    for dia_str in data["dias"]:
-        novo_horario.dias.append(DiasOperacao(dia=DiaDaSemana(dia_str)))
+    _preencher_dias(novo_horario, data["dias"])
     db.session.add(novo_horario)
     return novo_horario
 
@@ -389,7 +401,8 @@ def add_horario(gestor_id: str, rota_id: str, data: dict[str, Any]) -> HorarioRo
     if not dias_list:
         raise ValidationError("Selecione pelo menos um dia da semana")
 
-    _garantir_sem_sobreposicao(rota.id, dias_list)
+    travar_rota(rota.id)
+    _garantir_horario_nao_duplicado(rota.id, data["horario_saida"], data["sentido"], dias_list)
 
     try:
         novo_horario = _criar_horario(rota.id, data)
@@ -403,13 +416,14 @@ def add_horario(gestor_id: str, rota_id: str, data: dict[str, Any]) -> HorarioRo
 
 
 def _get_horario_do_gestor(gestor_id: str, rota_id: str, horario_id: str) -> HorarioRota:
-    """Active schedule of the route, locked until commit so a trip cannot be
-    generated for it between the pending-trip check and the write.
+    """Active schedule of the route. Locks the route first, so no trip is generated
+    for it between the pending-trip check and the write.
 
     Raises: ValidationError, ForbiddenError, NotFoundError
     """
     validate_uuid(horario_id, "Horário ID")
     rota = _get_rota_fixa_do_gestor(gestor_id, rota_id)
+    travar_rota(rota.id)
 
     horario = (
         db.session.query(HorarioRota)
@@ -418,7 +432,6 @@ def _get_horario_do_gestor(gestor_id: str, rota_id: str, horario_id: str) -> Hor
             HorarioRota.rota_id == rota.id,
             HorarioRota.ativo.is_(True),
         )
-        .with_for_update()
         .first()
     )
     if not horario:
@@ -427,16 +440,18 @@ def _get_horario_do_gestor(gestor_id: str, rota_id: str, horario_id: str) -> Hor
 
 
 def _garantir_horario_sem_viagem_pendente(horario: HorarioRota, acao: str) -> None:
-    """Pending trips would move with the schedule; past ones never leave
-    AGENDADA on their own, so they must not block it forever.
+    """Pending trips would move with the schedule. Past AGENDADA trips never leave
+    that status on their own, so only upcoming ones block; EM_ANDAMENTO always does.
     """
     hoje = tempo.agora_local().date()
     pendente = (
         db.session.query(Viagem.id)
         .filter(
             Viagem.horario_rota_id == horario.id,
-            Viagem.status.notin_((StatusViagem.FINALIZADA, StatusViagem.CANCELADA)),
-            Viagem.data >= hoje,
+            or_(
+                Viagem.status == StatusViagem.EM_ANDAMENTO,
+                and_(Viagem.status == StatusViagem.AGENDADA, Viagem.data >= hoje),
+            ),
         )
         .first()
     )
@@ -470,7 +485,9 @@ def update_horario(
         raise ValidationError("Selecione pelo menos um dia da semana")
 
     _garantir_horario_sem_viagem_pendente(horario, "alterá-lo")
-    _garantir_sem_sobreposicao(horario.rota_id, dias_list, horario.id)
+    _garantir_horario_nao_duplicado(
+        horario.rota_id, data["horario_saida"], data["sentido"], dias_list, horario.id
+    )
 
     try:
         if _horario_tem_viagens(horario):
@@ -481,8 +498,7 @@ def update_horario(
             horario.sentido = SentidoViagem(data.get("sentido"))
             horario.dias.clear()
             db.session.flush()
-            for dia_str in dias_list:
-                horario.dias.append(DiasOperacao(dia=DiaDaSemana(dia_str)))
+            _preencher_dias(horario, dias_list)
         db.session.commit()
     except Exception as e:
         db.session.rollback()

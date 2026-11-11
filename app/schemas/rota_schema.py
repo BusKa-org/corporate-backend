@@ -4,7 +4,7 @@ from marshmallow import fields, validate
 from app.models.enum import TipoViagem
 from app.schemas.common import BaseSchema
 
-from .horario_schema import HorarioResponseSchema
+from .horario_schema import HorarioCreateRequestSchema, HorarioResponseSchema
 from .ponto_schema import PontoFlatResponseSchema
 
 # ==========================================
@@ -25,12 +25,8 @@ class RotaPontosAddRequestSchema(BaseSchema):
     pontos = fields.List(fields.Nested(RotaPontoAddRequestSchema), required=True)
 
 
-class RotaHorarioCreateRequestSchema(BaseSchema):
-    """Schema for route schedule input."""
-
-    horario_saida = fields.String(required=True)
-    sentido = fields.String(required=True, validate=validate.OneOf(["IDA", "VOLTA", "CIRCULAR"]))
-    dias = fields.List(fields.String(), required=True)
+class RotaHorarioCreateRequestSchema(HorarioCreateRequestSchema):
+    """Schema for route schedule input: same rules as POST /rotas/<id>/horarios."""
 
 
 def validar_buffer_minutos(valor: int) -> None:

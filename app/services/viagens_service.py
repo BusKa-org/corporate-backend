@@ -38,6 +38,7 @@ from app.models.viagem import (
     ViagemPonto,
 )
 from app.services.notificacao_service import NotificacaoService
+from app.services.rotas_service import travar_rota
 from app.tasks.viagem_tasks import realizar_auto_checkin
 from app.utils import audit_logger, tempo
 from app.utils.geo_utils import calcular_distancia_metros
@@ -275,6 +276,63 @@ def listar_pontos_embarque(user_id: str, viagem_id: str) -> list[dict]:
     return resultado
 
 
+def _resolver_horario(rota: Rota, dia: DiaDaSemana, horario_rota_id: Any) -> HorarioRota:
+    """Active schedule of the route for the weekday: the one asked for, or the only one.
+
+    Raises: NotFoundError, ValidationError
+    """
+    ativos_no_dia = (
+        db.session.query(HorarioRota)
+        .join(DiasOperacao)
+        .filter(
+            HorarioRota.rota_id == rota.id,
+            HorarioRota.ativo.is_(True),
+            DiasOperacao.dia == dia,
+        )
+        .order_by(HorarioRota.horario_saida)
+    )
+
+    if horario_rota_id is None:
+        candidatos = ativos_no_dia.all()
+        if not candidatos:
+            raise NotFoundError(f"Horário não encontrado para a rota {rota.nome} em {dia.value}")
+        if len(candidatos) > 1:
+            opcoes = []
+            for h in candidatos:
+                opcoes.append(
+                    {
+                        "id": str(h.id),
+                        "sentido": h.sentido.value,
+                        "horario_saida": h.horario_saida.strftime("%H:%M"),
+                    }
+                )
+            raise ValidationError(
+                f"A rota tem {len(candidatos)} horários em {dia.value}; informe horario_rota_id",
+                details={"horarios": opcoes},
+            )
+        return candidatos[0]
+
+    horario = db.session.get(HorarioRota, horario_rota_id)
+    if not horario or horario.rota_id != rota.id:
+        raise NotFoundError("Horário não encontrado nesta rota")
+
+    if not horario.ativo:
+        # A PUT may have versioned it after the client read it: take the active
+        # version with the same time and direction.
+        substituto = ativos_no_dia.filter(
+            HorarioRota.sentido == horario.sentido,
+            HorarioRota.horario_saida == horario.horario_saida,
+        ).first()
+        if not substituto:
+            raise NotFoundError("Horário não está mais ativo nesta rota")
+        return substituto
+
+    for dia_operacao in horario.dias:
+        if dia_operacao.dia == dia:
+            return horario
+    raise ValidationError(f"O horário informado não opera em {dia.value}")
+
+
 def gerar_viagem(user_id: str, data_input: dict) -> Viagem:
     """Generate ONE trip for ONE specific route (manual mode).
 
@@ -306,25 +364,21 @@ def gerar_viagem(user_id: str, data_input: dict) -> Viagem:
 
     dia_semana = _get_dia_semana_enum(data_viagem)
 
-    # FOR SHARE waits for an in-flight schedule edit (FOR UPDATE in rotas_service),
-    # then re-checks ativo, so a trip never lands on a just-retired schedule.
-    horario_selecionado = (
-        db.session.query(HorarioRota)
-        .join(DiasOperacao)
-        .filter(
-            HorarioRota.rota_id == rota.id,
-            HorarioRota.ativo.is_(True),
-            DiasOperacao.dia == dia_semana,
-        )
-        .with_for_update(read=True, of=HorarioRota)
-        .first()
-    )
-    if not horario_selecionado:
-        raise NotFoundError(f"Horário não encontrado para a rota {rota.nome} no dia {dia_semana}")
+    # Same lock as the schedule edits in rotas_service: two generators, or a generator
+    # and an edit, run one after the other, and every read below sees the committed state.
+    travar_rota(rota.id)
+    horario_selecionado = _resolver_horario(rota, dia_semana, data_input.get("horario_rota_id"))
 
+    # By time and direction, not horario_rota_id: a versioned schedule gets a new id.
     existente = (
         db.session.query(Viagem.id)
-        .filter_by(data=data_viagem, horario_rota_id=horario_selecionado.id)
+        .join(HorarioRota, Viagem.horario_rota_id == HorarioRota.id)
+        .filter(
+            HorarioRota.rota_id == rota.id,
+            HorarioRota.sentido == horario_selecionado.sentido,
+            HorarioRota.horario_saida == horario_selecionado.horario_saida,
+            Viagem.data == data_viagem,
+        )
         .first()
     )
     if existente:
