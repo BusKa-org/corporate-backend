@@ -228,6 +228,25 @@
       }
     },
     "/v1/consentimento": {
+      "delete": {
+        "responses": {
+          "200": {
+            "description": "Consentimento revogado",
+            "schema": {
+              "$ref": "#/definitions/ConsentimentoEstadoResponse"
+            }
+          },
+          "409": {
+            "description": "Não há consentimento vigente"
+          }
+        },
+        "summary": "Revokes consent",
+        "description": "The user goes back to the pending state.",
+        "operationId": "revogar_consentimento",
+        "tags": [
+          "consentimento"
+        ]
+      },
       "get": {
         "responses": {
           "200": {
@@ -268,25 +287,6 @@
             }
           }
         ],
-        "tags": [
-          "consentimento"
-        ]
-      },
-      "delete": {
-        "responses": {
-          "200": {
-            "description": "Consentimento revogado",
-            "schema": {
-              "$ref": "#/definitions/ConsentimentoEstadoResponse"
-            }
-          },
-          "409": {
-            "description": "Não há consentimento vigente"
-          }
-        },
-        "summary": "Revokes consent",
-        "description": "The user goes back to the pending state.",
-        "operationId": "revogar_consentimento",
         "tags": [
           "consentimento"
         ]
@@ -525,6 +525,51 @@
         "operationId": "reenviar_convite",
         "tags": [
           "convites"
+        ]
+      }
+    },
+    "/v1/dashboard/ausencias": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/AusenciasLista"
+            }
+          }
+        },
+        "summary": "(Manager) Lists students who missed a confirmed trip or dropped out of it",
+        "operationId": "listar_ausencias",
+        "parameters": [
+          {
+            "in": "query",
+            "description": "Itens por página (padrão 20, máximo 100)",
+            "name": "per_page",
+            "type": "string"
+          },
+          {
+            "in": "query",
+            "description": "Página (padrão 1)",
+            "name": "page",
+            "type": "string"
+          },
+          {
+            "required": true,
+            "in": "query",
+            "description": "Fim do período, inclusivo (YYYY-MM-DD)",
+            "name": "fim",
+            "type": "string"
+          },
+          {
+            "required": true,
+            "in": "query",
+            "description": "Início do período, inclusivo (YYYY-MM-DD)",
+            "name": "inicio",
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "dashboard"
         ]
       }
     },
@@ -1073,6 +1118,17 @@
           "type": "string"
         }
       ],
+      "delete": {
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "operationId": "delete_instituicao",
+        "tags": [
+          "instituicoes"
+        ]
+      },
       "get": {
         "responses": {
           "200": {
@@ -1083,17 +1139,6 @@
           }
         },
         "operationId": "get_instituicao",
-        "tags": [
-          "instituicoes"
-        ]
-      },
-      "delete": {
-        "responses": {
-          "200": {
-            "description": "Success"
-          }
-        },
-        "operationId": "delete_instituicao",
         "tags": [
           "instituicoes"
         ]
@@ -1292,6 +1337,18 @@
           "type": "string"
         }
       ],
+      "delete": {
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "Removes a bus",
+        "operationId": "delete_onibus",
+        "tags": [
+          "onibus"
+        ]
+      },
       "get": {
         "responses": {
           "200": {
@@ -1303,18 +1360,6 @@
         },
         "summary": "Bus details",
         "operationId": "get_onibus",
-        "tags": [
-          "onibus"
-        ]
-      },
-      "delete": {
-        "responses": {
-          "200": {
-            "description": "Success"
-          }
-        },
-        "summary": "Removes a bus",
-        "operationId": "delete_onibus",
         "tags": [
           "onibus"
         ]
@@ -1472,6 +1517,17 @@
           "type": "string"
         }
       ],
+      "delete": {
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "operationId": "delete_ponto",
+        "tags": [
+          "pontos"
+        ]
+      },
       "get": {
         "responses": {
           "200": {
@@ -1482,17 +1538,6 @@
           }
         },
         "operationId": "get_ponto",
-        "tags": [
-          "pontos"
-        ]
-      },
-      "delete": {
-        "responses": {
-          "200": {
-            "description": "Success"
-          }
-        },
-        "operationId": "delete_ponto",
         "tags": [
           "pontos"
         ]
@@ -1587,6 +1632,17 @@
           "type": "string"
         }
       ],
+      "delete": {
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "operationId": "delete_rota",
+        "tags": [
+          "rotas"
+        ]
+      },
       "get": {
         "responses": {
           "200": {
@@ -1597,17 +1653,6 @@
           }
         },
         "operationId": "get_rota",
-        "tags": [
-          "rotas"
-        ]
-      },
-      "delete": {
-        "responses": {
-          "200": {
-            "description": "Success"
-          }
-        },
-        "operationId": "delete_rota",
         "tags": [
           "rotas"
         ]
@@ -2057,24 +2102,6 @@
       }
     },
     "/v1/users/me": {
-      "get": {
-        "responses": {
-          "200": {
-            "description": "Success",
-            "schema": {
-              "$ref": "#/definitions/UserMeResponse"
-            }
-          },
-          "404": {
-            "description": "User not found"
-          }
-        },
-        "summary": "Logged-in user's profile",
-        "operationId": "get_my_profile",
-        "tags": [
-          "users"
-        ]
-      },
       "delete": {
         "responses": {
           "200": {
@@ -2103,6 +2130,24 @@
             }
           }
         ],
+        "tags": [
+          "users"
+        ]
+      },
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/UserMeResponse"
+            }
+          },
+          "404": {
+            "description": "User not found"
+          }
+        },
+        "summary": "Logged-in user's profile",
+        "operationId": "get_my_profile",
         "tags": [
           "users"
         ]
@@ -5520,6 +5565,65 @@
         "timestamp": {
           "type": "string",
           "description": "Horário exato do registro (ISO)"
+        }
+      },
+      "type": "object"
+    },
+    "AusenciasLista": {
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Ausencia"
+          }
+        },
+        "total": {
+          "type": "integer",
+          "description": "Total de registros no período"
+        },
+        "page": {
+          "type": "integer"
+        },
+        "per_page": {
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "Ausencia": {
+      "properties": {
+        "tipo": {
+          "type": "string",
+          "description": "AUSENCIA: confirmou e não embarcou; DESISTENCIA: cancelou após a partida",
+          "example": "AUSENCIA",
+          "enum": [
+            "AUSENCIA",
+            "DESISTENCIA"
+          ]
+        },
+        "aluno_id": {
+          "type": "string"
+        },
+        "aluno_nome": {
+          "type": "string"
+        },
+        "foto_url": {
+          "type": "string",
+          "description": "URL da foto do aluno; nulo sem foto"
+        },
+        "viagem_id": {
+          "type": "string"
+        },
+        "rota_nome": {
+          "type": "string"
+        },
+        "data": {
+          "type": "string",
+          "description": "Data da viagem (YYYY-MM-DD)"
+        },
+        "registrado_em": {
+          "type": "string",
+          "description": "Fim da viagem (ausência) ou hora do cancelamento (desistência), ISO"
         }
       },
       "type": "object"

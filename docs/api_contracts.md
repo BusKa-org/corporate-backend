@@ -347,6 +347,22 @@ Devolve a imagem (`image/jpeg`, `image/png` ou `image/webp`).
   `BUFFER_ABERTO` em que o aluno já declarou trajeto. Os demais: 403.
 - `aluno_id` que não é UUID: 400. Aluno inexistente ou sem foto: 404.
 
+## Ausências e desistências
+
+### `GET /v1/dashboard/ausencias?inicio=YYYY-MM-DD&fim=YYYY-MM-DD&page=1&per_page=20`
+
+Gestor lista os alunos da sua organização que faltaram ou desistiram de uma viagem no
+período (datas inclusivas, pela data da viagem). Outro papel: 403.
+
+- `AUSENCIA`: aluno confirmado (`alunos_confirmados.confirmacao`) que não embarcou numa
+  viagem `FINALIZADA`. `registrado_em` = fim da viagem.
+- `DESISTENCIA`: solicitação cancelada após a partida (RF-19). `registrado_em` = hora do
+  cancelamento. Cancelamento antes da partida devolve a vaga e não aparece.
+- Calculado dos dados existentes, sem tabela nova. Ordem: data desc, nome do aluno.
+- Resposta: `{items, total, page, per_page}`; cada item tem `tipo`, `aluno_id`,
+  `aluno_nome`, `foto_url`, `viagem_id`, `rota_nome`, `data`, `registrado_em`.
+  `per_page` vai até 100.
+
 ## Acessibilidade do aluno
 
 `necessidades_acessibilidade` (lista de `CADEIRA_DE_RODAS`, `MOBILIDADE_REDUZIDA`,

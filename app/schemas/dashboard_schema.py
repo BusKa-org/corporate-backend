@@ -6,6 +6,7 @@ second copy of the Swagger contract.
 """
 
 from marshmallow import ValidationError, fields, validates_schema
+from marshmallow.validate import Range
 
 from app.schemas.common import BaseSchema
 
@@ -22,3 +23,8 @@ class PeriodoRelatorioQuerySchema(BaseSchema):
     def valida_intervalo(self, data, **kwargs):
         if data.get("inicio") and data.get("fim") and data["inicio"] > data["fim"]:
             raise ValidationError("A data inicial não pode ser posterior à final", "inicio")
+
+
+class AusenciasQuerySchema(PeriodoRelatorioQuerySchema):
+    page = fields.Integer(required=False, load_default=1, validate=Range(min=1))
+    per_page = fields.Integer(required=False, load_default=20, validate=Range(min=1, max=100))

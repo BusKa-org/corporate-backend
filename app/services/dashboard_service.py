@@ -5,7 +5,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import Float, Select, and_, case, cast, func, select
+from sqlalchemy import Float, Select, and_, case, cast, func, literal, select, union_all
 from sqlalchemy.orm import aliased
 
 from app.core.exceptions import NotFoundError
@@ -14,6 +14,7 @@ from app.models.enum import StatusSolicitacao, StatusViagem
 from app.models.geo import Ponto
 from app.models.onibus import Onibus
 from app.models.rota import HorarioRota, Rota
+from app.models.user import Aluno
 from app.models.viagem import (
     AlunosConfirmados,
     SolicitacaoViagem,
@@ -494,3 +495,81 @@ def exportar_indicadores_csv(gestor_id: str, inicio: date, fim: date) -> str:
         escritor.writerows(linhas)
 
     return buffer.getvalue()
+
+
+def listar_ausencias(gestor_id: str, inicio: date, fim: date, page: int, per_page: int) -> dict:
+    """Students who missed a trip they were confirmed on, or dropped out after it left.
+
+    Derived, not stored: a no-show is an `alunos_confirmados` row still confirmed
+    but not boarded on a finished trip; a dropout is a DESISTENCIA request (RF-19),
+    whose cancellation already clears `confirmacao`, so nobody is listed twice.
+    Unlike the RF-21 indicators this list names students, so it is manager only.
+    """
+    gestor = _get_gestor_or_403(gestor_id, "Apenas gestores podem visualizar ausências")
+    organizacao_id = gestor.organizacao_id
+
+    nao_embarcou = juntar_rota(
+        select(
+            literal("AUSENCIA").label("tipo"),
+            AlunosConfirmados.aluno_id.label("aluno_id"),
+            Viagem.id.label("viagem_id"),
+            Viagem.data.label("data"),
+            Rota.nome.label("rota_nome"),
+            Viagem.fim_real.label("registrado_em"),
+        )
+        .select_from(Viagem)
+        .join(AlunosConfirmados, AlunosConfirmados.viagem_id == Viagem.id)
+    ).where(
+        Rota.organizacao_id == organizacao_id,
+        Viagem.data >= inicio,
+        Viagem.data <= fim,
+        Viagem.status == StatusViagem.FINALIZADA,
+        AlunosConfirmados.confirmacao.is_(True),
+        AlunosConfirmados.embarcou.is_(False),
+    )
+
+    desistiu = juntar_rota(
+        select(
+            literal("DESISTENCIA").label("tipo"),
+            SolicitacaoViagem.aluno_id.label("aluno_id"),
+            Viagem.id.label("viagem_id"),
+            Viagem.data.label("data"),
+            Rota.nome.label("rota_nome"),
+            SolicitacaoViagem.cancelada_em.label("registrado_em"),
+        )
+        .select_from(Viagem)
+        .join(SolicitacaoViagem, SolicitacaoViagem.viagem_id == Viagem.id)
+    ).where(
+        Rota.organizacao_id == organizacao_id,
+        Viagem.data >= inicio,
+        Viagem.data <= fim,
+        SolicitacaoViagem.status == StatusSolicitacao.DESISTENCIA,
+    )
+
+    ausencias = union_all(nao_embarcou, desistiu).subquery()
+    total = db.session.execute(select(func.count()).select_from(ausencias)).scalar_one()
+
+    linhas = db.session.execute(
+        select(ausencias, Aluno.nome, Aluno.foto_url)
+        .join(Aluno, Aluno.usuario_id == ausencias.c.aluno_id)
+        .order_by(ausencias.c.data.desc(), Aluno.nome, ausencias.c.viagem_id)
+        .limit(per_page)
+        .offset((page - 1) * per_page)
+    ).all()
+
+    items: list[dict] = []
+    for linha in linhas:
+        items.append(
+            {
+                "tipo": linha.tipo,
+                "aluno_id": str(linha.aluno_id),
+                "aluno_nome": linha.nome,
+                "foto_url": linha.foto_url,
+                "viagem_id": str(linha.viagem_id),
+                "rota_nome": linha.rota_nome,
+                "data": linha.data.isoformat(),
+                "registrado_em": linha.registrado_em.isoformat() if linha.registrado_em else None,
+            }
+        )
+
+    return {"items": items, "total": total, "page": page, "per_page": per_page}
