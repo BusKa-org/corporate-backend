@@ -197,7 +197,15 @@ def cancelar_na_viagem_travada(aluno: Aluno, viagem: Viagem) -> SolicitacaoViage
         )
 
     if viagem.status == StatusViagem.EM_ANDAMENTO:
-        passageiro = db.session.get(AlunosConfirmados, (viagem.id, aluno.usuario_id))
+        # Locked like embarque_service._travar_registro so a boarding in flight cannot slip
+        # past this check. No deadlock: boarding locks credentials and this row, never the trip.
+        passageiro = (
+            db.session.query(AlunosConfirmados)
+            .filter_by(viagem_id=viagem.id, aluno_id=aluno.usuario_id)
+            .with_for_update()
+            .populate_existing()
+            .one_or_none()
+        )
         if passageiro and passageiro.embarcou:
             raise ConflictError("Você já embarcou nesta viagem e não pode mais desistir dela")
 
