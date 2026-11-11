@@ -170,6 +170,9 @@ Only run in the scheduler process (`RUN_SCHEDULER`).
 - `PUT /v1/viagens/<id>/cancelar` returns 403 for a trip of another organization, and
   also cancels and notifies the active requests of the trip.
 - Trip listings, the student agenda and the dashboard include on-demand trips.
+- `GET`/`POST /v1/viagens/<id>/localizacao`: an `id` that is not a UUID returns 404 at
+  routing (it was 400). `POST` returns 403 unless the caller is the trip's driver, and
+  authorization runs before the status check, as in `POST .../localizacao-aluno`.
 
 ### Replaced endpoints from dev's first on-demand version
 

@@ -205,9 +205,13 @@ def test_rf07_gestor_le_a_localizacao_de_viagem_sob_demanda(
 
 
 @pytest.mark.integration
-def test_rf07_localizacao_com_id_invalido_e_recusada(gestor):
-    r = gestor.client.get("/v1/viagens/abc/localizacao")
-    assert r.status_code == 400
+def test_rf07_localizacao_com_id_invalido_e_recusada_no_roteamento(gestor, motorista):
+    # The <uuid:id> route converter rejects bad ids before the service runs.
+    assert gestor.client.get("/v1/viagens/abc/localizacao").status_code == 404
+    envio = motorista.client.post(
+        "/v1/viagens/abc/localizacao", json={"latitude": -7.2, "longitude": -35.9}
+    )
+    assert envio.status_code == 404
 
 
 def _assert_localizacao_intacta(_db, viagem):

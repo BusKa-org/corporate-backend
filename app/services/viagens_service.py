@@ -41,7 +41,6 @@ from app.services.notificacao_service import NotificacaoService
 from app.tasks.viagem_tasks import realizar_auto_checkin
 from app.utils import audit_logger, tempo
 from app.utils.geo_utils import calcular_distancia_metros
-from app.utils.validators import validate_uuid
 
 logger = logging.getLogger(__name__)
 
@@ -809,7 +808,7 @@ def obter_localizacao_onibus(user_id: str, viagem_id: str) -> dict:
     if not user:
         raise ForbiddenError("Acesso negado")
 
-    viagem = db.session.get(Viagem, validate_uuid(viagem_id, "ID da viagem"))
+    viagem = db.session.get(Viagem, viagem_id)
     if not viagem:
         raise NotFoundError("Viagem não encontrada")
 

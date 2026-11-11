@@ -232,7 +232,7 @@ class ViagemCancelarResource(Resource):
         return result, 200
 
 
-@api.route("/<string:id>/localizacao")
+@api.route("/<uuid:id>/localizacao")
 class ViagemLocalizacaoResource(Resource):
     @api.doc("atualizar_localizacao_onibus")
     @api.expect(models["localizacao_request"])
@@ -244,7 +244,7 @@ class ViagemLocalizacaoResource(Resource):
         user_id = get_jwt_identity()
         data = request.get_json()
 
-        result = viagens_service.atualizar_localizacao(user_id, id, data)
+        result = viagens_service.atualizar_localizacao(user_id, str(id), data)
         return result, 200
 
     @api.doc("obter_localizacao_onibus")
@@ -254,7 +254,7 @@ class ViagemLocalizacaoResource(Resource):
     def get(self, id):
         """(Student/Driver/Manager) Gets the bus's current location (trip in progress)."""
         user_id = get_jwt_identity()
-        result = viagens_service.obter_localizacao_onibus(user_id, id)
+        result = viagens_service.obter_localizacao_onibus(user_id, str(id))
         return result, 200
 
 
