@@ -2288,7 +2288,7 @@
             "description": "Somente passageiros podem excluir a conta"
           },
           "404": {
-            "description": "Conta já excluída"
+            "description": "Conta não encontrada ou já excluída"
           },
           "409": {
             "description": "Viagem em andamento"
