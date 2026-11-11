@@ -720,6 +720,10 @@ def atualizar_localizacao(user_id: str, viagem_id: str, data: dict) -> dict:
     if not viagem:
         raise NotFoundError("Viagem não encontrada")
 
+    # Authorize before the status check so other drivers cannot probe a trip's state.
+    if viagem.motorista_id != user.id:
+        raise ForbiddenError("Apenas o motorista desta viagem pode enviar a localização.")
+
     if viagem.status != StatusViagem.EM_ANDAMENTO:
         raise ValidationError(f"A viagem não está em andamento (Status: {viagem.status.name})")
 
