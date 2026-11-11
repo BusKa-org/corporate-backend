@@ -3,6 +3,8 @@
 import logging
 from typing import Any
 
+from sqlalchemy import select
+
 from app.core.exceptions import AppError, ForbiddenError, NotFoundError, ValidationError
 from app.models.base import db
 from app.models.enum import StatusOcorrencia, TipoOcorrencia, UserRole
@@ -117,7 +119,13 @@ class OcorrenciaService:
 
         gestor = _get_gestor_or_403(gestor_id, "Apenas gestores podem resolver ocorrências.")
 
-        ocorrencia = db.session.get(Ocorrencia, ocorrencia_id)
+        # Row lock: a concurrent resolve waits and then sees it already resolved.
+        db.session.execute(
+            select(Ocorrencia.id)
+            .where(Ocorrencia.id == ocorrencia_id)
+            .with_for_update(key_share=True)
+        )
+        ocorrencia = db.session.get(Ocorrencia, ocorrencia_id, populate_existing=True)
         # 404, not 403: listar() hides other organizations' incidents, so don't reveal they exist.
         if not ocorrencia or ocorrencia.autor.organizacao_id != gestor.organizacao_id:
             raise NotFoundError("Ocorrência não encontrada.")

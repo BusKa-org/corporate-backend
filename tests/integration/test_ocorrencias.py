@@ -28,3 +28,9 @@ def test_gestor_da_organizacao_resolve_ocorrencia(aluno, gestor, _db):
 
     assert response.status_code == 200
     assert response.get_json()["status"] == StatusOcorrencia.RESOLVIDA.value
+
+
+def test_resolver_com_id_que_nao_e_uuid_devolve_404(gestor):
+    response = gestor.client.patch("/v1/ocorrencias/nao-e-uuid/resolver")
+
+    assert response.status_code == 404

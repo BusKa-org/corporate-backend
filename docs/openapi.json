@@ -1277,6 +1277,9 @@
             "schema": {
               "$ref": "#/definitions/OcorrenciaResponse"
             }
+          },
+          "404": {
+            "description": "Ocorrência não encontrada"
           }
         },
         "summary": "(Manager) Marks an incident as resolved",
