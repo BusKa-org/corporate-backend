@@ -8,7 +8,7 @@ from marshmallow.validate import OneOf, Range
 
 from app.models.enum import StatusViagem
 from app.schemas.common import BaseSchema
-from app.schemas.validators import validate_uuid4
+from app.schemas.validators import validate_uuid
 
 # -------------------------
 # Common helpers / fields
@@ -103,6 +103,13 @@ class ViagemAcaoRequestSchema(BaseSchema):
     acao = fields.String(required=True, validate=OneOf(["INICIAR", "FINALIZAR"]))
 
 
+class LocalizacaoRequestSchema(BaseSchema):
+    """POST /viagens/<id>/localizacao and /localizacao-aluno"""
+
+    latitude = fields.Float(required=True, validate=Range(min=-90, max=90))
+    longitude = fields.Float(required=True, validate=Range(min=-180, max=180))
+
+
 class ViagemListQuerySchema(BaseSchema):
     """GET /viagens?data_inicio=...&status=..."""
 
@@ -111,8 +118,8 @@ class ViagemListQuerySchema(BaseSchema):
     data_fim = DateISOField(required=False, allow_none=True)
 
     status = EnumByNameField(StatusViagem, required=False, allow_none=True)
-    motorista_id = fields.String(required=False, allow_none=True, validate=validate_uuid4)
-    rota_id = fields.String(required=False, allow_none=True, validate=validate_uuid4)
+    motorista_id = fields.String(required=False, allow_none=True, validate=validate_uuid)
+    rota_id = fields.String(required=False, allow_none=True, validate=validate_uuid)
 
     # Optional pagination, so "total" stays correct once it is used
     page = fields.Integer(required=False, load_default=1, validate=Range(min=1))

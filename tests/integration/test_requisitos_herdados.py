@@ -214,6 +214,55 @@ def test_rf07_localizacao_com_id_invalido_e_recusada_no_roteamento(gestor, motor
     assert envio.status_code == 404
 
 
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    "corpo",
+    [
+        None,
+        {},
+        {"latitude": -7.2},
+        {"latitude": "abc", "longitude": -35.9},
+        {"latitude": 91, "longitude": -35.9},
+        {"latitude": -7.2, "longitude": -181},
+    ],
+)
+def test_rf07_localizacao_com_corpo_invalido_da_400(
+    _db, viagem_futura_iniciada_com_motorista, motorista, corpo
+):
+    viagem = viagem_futura_iniciada_com_motorista
+    r = motorista.client.post(f"/v1/viagens/{viagem.id}/localizacao", json=corpo)
+    assert r.status_code == 400, r.get_data(as_text=True)
+    assert r.get_json()["error"]["code"] == "VALIDATION_ERROR"
+    _assert_localizacao_intacta(_db, viagem)
+
+
+@pytest.mark.integration
+def test_rf07_localizacao_aluno_com_corpo_invalido_da_400(
+    viagem_futura_iniciada_com_motorista, aluno
+):
+    r = aluno.client.post(
+        f"/v1/viagens/{viagem_futura_iniciada_com_motorista.id}/localizacao-aluno",
+        json={"latitude": "abc"},
+    )
+    assert r.status_code == 400, r.get_data(as_text=True)
+
+
+@pytest.mark.integration
+def test_rf07_localizacao_de_viagem_sem_motorista_da_409(
+    _db, viagem_futura_iniciada_com_motorista, motorista
+):
+    viagem = viagem_futura_iniciada_com_motorista
+    viagem.motorista_id = None
+    _db.session.commit()
+
+    r = motorista.client.post(
+        f"/v1/viagens/{viagem.id}/localizacao", json={"latitude": -7.2, "longitude": -35.9}
+    )
+    assert r.status_code == 409, r.get_data(as_text=True)
+    assert r.get_json()["error"]["message"] == "Viagem sem motorista atribuído"
+    _assert_localizacao_intacta(_db, viagem)
+
+
 def _assert_localizacao_intacta(_db, viagem):
     _db.session.refresh(viagem)
     assert viagem.motorista_lat is None

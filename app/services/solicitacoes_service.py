@@ -148,7 +148,7 @@ def cancelar_solicitacao(user_id: str, viagem_id: str) -> SolicitacaoViagem:
     """
     aluno = _buscar_aluno(user_id)
 
-    viagem = db.session.get(Viagem, validate_uuid(viagem_id, "ID da viagem"))
+    viagem = db.session.get(Viagem, viagem_id)
     if not viagem:
         raise NotFoundError("Viagem não encontrada")
 
@@ -248,7 +248,7 @@ def declarar_trajeto(user_id: str, viagem_id: str, data: dict) -> SolicitacaoVia
     """
     aluno = _buscar_aluno(user_id)
 
-    viagem = db.session.get(Viagem, validate_uuid(viagem_id, "ID da viagem"))
+    viagem = db.session.get(Viagem, viagem_id)
     if not viagem:
         raise NotFoundError("Viagem não encontrada")
 

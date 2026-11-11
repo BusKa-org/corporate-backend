@@ -32,7 +32,7 @@ relatorio_parser.add_argument(
 )
 
 
-@api.route("/viagens/<string:viagem_id>/progresso")
+@api.route("/viagens/<uuid:viagem_id>/progresso")
 class ProgressoViagemResource(Resource):
     @api.doc("progresso_viagem")
     @api.marshal_list_with(models["ponto_progresso"], code=HTTPStatus.OK)
@@ -40,7 +40,7 @@ class ProgressoViagemResource(Resource):
     def get(self, viagem_id):
         """Gets a trip's progress (the fixed stops visited)."""
         current_user_id = get_jwt_identity()
-        progresso = obter_progresso_viagem(gestor_id=current_user_id, viagem_id=viagem_id)
+        progresso = obter_progresso_viagem(gestor_id=current_user_id, viagem_id=str(viagem_id))
         return progresso, 200
 
 

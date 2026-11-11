@@ -113,7 +113,7 @@ request, plus `ponto_embarque_id`, `ponto_destino_id`, `declarada_em`).
 | 400 | trip not in `BUFFER_ABERTO`; buffer over; stop not in the circuit; origin not before destination; same stop twice |
 | 401 | token of a deleted or inactive account (`TOKEN_REVOKED`) |
 | 403 | no consent; not a student; other organization; account not active |
-| 404 | trip not found |
+| 404 | trip not found; trip id not a canonical UUID |
 | 409 | no seat on the requested segments |
 
 ### Driver start (RF-11, RF-12)
@@ -126,7 +126,7 @@ consent and notifications on, with the minutes left in the buffer.
 | Status | When |
 |---|---|
 | 403 | not the trip's driver |
-| 404 | trip not found |
+| 404 | trip not found; trip id not a canonical UUID |
 | 409 | trip is not `SOLICITADA` |
 
 ### Request cancellation (RF-19)
@@ -145,7 +145,7 @@ Returns 200 with the request (same shape as above).
 |---|---|
 | 400 | trip `FINALIZADA` / `CANCELADA` |
 | 403 | not a student |
-| 404 | trip not found, or the student has no active request on it |
+| 404 | trip not found, or the student has no active request on it; trip id not a canonical UUID |
 
 ### Scheduler jobs
 
@@ -170,9 +170,20 @@ Only run in the scheduler process (`RUN_SCHEDULER`).
 - `PUT /v1/viagens/<id>/cancelar` returns 403 for a trip of another organization, and
   also cancels and notifies the active requests of the trip.
 - Trip listings, the student agenda and the dashboard include on-demand trips.
-- `GET`/`POST /v1/viagens/<id>/localizacao`: an `id` that is not a UUID returns 404 at
-  routing (it was 400). `POST` returns 403 unless the caller is the trip's driver, and
-  authorization runs before the status check, as in `POST .../localizacao-aluno`.
+- Every `/v1/viagens/<id>/...` route (`declaracao`, `pontos-embarque`,
+  `credencial-embarque`, `confirmacao`, `acao`, `cancelar`, `localizacao`,
+  `localizacao-aluno`, `solicitacao`, `iniciar-percurso`) and
+  `GET /v1/dashboard/viagens/<viagem_id>/progresso` take the id through Werkzeug's `uuid`
+  converter. A malformed id returns 404 at routing (it was 400, or a 500 on some routes).
+  The converter only matches the canonical hyphenated form, so a hyphenless or braced
+  UUID also returns 404.
+- `POST /v1/viagens/<id>/localizacao`: body `{"latitude": -90..90, "longitude":
+  -180..180}`, both required numbers; a missing or invalid body returns 400
+  (`VALIDATION_ERROR`). 409 when the trip has no driver assigned. Otherwise 403 unless
+  the caller is the trip's driver, and authorization runs before the status check.
+- `POST /v1/viagens/<id>/localizacao-aluno`: same body validation (400). A student not
+  confirmed on the trip now gets 403 before the status check; on a trip that is not
+  running this was 400 before.
 
 ### Replaced endpoints from dev's first on-demand version
 

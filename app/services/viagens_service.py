@@ -70,11 +70,12 @@ def juntar_rota(query):
     )
 
 
-def _rota_id_da_viagem(viagem: Viagem):
-    if viagem.rota_id:
-        return viagem.rota_id
-    if viagem.horario_rota:
-        return viagem.horario_rota.rota_id
+def _rota_da_viagem(viagem: Viagem) -> Rota | None:
+    # On-demand trips have no horario_rota; older fixed trips may lack rota_id.
+    if viagem.rota is not None:
+        return viagem.rota
+    if viagem.horario_rota is not None:
+        return viagem.horario_rota.rota
     return None
 
 
@@ -82,9 +83,7 @@ def _exigir_viagem_da_organizacao(
     viagem: Viagem, user: User, mensagem: str = "Acesso negado"
 ) -> None:
     """Raise ForbiddenError unless the trip's route belongs to the user's organização."""
-    rota = viagem.rota
-    if rota is None and viagem.horario_rota is not None:
-        rota = viagem.horario_rota.rota
+    rota = _rota_da_viagem(viagem)
     if rota is None or rota.organizacao_id != user.organizacao_id:
         raise ForbiddenError(mensagem)
 
@@ -254,9 +253,10 @@ def listar_pontos_embarque(user_id: str, viagem_id: str) -> list[dict]:
     if not viagem:
         raise NotFoundError("Viagem não encontrada")
 
-    rota_id = _rota_id_da_viagem(viagem)
-    if not rota_id:
+    rota = _rota_da_viagem(viagem)
+    if rota is None:
         raise NotFoundError("Rota da viagem não encontrada")
+    rota_id = rota.id
 
     inscricao = db.session.query(RotaAluno).filter_by(rota_id=rota_id, aluno_id=aluno.id).first()
 
@@ -719,6 +719,9 @@ def atualizar_localizacao(user_id: str, viagem_id: str, data: dict) -> dict:
     if not viagem:
         raise NotFoundError("Viagem não encontrada")
 
+    if viagem.motorista_id is None:
+        raise ConflictError("Viagem sem motorista atribuído")
+
     # Authorize before the status check so other drivers cannot probe a trip's state.
     if viagem.motorista_id != user.id:
         raise ForbiddenError("Apenas o motorista desta viagem pode enviar a localização.")
@@ -817,7 +820,7 @@ def obter_localizacao_onibus(user_id: str, viagem_id: str) -> dict:
         if viagem.motorista_id != user.id:
             raise ForbiddenError("Apenas o motorista desta viagem pode consultar a localização.")
     elif user.role == UserRole.ALUNO:
-        conf = AlunosConfirmados.query.filter_by(viagem_id=viagem.id, aluno_id=user_id).first()
+        conf = AlunosConfirmados.query.filter_by(viagem_id=viagem.id, aluno_id=user.id).first()
         if not conf or not conf.confirmacao:
             raise ForbiddenError(
                 "Você precisa estar confirmado nesta viagem para ver a localização do ônibus."
@@ -859,7 +862,7 @@ def atualizar_localizacao_aluno(user_id: str, viagem_id: str, data: dict) -> dic
         raise NotFoundError("Viagem não encontrada.")
 
     # Authorize before the status check so outsiders cannot probe a trip's state.
-    conf = AlunosConfirmados.query.filter_by(viagem_id=viagem.id, aluno_id=user_id).first()
+    conf = AlunosConfirmados.query.filter_by(viagem_id=viagem.id, aluno_id=user.id).first()
     if not conf or not conf.confirmacao:
         raise ForbiddenError("O utilizador não está confirmado nesta viagem.")
 

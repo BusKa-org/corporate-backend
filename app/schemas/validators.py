@@ -18,13 +18,13 @@ def validate_optional_string(value: str | None, field_name: str = "Texto") -> st
     return value
 
 
-def validate_uuid4(value: str, field_name: str = "ID") -> str:
-    """Validate UUID4 format. Raises ValidationError if invalid."""
+def validate_uuid(value: str, field_name: str = "ID") -> str:
+    """Validate UUID format (any version). Raises ValidationError if invalid."""
     try:
-        uuid.UUID(value, version=4)
+        uuid.UUID(value)
         return value
     except (ValueError, AttributeError, TypeError):
-        raise MarshmallowValidationError(f"{field_name} deve ser um UUID4 válido")
+        raise MarshmallowValidationError(f"{field_name} deve ser um UUID válido")
 
 
 def validate_optional_cpf(value: str | None, field_name: str = "CPF") -> str | None:
