@@ -41,6 +41,7 @@ from app.services.notificacao_service import NotificacaoService
 from app.tasks.viagem_tasks import realizar_auto_checkin
 from app.utils import audit_logger, tempo
 from app.utils.geo_utils import calcular_distancia_metros
+from app.utils.validators import validate_uuid
 
 logger = logging.getLogger(__name__)
 
@@ -805,15 +806,11 @@ def obter_localizacao_onibus(user_id: str, viagem_id: str) -> dict:
     if not user:
         raise ForbiddenError("Acesso negado")
 
-    viagem = db.session.get(Viagem, viagem_id)
+    viagem = db.session.get(Viagem, validate_uuid(viagem_id, "ID da viagem"))
     if not viagem:
         raise NotFoundError("Viagem não encontrada")
 
-    if viagem.status != StatusViagem.EM_ANDAMENTO:
-        raise ValidationError(
-            "A localização do ônibus só está disponível enquanto a viagem está em andamento."
-        )
-
+    # Authorize before the status check so outsiders cannot probe a trip's state.
     if user.role == UserRole.MOTORISTA:
         if viagem.motorista_id != user.id:
             raise ForbiddenError("Apenas o motorista desta viagem pode consultar a localização.")
@@ -824,11 +821,20 @@ def obter_localizacao_onibus(user_id: str, viagem_id: str) -> dict:
                 "Você precisa estar confirmado nesta viagem para ver a localização do ônibus."
             )
     elif user.role == UserRole.GESTOR:
-        _exigir_viagem_da_organizacao(viagem, user)
+        _exigir_viagem_da_organizacao(
+            viagem,
+            user,
+            "Apenas gestores da organização desta viagem podem consultar a localização.",
+        )
     else:
         raise ForbiddenError(
             "Apenas alunos confirmados, o motorista ou o gestor podem consultar a localização"
             " do ônibus."
+        )
+
+    if viagem.status != StatusViagem.EM_ANDAMENTO:
+        raise ValidationError(
+            "A localização do ônibus só está disponível enquanto a viagem está em andamento."
         )
 
     return {
