@@ -119,6 +119,27 @@ class UserResource(Resource):
         return user_response_schema.dump(user), 200
 
 
+@api.route("/<string:id>/ativar")
+@api.param("id", "O UUID do motorista")
+class MotoristaAtivarResource(Resource):
+    @api.doc(
+        "ativar_motorista",
+        responses={
+            400: "Própria conta ou ID inválido",
+            403: "Forbidden",
+            404: "Not found",
+            409: "Cadastro não está pendente",
+        },
+    )
+    @api.response(200, "Motorista ativado", models["user_response"])
+    @jwt_required()
+    def post(self, id: str) -> tuple[dict[str, Any], int]:
+        """Manager activates a newly created driver"""
+        current_user_id = get_jwt_identity()
+        motorista = user_service.ativar_motorista(current_user_id, id)
+        return user_response_schema.dump(motorista), 200
+
+
 @api.route("/<string:id>/desativar")
 @api.param("id", "O UUID do usuário")
 class UserDesativar(Resource):

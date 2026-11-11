@@ -115,7 +115,9 @@ class OcorrenciaService:
         """Manager marks an incident as resolved."""
         from app.services.user_service import _get_gestor_or_403
 
-        _get_gestor_or_403(gestor_id, "Apenas gestores podem resolver ocorrências.")
+        _get_gestor_or_403(
+            gestor_id, "Apenas gestores podem resolver ocorrências.", require_active=True
+        )
 
         ocorrencia = db.session.get(Ocorrencia, ocorrencia_id)
         if not ocorrencia:
