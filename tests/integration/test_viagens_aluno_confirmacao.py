@@ -3,6 +3,7 @@ from datetime import date, timedelta
 import pytest
 
 from app.models.enum import StatusViagem
+from app.models.notificacao import Notificacao
 from app.models.viagem import AlunosConfirmados
 from tests.factories.viagem_factory import AlunosConfirmadosFactory, ViagemFactory
 
@@ -168,12 +169,15 @@ def test_desiste_de_viagem_fixa_depois_da_partida(
     assert registro.confirmacao is False
     desistencia_em = registro.desistencia_em
     assert desistencia_em is not None
+    aviso = Notificacao.query.filter_by(usuario_id=viagem.motorista_id).one()
+    assert aviso.titulo == "Desistência de passageiro"
 
-    # Resending is a no-op: the dropout time stays the first one.
+    # Resending is a no-op: the dropout time stays the first one, no second notice.
     assert aluno.client.put(url, json={"confirmacao": False}).status_code == 200
     _db.session.expire_all()
     registro = _db.session.get(AlunosConfirmados, (viagem.id, aluno.user.id))
     assert registro.desistencia_em == desistencia_em
+    assert Notificacao.query.filter_by(usuario_id=viagem.motorista_id).count() == 1
 
 
 def test_nao_desiste_de_viagem_fixa_depois_de_embarcar(
@@ -191,7 +195,7 @@ def test_nao_desiste_de_viagem_fixa_depois_de_embarcar(
     assert registro.desistencia_em is None
 
 
-def test_nao_desiste_de_viagem_em_que_nao_estava_confirmado(
+def test_cancelar_sem_estar_confirmado_depois_da_partida_nao_muda_nada(
     _db, aluno, rota_aluno, viagem_futura_agendada_com_motorista
 ):
     viagem = viagem_futura_agendada_com_motorista
@@ -199,9 +203,29 @@ def test_nao_desiste_de_viagem_em_que_nao_estava_confirmado(
 
     r = aluno.client.put(f"/v1/viagens/{viagem.id}/confirmacao", json={"confirmacao": False})
 
-    assert r.status_code == 409, r.get_data(as_text=True)
+    assert r.status_code == 200, r.get_data(as_text=True)
     _db.session.expire_all()
-    assert _db.session.get(AlunosConfirmados, (viagem.id, aluno.user.id)).desistencia_em is None
+    registro = _db.session.get(AlunosConfirmados, (viagem.id, aluno.user.id))
+    assert registro.confirmacao is False
+    assert registro.desistencia_em is None
+    assert Notificacao.query.filter_by(usuario_id=viagem.motorista_id).count() == 0
+
+
+def test_cancelar_sem_registro_depois_da_partida_responde_200(
+    _db, aluno, rota_aluno, viagem_futura_agendada_com_motorista
+):
+    viagem = viagem_futura_agendada_com_motorista
+    viagem.status = StatusViagem.EM_ANDAMENTO
+    _db.session.commit()
+
+    r = aluno.client.put(f"/v1/viagens/{viagem.id}/confirmacao", json={"confirmacao": False})
+
+    assert r.status_code == 200, r.get_data(as_text=True)
+    assert r.get_json()["confirmacao"] is False
+    _db.session.expire_all()
+    registro = _db.session.get(AlunosConfirmados, (viagem.id, aluno.user.id))
+    assert registro is None or registro.desistencia_em is None
+    assert Notificacao.query.filter_by(usuario_id=viagem.motorista_id).count() == 0
 
 
 def test_nao_confirma_depois_da_partida(

@@ -171,8 +171,10 @@ Only run in the scheduler process (`RUN_SCHEDULER`).
   longer `AGENDADA` the attendance is kept as the trip's record, with one exception:
   `{"confirmacao": false}` on an `EM_ANDAMENTO` trip is a dropout (200): it sets
   `confirmacao = false` and `desistencia_em`, so the student leaves the boarding list,
-  approach notices and auto-checkin; resending it keeps the first `desistencia_em`.
-  It returns 409 if the student already boarded or was not confirmed. Everything else after
+  approach notices and auto-checkin, and the driver gets the same "Desistência de passageiro"
+  notice as on-demand trips; resending it keeps the first `desistencia_em`. A student who was
+  not confirmed gets 200 with no change (no `desistencia_em`). It returns 409 if the student
+  already boarded. Everything else after
   `AGENDADA` (`confirmacao: true` on `EM_ANDAMENTO`, any change on `FINALIZADA`/`CANCELADA`)
   returns 409.
 - `PUT /v1/viagens/<id>/cancelar` returns 403 for a trip of another organization, and

@@ -215,12 +215,7 @@ def cancelar_na_viagem_travada(aluno: Aluno, viagem: Viagem) -> SolicitacaoViage
         # Leaves the driver's boarding list (RF-16/RF-17).
         if passageiro:
             passageiro.confirmacao = False
-        if viagem.motorista_id:
-            NotificacaoService._criar_notificacao_interna(
-                usuario_id=viagem.motorista_id,
-                titulo="Desistência de passageiro",
-                mensagem=f"O passageiro {aluno.nome} desistiu da viagem em andamento.",
-            )
+        viagens_service.notificar_desistencia_ao_motorista(viagem, aluno)
         return solicitacao
 
     if viagem.status not in (StatusViagem.SOLICITADA, StatusViagem.BUFFER_ABERTO):

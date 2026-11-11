@@ -180,10 +180,13 @@ def confirmar_presenca_aluno(
         )
 
         if viagem.status == StatusViagem.EM_ANDAMENTO and not confirmacao:
-            return _desistir_apos_partida(viagem, aluno.usuario_id)
+            desistencia = _desistir_apos_partida(viagem, aluno)
+            if desistencia is not None:
+                return desistencia
+            # Never confirmed: falls through to the plain unconfirm, a 200 as before.
         # Once the trip left, attendance is evidence (no-show/boarding) and only a dropout
         # may still change it.
-        if viagem.status != StatusViagem.AGENDADA:
+        elif viagem.status != StatusViagem.AGENDADA:
             raise ConflictError(
                 f"Não é possível alterar a presença em uma viagem com status {viagem.status.name}"
             )
@@ -249,28 +252,41 @@ def confirmar_presenca_aluno(
         return registro
 
 
-def _desistir_apos_partida(viagem: Viagem, aluno_id) -> AlunosConfirmados:
-    """Fixed trip dropout after departure: leaves the boarding list, the dashboard lists it."""
+def notificar_desistencia_ao_motorista(viagem: Viagem, aluno: Aluno) -> None:
+    """Tells the driver a passenger dropped out of a trip in progress (fixed or on-demand)."""
+    if viagem.motorista_id:
+        NotificacaoService._criar_notificacao_interna(
+            usuario_id=viagem.motorista_id,
+            titulo="Desistência de passageiro",
+            mensagem=f"O passageiro {aluno.nome} desistiu da viagem em andamento.",
+        )
+
+
+def _desistir_apos_partida(viagem: Viagem, aluno: Aluno) -> AlunosConfirmados | None:
+    """Fixed trip dropout after departure: leaves the boarding list, the dashboard lists it.
+
+    Returns None when the student has no attendance row, so the caller keeps the old 200.
+    """
     # Same row lock as boarding (embarque_service._travar_registro): either the boarding
     # or the dropout wins, never both.
     registro = (
         db.session.query(AlunosConfirmados)
-        .filter_by(viagem_id=viagem.id, aluno_id=aluno_id)
+        .filter_by(viagem_id=viagem.id, aluno_id=aluno.usuario_id)
         .with_for_update()
         .populate_existing()
         .one_or_none()
     )
     if registro is None:
-        raise ConflictError("Você não está confirmado nesta viagem")
+        return None
     if registro.embarcou:
         raise ConflictError("Você já embarcou nesta viagem e não pode mais desistir dela")
-    if registro.desistencia_em is not None:
-        return registro
+    # Already unconfirmed (or a repeated dropout): idempotent, keeps the first desistencia_em.
     if not registro.confirmacao:
-        raise ConflictError("Você não está confirmado nesta viagem")
+        return registro
 
     registro.confirmacao = False
     registro.desistencia_em = _agora()
+    notificar_desistencia_ao_motorista(viagem, aluno)
     return registro
 
 
