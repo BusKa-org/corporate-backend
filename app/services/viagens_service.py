@@ -306,10 +306,17 @@ def gerar_viagem(user_id: str, data_input: dict) -> Viagem:
 
     dia_semana = _get_dia_semana_enum(data_viagem)
 
+    # FOR SHARE waits for an in-flight schedule edit (FOR UPDATE in rotas_service),
+    # then re-checks ativo, so a trip never lands on a just-retired schedule.
     horario_selecionado = (
         db.session.query(HorarioRota)
         .join(DiasOperacao)
-        .filter(HorarioRota.rota_id == rota.id, DiasOperacao.dia == dia_semana)
+        .filter(
+            HorarioRota.rota_id == rota.id,
+            HorarioRota.ativo.is_(True),
+            DiasOperacao.dia == dia_semana,
+        )
+        .with_for_update(read=True, of=HorarioRota)
         .first()
     )
     if not horario_selecionado:

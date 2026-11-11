@@ -109,7 +109,7 @@ class RotaDetailResponseSchema(RotaResponseSchema):
     """Extended schema with nested relationships."""
 
     pontos = fields.Method("get_pontos")
-    horarios = fields.Nested(HorarioResponseSchema, many=True, attribute="grade_horarios")
+    horarios = fields.Nested(HorarioResponseSchema, many=True, attribute="grade_horarios_ativos")
 
     def get_pontos(self, obj):
         return PontoFlatResponseSchema(many=True).dump(
