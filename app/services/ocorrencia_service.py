@@ -115,10 +115,11 @@ class OcorrenciaService:
         """Manager marks an incident as resolved."""
         from app.services.user_service import _get_gestor_or_403
 
-        _get_gestor_or_403(gestor_id, "Apenas gestores podem resolver ocorrências.")
+        gestor = _get_gestor_or_403(gestor_id, "Apenas gestores podem resolver ocorrências.")
 
         ocorrencia = db.session.get(Ocorrencia, ocorrencia_id)
-        if not ocorrencia:
+        # 404, not 403: listar() hides other organizations' incidents, so don't reveal they exist.
+        if not ocorrencia or ocorrencia.autor.organizacao_id != gestor.organizacao_id:
             raise NotFoundError("Ocorrência não encontrada.")
         if ocorrencia.status == StatusOcorrencia.RESOLVIDA:
             raise ValidationError("Ocorrência já foi resolvida.")
