@@ -104,6 +104,15 @@ def test_dashboard_funciona_com_viagem_sob_demanda(gestor, rota_sob_demanda, mot
     assert gestor.client.get(f"/v1/dashboard/viagens/{v.id}/trajeto-real").status_code == 200
 
 
+def test_progresso_de_viagem_de_outra_organizacao_e_negado(
+    gestor, other_gestor, rota_sob_demanda, motorista, _db
+):
+    v = _viagem_sob_demanda(_db, rota_sob_demanda, motorista, StatusViagem.FINALIZADA)
+    assert gestor.client.get(f"/v1/dashboard/viagens/{v.id}/progresso").status_code == 200
+    # 404, not 403: the dashboard hides other organizations' trips entirely.
+    assert other_gestor.client.get(f"/v1/dashboard/viagens/{v.id}/progresso").status_code == 404
+
+
 def test_lembretes_ignoram_viagem_sob_demanda(app, _db, aluno, rota_sob_demanda, motorista):
     _db.session.add(RotaAluno(rota_id=rota_sob_demanda.id, aluno_id=aluno.user.id))
     _db.session.commit()
