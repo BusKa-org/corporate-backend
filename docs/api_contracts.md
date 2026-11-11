@@ -31,10 +31,14 @@ On `desativar`:
 A disabled driver gets no new work: window creation, manual trip creation and the
 on-demand driver choice re-check that the driver is `ACTIVE` after locking the driver row.
 
+Checks run in this order, and the first failing one answers: `id` not a UUID (400), caller
+not an `ACTIVE` gestor (403), own account (400), other organization (403), not found (404),
+state (409). The same order applies to `POST /v1/users/<id>/ativar`.
+
 | Status | When |
 |---|---|
 | 400 | `id` is not a UUID; target is the gestor's own account |
-| 403 | caller is not a gestor; account from another organization (any role or status) |
+| 403 | caller is not a gestor, or the gestor is not `ACTIVE`; account from another organization (any role or status) |
 | 404 | user not found, not a passenger/driver, or deleted |
 | 409 | `desativar` on an account that is not `ACTIVE`, or on one in a trip `EM_ANDAMENTO`, or on a driver with future trips/windows/default routes; `reativar` on one that is not `DISABLED` |
 
@@ -184,11 +188,13 @@ for the normal idle case).
 
 | Status | When |
 |---|---|
-| 400 | fixed route; malformed id |
+| 400 | fixed route |
 | 403 | other organization; role without access |
-| 404 | route not found |
+| 404 | route not found; route id not a canonical UUID |
 
-Every on-demand endpoint returns 400 for a malformed id in the path.
+`/v1/rotas/<id>/solicitacoes` and `/v1/rotas/<id>/viagem-ativa` take the id through
+Werkzeug's `uuid` converter, so a malformed id returns 404 at routing (it was 400). The
+vehicle window ids under `/v1/onibus` still return 400 for a malformed id.
 
 ### Route declaration (RF-13, RF-14)
 
@@ -214,7 +220,7 @@ request, plus `ponto_embarque_id`, `ponto_destino_id`, `declarada_em`).
 | 400 | trip not in `BUFFER_ABERTO`; buffer over; stop not in the circuit; origin not before destination; same stop twice |
 | 401 | token of a deleted or inactive account (`TOKEN_REVOKED`) |
 | 403 | no consent; not a student; other organization; account not active |
-| 404 | trip not found |
+| 404 | trip not found; trip id not a canonical UUID |
 | 409 | no seat on the requested segments |
 
 ### Driver start (RF-11, RF-12)
@@ -227,7 +233,7 @@ consent and notifications on, with the minutes left in the buffer.
 | Status | When |
 |---|---|
 | 403 | not the trip's driver; driver in mandatory rest (`descanso_ate`, CTB message) or in the organization pause (`pausa_ate`, "pausa mínima entre viagens" message); both say when they can start, with the date when it is not today; or outside their working days/hours |
-| 404 | trip not found |
+| 404 | trip not found; trip id not a canonical UUID |
 | 409 | trip has no driver ("Viagem sem motorista atribuído"); trip is not `SOLICITADA`; fewer active requests than `minimo_alunos`; driver already has another trip `BUFFER_ABERTO` or `EM_ANDAMENTO` (both show the driver as `EM_ROTA`) |
 
 When the buffer closes (job), the trip is cancelled instead of going `EM_ANDAMENTO` if fewer
@@ -275,7 +281,7 @@ Returns 200 with the request (same shape as above).
 |---|---|
 | 400 | trip `FINALIZADA` / `CANCELADA` |
 | 403 | not a student |
-| 404 | trip not found, or the student has no active request on it |
+| 404 | trip not found, or the student has no active request on it; trip id not a canonical UUID |
 | 409 | trip `EM_ANDAMENTO` and the student already boarded |
 
 ### Scheduler jobs
@@ -312,6 +318,25 @@ Only run in the scheduler process (`RUN_SCHEDULER`).
 - `PUT /v1/viagens/<id>/cancelar` returns 403 for a trip of another organization, and
   also cancels and notifies the active requests of the trip.
 - Trip listings, the student agenda and the dashboard include on-demand trips.
+- Every `/v1/viagens/<id>/...` route (`declaracao`, `pontos-embarque`,
+  `credencial-embarque`, `confirmacao`, `acao`, `cancelar`, `localizacao`,
+  `localizacao-aluno`, `solicitacao`, `iniciar-percurso`), every
+  `/v1/embarque/viagens/<viagem_id>/...` route (`roteiro`, `roteiro/avancar`, `validacao`,
+  `checkin`, `confirmacao`, `recusa`, `manual`, `sincronizacao`) and
+  `GET /v1/dashboard/viagens/<viagem_id>/progresso` and `/trajeto-real` take the id through
+  Werkzeug's `uuid` converter. A malformed id returns 404 at routing (it was 400, or a 500 on some routes).
+  The converter only matches the canonical hyphenated form, so a hyphenless or braced
+  UUID also returns 404.
+- `GET /v1/viagens/?rota_id=&motorista_id=`: any spelling Python's `uuid.UUID` accepts
+  (hyphenless, braced, `urn:uuid:`) is normalized before filtering; anything else is 400.
+- `POST /v1/viagens/<id>/localizacao`: body `{"latitude": -90..90, "longitude":
+  -180..180}`, both required numbers; a missing or invalid body returns 400
+  (`VALIDATION_ERROR`). 403 unless the caller is the trip's driver (also when the trip
+  has no driver, so the assignment does not leak), and authorization runs before the
+  status check.
+- `POST /v1/viagens/<id>/localizacao-aluno`: same body validation (400). A student not
+  confirmed on the trip now gets 403 before the status check; on a trip that is not
+  running this was 400 before.
 
 ### Replaced endpoints from dev's first on-demand version
 
@@ -545,6 +570,28 @@ ao e-mail de um convite pendente; um PIN novo só sai 60 segundos depois do ante
   puro (só o hash).
 - As respostas nunca revelam o estado: o pedido sempre responde 200 com a mesma mensagem e a
   validação sempre falha com 400 `PIN inválido ou expirado`.
+
+## Ativação de motorista (RF-02, RF-06)
+
+`POST /v1/users/<id>/ativar`: gestor `ACTIVE` da mesma organização. Sem body.
+O motorista criado pelo gestor nasce `PENDING_SIGNUP`; esta rota o passa para `ACTIVE`
+(exigido, por exemplo, para receber janela de disponibilidade). Retorna 200 com o usuário.
+A ordem das checagens é a mesma de `desativar`/`reativar`.
+
+A ativação não registra aceite do termo (RF-09). Todo motorista sem o aceite da versão
+vigente recebe 403 em qualquer rota autenticada, exceto `/v1/auth/*`, `/v1/consentimento`,
+`/v1/users/me` (GET, PATCH, DELETE), `/v1/users/change-password` e `/v1/users/fcm-token`
+(caminhos exatos), até aceitar o termo em `POST /v1/consentimento`.
+
+Criar, reenviar e cancelar convites e resolver ocorrências também exigem gestor `ACTIVE`
+(403 caso contrário), como as mudanças de conta.
+
+| Status | When |
+|---|---|
+| 400 | `id` não é um UUID; é a própria conta do gestor |
+| 403 | não é gestor ou o gestor não está `ACTIVE`; conta de outra organização (qualquer papel ou status) |
+| 404 | não encontrado, não é motorista, ou motorista `DELETED` |
+| 409 | cadastro não está `PENDING_SIGNUP` (já `ACTIVE`, ou `DISABLED`) |
 
 ## Rate limit
 

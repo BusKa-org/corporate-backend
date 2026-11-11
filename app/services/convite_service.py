@@ -182,7 +182,7 @@ def _processar_item(gestor, item: dict[str, Any]) -> dict[str, str]:
 
 def criar_convites(gestor_id: str, itens: list[dict[str, Any]]) -> list[dict[str, str]]:
     """Create invites in batch. One bad row does not stop the others."""
-    gestor = _get_gestor_or_403(gestor_id, "Apenas gestores podem convidar")
+    gestor = _get_gestor_or_403(gestor_id, "Apenas gestores podem convidar", require_active=True)
 
     if len(itens) == 0:
         raise ValidationError("Envie ao menos um convite")
@@ -228,7 +228,9 @@ def _convite_da_organizacao(gestor, convite_id: str) -> Convite:
 
 
 def reenviar_convite(gestor_id: str, convite_id: str) -> Convite:
-    gestor = _get_gestor_or_403(gestor_id, "Apenas gestores podem reenviar convites")
+    gestor = _get_gestor_or_403(
+        gestor_id, "Apenas gestores podem reenviar convites", require_active=True
+    )
     convite = _convite_da_organizacao(gestor, convite_id)
     if convite.estado != PENDENTE:
         raise ConflictError("Só convites pendentes podem ser reenviados")
@@ -246,7 +248,9 @@ def reenviar_convite(gestor_id: str, convite_id: str) -> Convite:
 
 
 def cancelar_convite(gestor_id: str, convite_id: str) -> None:
-    gestor = _get_gestor_or_403(gestor_id, "Apenas gestores podem cancelar convites")
+    gestor = _get_gestor_or_403(
+        gestor_id, "Apenas gestores podem cancelar convites", require_active=True
+    )
     convite = _convite_da_organizacao(gestor, convite_id)
     if convite.estado != PENDENTE:
         raise ConflictError("Só convites pendentes podem ser cancelados")

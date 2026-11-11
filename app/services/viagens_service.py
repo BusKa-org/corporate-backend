@@ -43,9 +43,8 @@ from app.services import capacidade_service, parametros_operacao_service
 from app.services.notificacao_service import NotificacaoService
 from app.services.rotas_service import travar_rota
 from app.tasks.viagem_tasks import realizar_auto_checkin
-from app.utils import audit_logger, tempo
+from app.utils import audit_logger, tempo, validate_uuid
 from app.utils.geo_utils import calcular_distancia_metros
-from app.utils.validators import validate_uuid
 
 logger = logging.getLogger(__name__)
 
@@ -75,11 +74,12 @@ def juntar_rota(query):
     )
 
 
-def _rota_id_da_viagem(viagem: Viagem):
-    if viagem.rota_id:
-        return viagem.rota_id
-    if viagem.horario_rota:
-        return viagem.horario_rota.rota_id
+def _rota_da_viagem(viagem: Viagem) -> Rota | None:
+    # On-demand trips have no horario_rota; older fixed trips may lack rota_id.
+    if viagem.rota is not None:
+        return viagem.rota
+    if viagem.horario_rota is not None:
+        return viagem.horario_rota.rota
     return None
 
 
@@ -87,11 +87,8 @@ def _exigir_viagem_da_organizacao(
     viagem: Viagem, user: User, mensagem: str = "Acesso negado"
 ) -> None:
     """Raise ForbiddenError unless the trip's route belongs to the user's organização."""
-    rota_id = _rota_id_da_viagem(viagem)
-    if rota_id is None:
-        raise ForbiddenError(mensagem)
-    rota = db.session.get(Rota, rota_id)
-    if not rota or rota.organizacao_id != user.organizacao_id:
+    rota = _rota_da_viagem(viagem)
+    if rota is None or rota.organizacao_id != user.organizacao_id:
         raise ForbiddenError(mensagem)
 
 
@@ -321,8 +318,10 @@ def listar_pontos_embarque(user_id: str, viagem_id: str) -> list[dict]:
     if not viagem:
         raise NotFoundError("Viagem não encontrada")
 
-    rota_id = _rota_id_da_viagem(viagem)
-    if not rota_id:
+    rota_id = viagem.rota_id
+    if rota_id is None and viagem.horario_rota is not None:
+        rota_id = viagem.horario_rota.rota_id
+    if rota_id is None:
         raise NotFoundError("Rota da viagem não encontrada")
 
     inscricao = db.session.query(RotaAluno).filter_by(rota_id=rota_id, aluno_id=aluno.id).first()
@@ -891,6 +890,11 @@ def atualizar_localizacao(user_id: str, viagem_id: str, data: dict) -> dict:
     if not viagem:
         raise NotFoundError("Viagem não encontrada")
 
+    # Authorize before the status check so other drivers cannot probe a trip's state;
+    # a trip without a driver also falls here, so its assignment does not leak.
+    if viagem.motorista_id != user.id:
+        raise ForbiddenError("Apenas o motorista desta viagem pode enviar a localização.")
+
     if viagem.status != StatusViagem.EM_ANDAMENTO:
         raise ValidationError(f"A viagem não está em andamento (Status: {viagem.status.name})")
 
@@ -976,7 +980,7 @@ def obter_localizacao_onibus(user_id: str, viagem_id: str) -> dict:
     if not user:
         raise ForbiddenError("Acesso negado")
 
-    viagem = db.session.get(Viagem, validate_uuid(viagem_id, "ID da viagem"))
+    viagem = db.session.get(Viagem, viagem_id)
     if not viagem:
         raise NotFoundError("Viagem não encontrada")
 
@@ -985,7 +989,7 @@ def obter_localizacao_onibus(user_id: str, viagem_id: str) -> dict:
         if viagem.motorista_id != user.id:
             raise ForbiddenError("Apenas o motorista desta viagem pode consultar a localização.")
     elif user.role == UserRole.ALUNO:
-        conf = AlunosConfirmados.query.filter_by(viagem_id=viagem.id, aluno_id=user_id).first()
+        conf = AlunosConfirmados.query.filter_by(viagem_id=viagem.id, aluno_id=user.id).first()
         if not conf or not conf.confirmacao:
             raise ForbiddenError(
                 "Você precisa estar confirmado nesta viagem para ver a localização do ônibus."
@@ -1026,12 +1030,13 @@ def atualizar_localizacao_aluno(user_id: str, viagem_id: str, data: dict) -> dic
     if not viagem:
         raise NotFoundError("Viagem não encontrada.")
 
-    if viagem.status != StatusViagem.EM_ANDAMENTO:
-        raise ValidationError("A viagem precisa de estar em andamento para rastrear o embarque.")
-
-    conf = AlunosConfirmados.query.filter_by(viagem_id=viagem.id, aluno_id=user_id).first()
+    # Authorize before the status check so outsiders cannot probe a trip's state.
+    conf = AlunosConfirmados.query.filter_by(viagem_id=viagem.id, aluno_id=user.id).first()
     if not conf or not conf.confirmacao:
         raise ForbiddenError("O utilizador não está confirmado nesta viagem.")
+
+    if viagem.status != StatusViagem.EM_ANDAMENTO:
+        raise ValidationError("A viagem precisa de estar em andamento para rastrear o embarque.")
 
     if conf.embarcou:
         return {
@@ -1051,30 +1056,6 @@ def atualizar_localizacao_aluno(user_id: str, viagem_id: str, data: dict) -> dic
         "message": "Localização do aluno atualizada com sucesso para validação de check-in.",
         "embarcou": False,
     }
-
-
-def obter_progresso_viagem(gestor_id: str, viagem_id: str):
-    """Return the stops the driver has already passed, in chronological order."""
-    user = db.session.get(User, gestor_id)
-    if not user or user.role != UserRole.GESTOR:
-        raise ForbiddenError("Apenas gestores podem auditar o trajeto")
-
-    pontos_visitados = (
-        ViagemPonto.query.filter(
-            ViagemPonto.viagem_id == viagem_id, ViagemPonto.chegada_real.isnot(None)
-        )
-        .order_by(ViagemPonto.chegada_real.asc())
-        .all()
-    )
-
-    return [
-        {
-            "ponto_id": str(vp.ponto_id),
-            "apelido": vp.ponto.apelido,
-            "horario_passagem": str(vp.chegada_real),
-        }
-        for vp in pontos_visitados
-    ]
 
 
 # States in which the on-demand round occupies the vehicle. No trip in these states = Idle.

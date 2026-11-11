@@ -125,7 +125,9 @@ class OcorrenciaService:
         """Manager marks an incident as resolved."""
         from app.services.user_service import _get_gestor_or_403
 
-        gestor = _get_gestor_or_403(gestor_id, "Apenas gestores podem resolver ocorrências.")
+        gestor = _get_gestor_or_403(
+            gestor_id, "Apenas gestores podem resolver ocorrências.", require_active=True
+        )
 
         # Org filter inside the locked query: another org's manager never locks the row.
         # 404, not 403: listar() hides other organizations' incidents, so don't reveal they exist.

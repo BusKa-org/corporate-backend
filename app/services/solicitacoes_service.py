@@ -15,7 +15,6 @@ from app.models.viagem import AlunosConfirmados, SolicitacaoViagem, Viagem
 from app.services import capacidade_service, janelas_service, viagens_service
 from app.services.notificacao_service import NotificacaoService
 from app.utils import tempo
-from app.utils.validators import validate_uuid
 
 EM_VIAGEM = "A conta está em uma viagem em andamento. Aguarde o fim da viagem."
 
@@ -66,7 +65,7 @@ def solicitar_viagem(user_id: str, rota_id: str) -> SolicitacaoViagem:
     """
     aluno = _buscar_aluno(user_id)
 
-    rota = db.session.get(Rota, validate_uuid(rota_id, "ID da rota"))
+    rota = db.session.get(Rota, rota_id)
     if not rota or not rota.ativa:
         raise NotFoundError("Rota não encontrada")
 
@@ -168,7 +167,7 @@ def cancelar_solicitacao(user_id: str, viagem_id: str) -> SolicitacaoViagem:
     """
     aluno = _buscar_aluno(user_id)
 
-    viagem = db.session.get(Viagem, validate_uuid(viagem_id, "ID da viagem"))
+    viagem = db.session.get(Viagem, viagem_id)
     if not viagem:
         raise NotFoundError("Viagem não encontrada")
 
@@ -396,7 +395,7 @@ def declarar_trajeto(user_id: str, viagem_id: str, data: dict) -> SolicitacaoVia
     """
     aluno = _buscar_aluno(user_id)
 
-    viagem = db.session.get(Viagem, validate_uuid(viagem_id, "ID da viagem"))
+    viagem = db.session.get(Viagem, viagem_id)
     if not viagem:
         raise NotFoundError("Viagem não encontrada")
 
@@ -426,7 +425,7 @@ def buscar_rodada_ativa(user_id: str, rota_id: str) -> dict:
     if not user or user.role not in (UserRole.ALUNO, UserRole.GESTOR, UserRole.MOTORISTA):
         raise ForbiddenError("Acesso negado")
 
-    rota = db.session.get(Rota, validate_uuid(rota_id, "ID da rota"))
+    rota = db.session.get(Rota, rota_id)
     if not rota or not rota.ativa:
         raise NotFoundError("Rota não encontrada")
 

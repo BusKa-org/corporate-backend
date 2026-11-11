@@ -18,7 +18,7 @@ from app.models.enum import StatusOcorrencia, StatusViagem, TipoOcorrencia
 from app.models.ocorrencia import Ocorrencia
 from app.models.viagem import AlunosConfirmados, TelemetriaViagem, Viagem, ViagemPonto
 from app.services import buffer_service, consentimento_service, credencial_embarque_service
-from tests.conftest import Actor, AuthenticatedClient, reservar_trajeto
+from tests.conftest import Actor, AuthenticatedClient, aceitar_termo, reservar_trajeto
 from tests.factories.user_factory import AlunoFactory, MotoristaFactory
 from tests.factories.viagem_factory import SolicitacaoViagemFactory, ViagemFactory
 from tests.helpers import imagens
@@ -420,6 +420,14 @@ def test_validacao_antiga_responde_410(rodada, motorista, aluno, _db):
 
 
 @pytest.mark.integration
+def test_validacao_antiga_responde_410_para_id_que_nao_e_uuid(motorista):
+    r = motorista.client.post("/v1/embarque/viagens/nao-e-uuid/validacao", json={})
+
+    assert r.status_code == 410
+    assert _codigo_erro(r) == "ENDPOINT_DESCONTINUADO"
+
+
+@pytest.mark.integration
 @pytest.mark.parametrize("passo", ["checkin", "confirmacao", "recusa"])
 @pytest.mark.parametrize(
     "qr",
@@ -697,9 +705,13 @@ def test_motorista_ve_a_foto_do_passageiro_do_roteiro_e_o_de_outra_viagem_nao(
     outro = MotoristaFactory(organizacao_id=organizacao.id)
     _db.session.add(outro)
     _db.session.commit()
+    aceitar_termo(_db, outro.id)
     with app.app_context():
         headers = {"Authorization": f"Bearer {create_access_token(identity=str(outro.id))}"}
-    assert client.get(foto_url, headers=headers).status_code == 403
+    negada = client.get(foto_url, headers=headers)
+    assert negada.status_code == 403
+    # The ownership check, not the consent hook.
+    assert negada.get_json()["error"]["message"] == "Aluno não é passageiro de uma viagem sua"
 
 
 # RF-18: batch sync
