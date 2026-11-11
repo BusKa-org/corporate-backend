@@ -3,8 +3,6 @@
 import logging
 from typing import Any
 
-from sqlalchemy import select
-
 from app.core.exceptions import AppError, ForbiddenError, NotFoundError, ValidationError
 from app.models.base import db
 from app.models.enum import StatusOcorrencia, TipoOcorrencia, UserRole
@@ -12,8 +10,16 @@ from app.models.ocorrencia import Ocorrencia
 from app.models.user import User
 from app.models.viagem import Viagem
 from app.utils import audit_logger
+from app.utils.validators import validate_uuid
 
 logger = logging.getLogger(__name__)
+
+
+def _organizacao_da_viagem(viagem: Viagem) -> Any:
+    """The route's organization; the driver's or vehicle's if the route was deleted (SET NULL)."""
+    rota = viagem.rota or (viagem.horario_rota.rota if viagem.horario_rota else None)
+    dono = rota or viagem.motorista or viagem.veiculo
+    return dono.organizacao_id if dono else None
 
 
 class OcorrenciaService:
@@ -37,16 +43,10 @@ class OcorrenciaService:
 
         viagem_id = dados.get("viagem_id")
         if viagem_id:
-            from app.services.viagens_service import _exigir_viagem_da_organizacao
-
-            viagem = db.session.get(Viagem, viagem_id)
-            if not viagem:
+            viagem = db.session.get(Viagem, validate_uuid(viagem_id, "ID da viagem"))
+            # Another organization's trip gets the same answer as a missing one.
+            if not viagem or _organizacao_da_viagem(viagem) != user.organizacao_id:
                 raise NotFoundError("Viagem não encontrada.")
-            try:
-                _exigir_viagem_da_organizacao(viagem, user)
-            except ForbiddenError:
-                # Another organization's trip gets the same answer as a missing one.
-                raise NotFoundError("Viagem não encontrada.") from None
 
         try:
             ocorrencia = Ocorrencia(
@@ -126,15 +126,18 @@ class OcorrenciaService:
 
         gestor = _get_gestor_or_403(gestor_id, "Apenas gestores podem resolver ocorrências.")
 
-        # Row lock: a concurrent resolve waits and then sees it already resolved.
-        db.session.execute(
-            select(Ocorrencia.id)
-            .where(Ocorrencia.id == ocorrencia_id)
-            .with_for_update(key_share=True)
-        )
-        ocorrencia = db.session.get(Ocorrencia, ocorrencia_id, populate_existing=True)
+        # Org filter inside the locked query: another org's manager never locks the row.
         # 404, not 403: listar() hides other organizations' incidents, so don't reveal they exist.
-        if not ocorrencia or ocorrencia.autor.organizacao_id != gestor.organizacao_id:
+        # of=Ocorrencia: the joined-eager autor is an outer join, which FOR UPDATE can't lock.
+        ocorrencia = (
+            db.session.query(Ocorrencia)
+            .join(User, Ocorrencia.autor_id == User.id)
+            .filter(Ocorrencia.id == ocorrencia_id, User.organizacao_id == gestor.organizacao_id)
+            .with_for_update(of=Ocorrencia, key_share=True)
+            .populate_existing()
+            .one_or_none()
+        )
+        if not ocorrencia:
             raise NotFoundError("Ocorrência não encontrada.")
         if ocorrencia.status == StatusOcorrencia.RESOLVIDA:
             raise ValidationError("Ocorrência já foi resolvida.")

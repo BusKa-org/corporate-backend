@@ -63,3 +63,28 @@ def test_aluno_reporta_ocorrencia_em_viagem_da_organizacao(
 
     assert response.status_code == 201
     assert response.get_json()["viagem_id"] == viagem_id
+
+
+def test_viagem_id_que_nao_e_uuid_devolve_400(aluno, _db):
+    response = aluno.client.post(
+        "/v1/ocorrencias/", json={"tipo": "ATRASO", "viagem_id": "nao-e-uuid"}
+    )
+
+    assert response.status_code == 400
+    assert _db.session.query(Ocorrencia).count() == 0
+
+
+def test_viagem_da_organizacao_sem_rota_usa_o_motorista(
+    aluno, viagem_futura_agendada_com_motorista, _db
+):
+    # The route FKs are ON DELETE SET NULL: a deleted route leaves the trip without one.
+    viagem = viagem_futura_agendada_com_motorista
+    viagem.rota_id = None
+    viagem.horario_rota_id = None
+    _db.session.commit()
+
+    response = aluno.client.post(
+        "/v1/ocorrencias/", json={"tipo": "ATRASO", "viagem_id": str(viagem.id)}
+    )
+
+    assert response.status_code == 201
