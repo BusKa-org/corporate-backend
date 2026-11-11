@@ -11,7 +11,7 @@ from app.utils.security import SecurityConfig
 def validate_uuid(value: str, field_name: str = "ID") -> uuid.UUID:
     """Validate UUID format and return a uuid.UUID. Raises ValidationError if invalid."""
     try:
-        return uuid.UUID(value, version=4)
+        return uuid.UUID(value)
     except (ValueError, AttributeError, TypeError):
         raise ValidationError(f"{field_name} deve ser um UUID válido")
 
