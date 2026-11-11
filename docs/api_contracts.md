@@ -167,8 +167,14 @@ Only run in the scheduler process (`RUN_SCHEDULER`).
 
 - `POST /v1/viagens/` on an on-demand route returns 400 (trips come from requests).
   On success it now returns 201 with the serialized trip (before, it returned the raw ORM object).
-- `PUT /v1/viagens/<id>/confirmacao` on an on-demand trip returns 400, and on a trip that is
-  no longer `AGENDADA` returns 409 (the attendance is kept as the trip's record).
+- `PUT /v1/viagens/<id>/confirmacao` on an on-demand trip returns 400. Once a fixed trip is no
+  longer `AGENDADA` the attendance is kept as the trip's record, with one exception:
+  `{"confirmacao": false}` on an `EM_ANDAMENTO` trip is a dropout (200): it sets
+  `confirmacao = false` and `desistencia_em`, so the student leaves the boarding list,
+  approach notices and auto-checkin; resending it keeps the first `desistencia_em`.
+  It returns 409 if the student already boarded or was not confirmed. Everything else after
+  `AGENDADA` (`confirmacao: true` on `EM_ANDAMENTO`, any change on `FINALIZADA`/`CANCELADA`)
+  returns 409.
 - `PUT /v1/viagens/<id>/cancelar` returns 403 for a trip of another organization, and
   also cancels and notifies the active requests of the trip.
 - Trip listings, the student agenda and the dashboard include on-demand trips.
@@ -357,11 +363,15 @@ Gestor lista os alunos da sua organização que faltaram ou desistiram de uma vi
 período (datas inclusivas, pela data da viagem). Outro papel: 403.
 
 - `AUSENCIA`: aluno confirmado (`alunos_confirmados.confirmacao`) que não embarcou numa
-  viagem `FINALIZADA`. `registrado_em` = fim da viagem (`fim_real`; viagem antiga sem ele
-  usa a última atualização da viagem, então nunca é nulo).
-- `DESISTENCIA`: solicitação cancelada após a partida (RF-19), em viagem não `CANCELADA`
-  e de aluno que não embarcou. `registrado_em` = hora do cancelamento. Cancelamento antes
-  da partida devolve a vaga e não aparece.
+  viagem `FINALIZADA`.
+- `DESISTENCIA`: aluno que não embarcou e desistiu após a partida, em viagem não
+  `CANCELADA`. Viagem fixa: `alunos_confirmados.desistencia_em`. Viagem sob demanda:
+  solicitação `DESISTENCIA` (RF-19), uma linha por viagem e aluno mesmo com solicitações
+  repetidas (vale a mais recente). Cancelamento antes da partida devolve a vaga e não aparece.
+- `registrado_em` não muda depois: `AUSENCIA` usa o fim da viagem (`fim_real`);
+  `DESISTENCIA` usa a hora da desistência (`desistencia_em`, ou `cancelada_em` e então
+  `created_at` da solicitação). Sem esses valores, cai na partida prevista em hora local
+  (`data` + `horario_saida`, ou `data` às 00:00 em viagem sob demanda), então nunca é nulo.
 - Calculado dos dados existentes, sem tabela nova. Ordem: data desc, nome do aluno, e
   `viagem_id`/`aluno_id`/`tipo` para desempate estável entre páginas.
 - Resposta: `{items, total, page, per_page}`; cada item tem `tipo`, `aluno_id`,
