@@ -129,9 +129,7 @@ def test_confirmar_presenca_bloqueada_se_em_outra_viagem_em_andamento(
     assert r.status_code == esperado, r.get_data(as_text=True)
 
 
-@pytest.mark.parametrize(
-    "status", [StatusViagem.EM_ANDAMENTO, StatusViagem.FINALIZADA, StatusViagem.CANCELADA]
-)
+@pytest.mark.parametrize("status", [StatusViagem.FINALIZADA, StatusViagem.CANCELADA])
 def test_presenca_nao_muda_depois_que_a_viagem_saiu_de_agendada(
     _db, aluno, rota_aluno, viagem_futura_agendada_com_motorista, status
 ):
@@ -147,3 +145,74 @@ def test_presenca_nao_muda_depois_que_a_viagem_saiu_de_agendada(
     assert r.status_code == 409, r.get_data(as_text=True)
     _db.session.expire_all()
     assert _db.session.get(AlunosConfirmados, (viagem.id, aluno.user.id)).confirmacao is True
+
+
+def _em_andamento_com(_db, aluno, viagem, **campos):
+    _db.session.add(AlunosConfirmadosFactory(viagem_id=viagem.id, aluno_id=aluno.user.id, **campos))
+    viagem.status = StatusViagem.EM_ANDAMENTO
+    _db.session.commit()
+
+
+def test_desiste_de_viagem_fixa_depois_da_partida(
+    _db, aluno, rota_aluno, viagem_futura_agendada_com_motorista
+):
+    viagem = viagem_futura_agendada_com_motorista
+    _em_andamento_com(_db, aluno, viagem, confirmacao=True, embarcou=False)
+    url = f"/v1/viagens/{viagem.id}/confirmacao"
+
+    r = aluno.client.put(url, json={"confirmacao": False})
+
+    assert r.status_code == 200, r.get_data(as_text=True)
+    _db.session.expire_all()
+    registro = _db.session.get(AlunosConfirmados, (viagem.id, aluno.user.id))
+    assert registro.confirmacao is False
+    desistencia_em = registro.desistencia_em
+    assert desistencia_em is not None
+
+    # Resending is a no-op: the dropout time stays the first one.
+    assert aluno.client.put(url, json={"confirmacao": False}).status_code == 200
+    _db.session.expire_all()
+    registro = _db.session.get(AlunosConfirmados, (viagem.id, aluno.user.id))
+    assert registro.desistencia_em == desistencia_em
+
+
+def test_nao_desiste_de_viagem_fixa_depois_de_embarcar(
+    _db, aluno, rota_aluno, viagem_futura_agendada_com_motorista
+):
+    viagem = viagem_futura_agendada_com_motorista
+    _em_andamento_com(_db, aluno, viagem, confirmacao=True, embarcou=True)
+
+    r = aluno.client.put(f"/v1/viagens/{viagem.id}/confirmacao", json={"confirmacao": False})
+
+    assert r.status_code == 409, r.get_data(as_text=True)
+    _db.session.expire_all()
+    registro = _db.session.get(AlunosConfirmados, (viagem.id, aluno.user.id))
+    assert registro.confirmacao is True
+    assert registro.desistencia_em is None
+
+
+def test_nao_desiste_de_viagem_em_que_nao_estava_confirmado(
+    _db, aluno, rota_aluno, viagem_futura_agendada_com_motorista
+):
+    viagem = viagem_futura_agendada_com_motorista
+    _em_andamento_com(_db, aluno, viagem, confirmacao=False, embarcou=False)
+
+    r = aluno.client.put(f"/v1/viagens/{viagem.id}/confirmacao", json={"confirmacao": False})
+
+    assert r.status_code == 409, r.get_data(as_text=True)
+    _db.session.expire_all()
+    assert _db.session.get(AlunosConfirmados, (viagem.id, aluno.user.id)).desistencia_em is None
+
+
+def test_nao_confirma_depois_da_partida(
+    _db, aluno, rota_aluno, viagem_futura_agendada_com_motorista, rota_ponto
+):
+    viagem = viagem_futura_agendada_com_motorista
+    _em_andamento_com(_db, aluno, viagem, confirmacao=False, embarcou=False)
+
+    r = aluno.client.put(
+        f"/v1/viagens/{viagem.id}/confirmacao",
+        json={"confirmacao": True, "ponto_embarque_id": str(rota_ponto.ponto_id)},
+    )
+
+    assert r.status_code == 409, r.get_data(as_text=True)

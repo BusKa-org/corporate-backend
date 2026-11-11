@@ -164,20 +164,25 @@ def confirmar_presenca_aluno(
         if not horario:
             raise NotFoundError("Horário da viagem não encontrado")
 
-        # Lock the student before reading the record: a double tap waits for the first and
-        # finds the record already created (200, same result) instead of hitting the PK (409).
-        db.session.execute(
-            select(User.id).where(User.id == aluno.usuario_id).with_for_update(key_share=True)
-        )
-        # Locked so INICIAR cannot slip in between: once the trip left, the attendance is
-        # evidence (no-show/boarding) and must not be rewritten by the student.
+        # Trip before student, the system-wide lock order (travar_viagem, excluir_conta).
+        # FOR SHARE: confirmers of one trip run in parallel, but INICIAR's FOR UPDATE waits.
         viagem = (
             db.session.query(Viagem)
             .filter(Viagem.id == viagem.id)
-            .with_for_update(key_share=True)
+            .with_for_update(read=True)
             .populate_existing()
             .one()
         )
+        # A double tap waits for the first and finds the record already created (200,
+        # same result) instead of hitting the PK (409).
+        db.session.execute(
+            select(User.id).where(User.id == aluno.usuario_id).with_for_update(key_share=True)
+        )
+
+        if viagem.status == StatusViagem.EM_ANDAMENTO and not confirmacao:
+            return _desistir_apos_partida(viagem, aluno.usuario_id)
+        # Once the trip left, attendance is evidence (no-show/boarding) and only a dropout
+        # may still change it.
         if viagem.status != StatusViagem.AGENDADA:
             raise ConflictError(
                 f"Não é possível alterar a presença em uma viagem com status {viagem.status.name}"
@@ -242,6 +247,31 @@ def confirmar_presenca_aluno(
             registro.ponto_destino_id = None
 
         return registro
+
+
+def _desistir_apos_partida(viagem: Viagem, aluno_id) -> AlunosConfirmados:
+    """Fixed trip dropout after departure: leaves the boarding list, the dashboard lists it."""
+    # Same row lock as boarding (embarque_service._travar_registro): either the boarding
+    # or the dropout wins, never both.
+    registro = (
+        db.session.query(AlunosConfirmados)
+        .filter_by(viagem_id=viagem.id, aluno_id=aluno_id)
+        .with_for_update()
+        .populate_existing()
+        .one_or_none()
+    )
+    if registro is None:
+        raise ConflictError("Você não está confirmado nesta viagem")
+    if registro.embarcou:
+        raise ConflictError("Você já embarcou nesta viagem e não pode mais desistir dela")
+    if registro.desistencia_em is not None:
+        return registro
+    if not registro.confirmacao:
+        raise ConflictError("Você não está confirmado nesta viagem")
+
+    registro.confirmacao = False
+    registro.desistencia_em = _agora()
+    return registro
 
 
 def listar_pontos_embarque(user_id: str, viagem_id: str) -> list[dict]:
