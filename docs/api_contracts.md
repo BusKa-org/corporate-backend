@@ -83,11 +83,13 @@ for the normal idle case).
 
 | Status | When |
 |---|---|
-| 400 | fixed route; malformed id |
+| 400 | fixed route |
 | 403 | other organization; role without access |
-| 404 | route not found |
+| 404 | route not found; route id not a canonical UUID |
 
-Every on-demand endpoint returns 400 for a malformed id in the path.
+`/v1/rotas/<id>/solicitacoes` and `/v1/rotas/<id>/viagem-ativa` take the id through
+Werkzeug's `uuid` converter, so a malformed id returns 404 at routing (it was 400). The
+vehicle window ids under `/v1/onibus` still return 400 for a malformed id.
 
 ### Route declaration (RF-13, RF-14)
 
@@ -172,15 +174,20 @@ Only run in the scheduler process (`RUN_SCHEDULER`).
 - Trip listings, the student agenda and the dashboard include on-demand trips.
 - Every `/v1/viagens/<id>/...` route (`declaracao`, `pontos-embarque`,
   `credencial-embarque`, `confirmacao`, `acao`, `cancelar`, `localizacao`,
-  `localizacao-aluno`, `solicitacao`, `iniciar-percurso`) and
-  `GET /v1/dashboard/viagens/<viagem_id>/progresso` take the id through Werkzeug's `uuid`
-  converter. A malformed id returns 404 at routing (it was 400, or a 500 on some routes).
+  `localizacao-aluno`, `solicitacao`, `iniciar-percurso`), every
+  `/v1/embarque/viagens/<viagem_id>/...` route (`roteiro`, `roteiro/avancar`, `validacao`,
+  `checkin`, `confirmacao`, `recusa`, `manual`, `sincronizacao`) and
+  `GET /v1/dashboard/viagens/<viagem_id>/progresso` and `/trajeto-real` take the id through
+  Werkzeug's `uuid` converter. A malformed id returns 404 at routing (it was 400, or a 500 on some routes).
   The converter only matches the canonical hyphenated form, so a hyphenless or braced
   UUID also returns 404.
+- `GET /v1/viagens/?rota_id=&motorista_id=`: any spelling Python's `uuid.UUID` accepts
+  (hyphenless, braced, `urn:uuid:`) is normalized before filtering; anything else is 400.
 - `POST /v1/viagens/<id>/localizacao`: body `{"latitude": -90..90, "longitude":
   -180..180}`, both required numbers; a missing or invalid body returns 400
-  (`VALIDATION_ERROR`). 409 when the trip has no driver assigned. Otherwise 403 unless
-  the caller is the trip's driver, and authorization runs before the status check.
+  (`VALIDATION_ERROR`). 403 unless the caller is the trip's driver (also when the trip
+  has no driver, so the assignment does not leak), and authorization runs before the
+  status check.
 - `POST /v1/viagens/<id>/localizacao-aluno`: same body validation (400). A student not
   confirmed on the trip now gets 403 before the status check; on a trip that is not
   running this was 400 before.

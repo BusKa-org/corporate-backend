@@ -13,7 +13,6 @@ from app.models.viagem import AlunosConfirmados, SolicitacaoViagem, Viagem
 from app.services import capacidade_service, janelas_service, viagens_service
 from app.services.notificacao_service import NotificacaoService
 from app.utils import tempo
-from app.utils.validators import validate_uuid
 
 
 def _buscar_aluno(user_id: str) -> Aluno:
@@ -48,7 +47,7 @@ def solicitar_viagem(user_id: str, rota_id: str) -> SolicitacaoViagem:
     """
     aluno = _buscar_aluno(user_id)
 
-    rota = db.session.get(Rota, validate_uuid(rota_id, "ID da rota"))
+    rota = db.session.get(Rota, rota_id)
     if not rota:
         raise NotFoundError("Rota não encontrada")
 
@@ -278,7 +277,7 @@ def buscar_rodada_ativa(user_id: str, rota_id: str) -> dict:
     if not user or user.role not in (UserRole.ALUNO, UserRole.GESTOR, UserRole.MOTORISTA):
         raise ForbiddenError("Acesso negado")
 
-    rota = db.session.get(Rota, validate_uuid(rota_id, "ID da rota"))
+    rota = db.session.get(Rota, rota_id)
     if not rota:
         raise NotFoundError("Rota não encontrada")
 

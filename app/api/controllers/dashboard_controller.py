@@ -99,7 +99,7 @@ class IndicadoresExportacaoResource(Resource):
         )
 
 
-@api.route("/viagens/<string:viagem_id>/trajeto-real")
+@api.route("/viagens/<uuid:viagem_id>/trajeto-real")
 class TrajetoRealViagemResource(Resource):
     @api.doc("trajeto_real_viagem")
     @api.marshal_list_with(models["ponto_telemetria"], code=200)
@@ -107,5 +107,5 @@ class TrajetoRealViagemResource(Resource):
     def get(self, viagem_id):
         """Gets the full GPS trail (actual route) of a trip."""
         current_user_id = get_jwt_identity()
-        rastros = obter_telemetria_viagem(gestor_id=current_user_id, viagem_id=viagem_id)
+        rastros = obter_telemetria_viagem(gestor_id=current_user_id, viagem_id=str(viagem_id))
         return rastros, 200

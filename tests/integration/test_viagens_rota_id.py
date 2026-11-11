@@ -60,6 +60,13 @@ def test_listagem_do_gestor_inclui_viagem_sob_demanda(gestor, viagem_solicitada,
     r = gestor.client.get(f"/v1/viagens/?rota_id={viagem_solicitada.rota_id}&status=SOLICITADA")
     assert len(r.get_json()["items"]) == 1
 
+    # Non-canonical spellings are normalized before reaching SQL.
+    r = gestor.client.get(f"/v1/viagens/?rota_id=urn:uuid:{viagem_solicitada.rota_id}")
+    assert r.status_code == 200, r.get_data(as_text=True)
+    assert len(r.get_json()["items"]) == 1
+
+    assert gestor.client.get("/v1/viagens/?rota_id=nao-e-uuid").status_code == 400
+
 
 def test_agenda_do_aluno_com_viagem_sob_demanda(
     aluno, rota_sob_demanda, motorista, _db, horario_rota, relogio

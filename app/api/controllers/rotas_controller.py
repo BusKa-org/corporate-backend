@@ -1,4 +1,5 @@
 from typing import Any
+from uuid import UUID
 
 from flask import request
 from flask_jwt_extended import get_jwt_identity, jwt_required
@@ -204,26 +205,26 @@ class RotaResource(Resource):
         return {"message": "Rota removida com sucesso"}, 200
 
 
-@api.route("/<string:id>/solicitacoes")
+@api.route("/<uuid:id>/solicitacoes")
 class RotaSolicitacoesResource(Resource):
     @api.doc("solicitar_viagem")
     @api.response(201, "Created", solicitacao_models["solicitacao_response"])
     @jwt_required()
     @exige_consentimento
-    def post(self, id: str) -> tuple[dict[str, Any], int]:
+    def post(self, id: UUID) -> tuple[dict[str, Any], int]:
         """(Student) Requests the on-demand route's vehicle within the availability window."""
         user_id = get_jwt_identity()
-        solicitacao = solicitacoes_service.solicitar_viagem(user_id, id)
+        solicitacao = solicitacoes_service.solicitar_viagem(user_id, str(id))
         return solicitacao_response_schema.dump(solicitacao), 201
 
 
-@api.route("/<string:id>/viagem-ativa")
+@api.route("/<uuid:id>/viagem-ativa")
 class RotaViagemAtivaResource(Resource):
     @api.doc("rodada_ativa")
     @api.response(200, "Success", solicitacao_models["rodada_ativa_response"])
     @jwt_required()
-    def get(self, id: str) -> tuple[dict[str, Any], int]:
+    def get(self, id: UUID) -> tuple[dict[str, Any], int]:
         """Active round of the on-demand route (viagem null when idle) and today's windows."""
         user_id = get_jwt_identity()
-        rodada = solicitacoes_service.buscar_rodada_ativa(user_id, id)
+        rodada = solicitacoes_service.buscar_rodada_ativa(user_id, str(id))
         return rodada_ativa_response_schema.dump(rodada), 200

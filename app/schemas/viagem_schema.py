@@ -8,7 +8,6 @@ from marshmallow.validate import OneOf, Range
 
 from app.models.enum import StatusViagem
 from app.schemas.common import BaseSchema
-from app.schemas.validators import validate_uuid
 
 # -------------------------
 # Common helpers / fields
@@ -118,8 +117,8 @@ class ViagemListQuerySchema(BaseSchema):
     data_fim = DateISOField(required=False, allow_none=True)
 
     status = EnumByNameField(StatusViagem, required=False, allow_none=True)
-    motorista_id = fields.String(required=False, allow_none=True, validate=validate_uuid)
-    rota_id = fields.String(required=False, allow_none=True, validate=validate_uuid)
+    motorista_id = fields.UUID(required=False, allow_none=True)
+    rota_id = fields.UUID(required=False, allow_none=True)
 
     # Optional pagination, so "total" stays correct once it is used
     page = fields.Integer(required=False, load_default=1, validate=Range(min=1))

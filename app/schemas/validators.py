@@ -1,7 +1,6 @@
 """Input validation utilities for enhanced security."""
 
 import re
-import uuid
 from typing import Any
 
 from marshmallow import ValidationError as MarshmallowValidationError
@@ -16,15 +15,6 @@ def validate_optional_string(value: str | None, field_name: str = "Texto") -> st
     if not isinstance(value, str):
         raise MarshmallowValidationError(f"{field_name} deve ser uma string")
     return value
-
-
-def validate_uuid(value: str, field_name: str = "ID") -> str:
-    """Validate UUID format (any version). Raises ValidationError if invalid."""
-    try:
-        uuid.UUID(value)
-        return value
-    except (ValueError, AttributeError, TypeError):
-        raise MarshmallowValidationError(f"{field_name} deve ser um UUID válido")
 
 
 def validate_optional_cpf(value: str | None, field_name: str = "CPF") -> str | None:
