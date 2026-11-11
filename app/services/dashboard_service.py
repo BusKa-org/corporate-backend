@@ -515,7 +515,8 @@ def listar_ausencias(gestor_id: str, inicio: date, fim: date, page: int, per_pag
             Viagem.id.label("viagem_id"),
             Viagem.data.label("data"),
             Rota.nome.label("rota_nome"),
-            Viagem.fim_real.label("registrado_em"),
+            # Older finished trips may lack fim_real; updated_at is the finalization write.
+            func.coalesce(Viagem.fim_real, Viagem.updated_at).label("registrado_em"),
         )
         .select_from(Viagem)
         .join(AlunosConfirmados, AlunosConfirmados.viagem_id == Viagem.id)
@@ -535,15 +536,27 @@ def listar_ausencias(gestor_id: str, inicio: date, fim: date, page: int, per_pag
             Viagem.id.label("viagem_id"),
             Viagem.data.label("data"),
             Rota.nome.label("rota_nome"),
-            SolicitacaoViagem.cancelada_em.label("registrado_em"),
+            func.coalesce(SolicitacaoViagem.cancelada_em, SolicitacaoViagem.created_at).label(
+                "registrado_em"
+            ),
         )
         .select_from(Viagem)
         .join(SolicitacaoViagem, SolicitacaoViagem.viagem_id == Viagem.id)
+        .outerjoin(
+            AlunosConfirmados,
+            and_(
+                AlunosConfirmados.viagem_id == Viagem.id,
+                AlunosConfirmados.aluno_id == SolicitacaoViagem.aluno_id,
+            ),
+        )
     ).where(
         Rota.organizacao_id == organizacao_id,
         Viagem.data >= inicio,
         Viagem.data <= fim,
         SolicitacaoViagem.status == StatusSolicitacao.DESISTENCIA,
+        Viagem.status != StatusViagem.CANCELADA,
+        # Rows from before the cancel flow refused dropping out after boarding.
+        AlunosConfirmados.embarcou.is_not(True),
     )
 
     ausencias = union_all(nao_embarcou, desistiu).subquery()
@@ -552,7 +565,13 @@ def listar_ausencias(gestor_id: str, inicio: date, fim: date, page: int, per_pag
     linhas = db.session.execute(
         select(ausencias, Aluno.nome, Aluno.foto_url)
         .join(Aluno, Aluno.usuario_id == ausencias.c.aluno_id)
-        .order_by(ausencias.c.data.desc(), Aluno.nome, ausencias.c.viagem_id)
+        .order_by(
+            ausencias.c.data.desc(),
+            Aluno.nome,
+            ausencias.c.viagem_id,
+            ausencias.c.aluno_id,
+            ausencias.c.tipo,
+        )
         .limit(per_page)
         .offset((page - 1) * per_page)
     ).all()
@@ -568,7 +587,7 @@ def listar_ausencias(gestor_id: str, inicio: date, fim: date, page: int, per_pag
                 "viagem_id": str(linha.viagem_id),
                 "rota_nome": linha.rota_nome,
                 "data": linha.data.isoformat(),
-                "registrado_em": linha.registrado_em.isoformat() if linha.registrado_em else None,
+                "registrado_em": linha.registrado_em.isoformat(),
             }
         )
 
