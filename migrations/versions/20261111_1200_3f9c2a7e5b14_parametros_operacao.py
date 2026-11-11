@@ -1,7 +1,7 @@
 """parametros_operacao: on-demand operation parameters per organization, motorista.pausa_ate
 
 Revision ID: 3f9c2a7e5b14
-Revises: d2e3f4a5b6c7
+Revises: 5c3e9a1f7b24
 Create Date: 2026-11-11 12:00:00.000000+00:00
 """
 
@@ -13,7 +13,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic
 revision: str = "3f9c2a7e5b14"
-down_revision: Union[str, None] = "d2e3f4a5b6c7"
+down_revision: Union[str, None] = "5c3e9a1f7b24"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
