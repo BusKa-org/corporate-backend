@@ -7,6 +7,11 @@ from limits import parse_many
 
 logger = logging.getLogger(__name__)
 
+# Allowed ranges of the on-demand operation parameters (env defaults and the gestor's PUT).
+OPERACAO_MINIMO_ALUNOS_MIN = 1
+OPERACAO_MINIMO_ALUNOS_MAX = 1000
+OPERACAO_MINUTOS_MAX = 1440
+
 
 class ConfigurationError(Exception):
     """Raised when required configuration is missing or invalid."""
@@ -93,6 +98,26 @@ class Settings:
             default=10,
             min_val=1,
             max_val=self.ROTA_PRAZO_INICIO_MINUTOS_MAX,
+        )
+
+        # On-demand operation parameters, per organization: used until the manager saves them.
+        self.OPERACAO_MINIMO_ALUNOS_PADRAO = self._get_int(
+            "OPERACAO_MINIMO_ALUNOS_PADRAO",
+            default=1,
+            min_val=OPERACAO_MINIMO_ALUNOS_MIN,
+            max_val=OPERACAO_MINIMO_ALUNOS_MAX,
+        )
+        self.OPERACAO_PAUSA_ENTRE_VIAGENS_MINUTOS_PADRAO = self._get_int(
+            "OPERACAO_PAUSA_ENTRE_VIAGENS_MINUTOS_PADRAO",
+            default=0,
+            min_val=0,
+            max_val=OPERACAO_MINUTOS_MAX,
+        )
+        self.OPERACAO_ANTECEDENCIA_MOTORISTA_MINUTOS_PADRAO = self._get_int(
+            "OPERACAO_ANTECEDENCIA_MOTORISTA_MINUTOS_PADRAO",
+            default=0,
+            min_val=0,
+            max_val=OPERACAO_MINUTOS_MAX,
         )
 
         # Driver working hours. CTB (Law 9.503/97) art. 67-C §1-A, added by Law

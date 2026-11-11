@@ -145,6 +145,7 @@ def test_excluir_conta_bloqueia_com_viagem_em_andamento(
 
     response = _excluir(aluno, aluno.user.email, SENHA)
     assert response.status_code == 409
+    assert "antes de excluir a conta" in response.get_json()["error"]["message"]
     assert aluno.user.status != UserStatus.DELETED
 
 

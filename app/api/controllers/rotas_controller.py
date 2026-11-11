@@ -164,6 +164,7 @@ class RotaHorariosResource(Resource):
     @api.doc("add_rota_horario")
     @api.expect(models["rota_horario_create_request"])
     @api.response(201, "Created", models["rota_horario_response"])
+    @api.response(409, "Horário idêntico (mesmo horário, sentido e dia) já ativo")
     @jwt_required()
     def post(self, id: str) -> tuple[dict[str, Any], int]:
         current_user = get_jwt_identity()
@@ -172,6 +173,35 @@ class RotaHorariosResource(Resource):
 
         horario = rotas_service.add_horario(current_user, id, payload)
         return horario_response_schema.dump(horario), 201
+
+
+@api.route("/<string:id>/horarios/<string:horario_id>")
+class RotaHorarioResource(Resource):
+    @api.doc("update_rota_horario")
+    @api.expect(models["rota_horario_create_request"])
+    @api.response(200, "Success", models["rota_horario_response"])
+    @api.response(404, "Horário não encontrado ou inativo")
+    @api.response(409, "Viagem pendente no horário ou horário idêntico já ativo")
+    @jwt_required()
+    def put(self, id: str, horario_id: str) -> tuple[dict[str, Any], int]:
+        """Replaces a schedule; one that already has trips is versioned under a new id."""
+        current_user = get_jwt_identity()
+        data = request.get_json(silent=True) or {}
+        payload = horario_create_request_schema.load(data)
+
+        horario = rotas_service.update_horario(current_user, id, horario_id, payload)
+        return horario_response_schema.dump(horario), 200
+
+    @api.doc("delete_rota_horario")
+    @api.response(200, "Success")
+    @api.response(404, "Horário não encontrado ou inativo")
+    @api.response(409, "Viagem pendente no horário")
+    @jwt_required()
+    def delete(self, id: str, horario_id: str) -> tuple[dict[str, Any], int]:
+        """Removes a schedule; one that already has trips is only deactivated."""
+        current_user = get_jwt_identity()
+        rotas_service.delete_horario(current_user, id, horario_id)
+        return {"message": "Horário removido com sucesso"}, 200
 
 
 @api.route("/<string:id>")
@@ -198,6 +228,7 @@ class RotaResource(Resource):
 
     @api.doc("delete_rota")
     @api.response(200, "Success")
+    @api.response(409, "Viagem pendente na rota")
     @jwt_required()
     def delete(self, id: str) -> tuple[dict[str, Any], int]:
         current_user_id = get_jwt_identity()

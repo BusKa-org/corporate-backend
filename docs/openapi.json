@@ -528,6 +528,51 @@
         ]
       }
     },
+    "/v1/dashboard/ausencias": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/AusenciasLista"
+            }
+          }
+        },
+        "summary": "(Manager) Lists students who missed a confirmed trip or dropped out of it",
+        "operationId": "listar_ausencias",
+        "parameters": [
+          {
+            "type": "integer",
+            "in": "query",
+            "description": "Itens por página (padrão 20, máximo 100)",
+            "name": "per_page"
+          },
+          {
+            "type": "integer",
+            "in": "query",
+            "description": "Página (padrão 1)",
+            "name": "page"
+          },
+          {
+            "required": true,
+            "in": "query",
+            "description": "Fim do período, inclusivo (YYYY-MM-DD)",
+            "name": "fim",
+            "type": "string"
+          },
+          {
+            "required": true,
+            "in": "query",
+            "description": "Início do período, inclusivo (YYYY-MM-DD)",
+            "name": "inicio",
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "dashboard"
+        ]
+      }
+    },
     "/v1/dashboard/indicadores": {
       "get": {
         "responses": {
@@ -1307,18 +1352,6 @@
           "onibus"
         ]
       },
-      "delete": {
-        "responses": {
-          "200": {
-            "description": "Success"
-          }
-        },
-        "summary": "Removes a bus",
-        "operationId": "delete_onibus",
-        "tags": [
-          "onibus"
-        ]
-      },
       "patch": {
         "responses": {
           "200": {
@@ -1340,6 +1373,18 @@
             }
           }
         ],
+        "tags": [
+          "onibus"
+        ]
+      },
+      "delete": {
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "Removes a bus",
+        "operationId": "delete_onibus",
         "tags": [
           "onibus"
         ]
@@ -1420,6 +1465,57 @@
         "operationId": "delete_janela",
         "tags": [
           "onibus"
+        ]
+      }
+    },
+    "/v1/parametros-operacao": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/ParametrosOperacaoResponse"
+            }
+          },
+          "403": {
+            "description": "Não é gestor nem motorista"
+          }
+        },
+        "summary": "On-demand operation parameters of the logged-in user's organization",
+        "operationId": "get_parametros_operacao",
+        "tags": [
+          "parametros-operacao"
+        ]
+      },
+      "put": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/ParametrosOperacaoResponse"
+            }
+          },
+          "400": {
+            "description": "Valores inválidos"
+          },
+          "403": {
+            "description": "Não é gestor"
+          }
+        },
+        "summary": "Saves the organization's on-demand operation parameters (gestor)",
+        "operationId": "put_parametros_operacao",
+        "parameters": [
+          {
+            "name": "payload",
+            "required": true,
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/ParametrosOperacaoRequest"
+            }
+          }
+        ],
+        "tags": [
+          "parametros-operacao"
         ]
       }
     },
@@ -1603,6 +1699,9 @@
       },
       "delete": {
         "responses": {
+          "409": {
+            "description": "Viagem pendente na rota"
+          },
           "200": {
             "description": "Success"
           }
@@ -1662,6 +1761,9 @@
       },
       "post": {
         "responses": {
+          "409": {
+            "description": "Horário idêntico (mesmo horário, sentido e dia) já ativo"
+          },
           "201": {
             "description": "Created",
             "schema": {
@@ -1670,6 +1772,71 @@
           }
         },
         "operationId": "add_rota_horario",
+        "parameters": [
+          {
+            "name": "payload",
+            "required": true,
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/RotaHorarioCreateRequest"
+            }
+          }
+        ],
+        "tags": [
+          "rotas"
+        ]
+      }
+    },
+    "/v1/rotas/{id}/horarios/{horario_id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "horario_id",
+          "in": "path",
+          "required": true,
+          "type": "string"
+        }
+      ],
+      "delete": {
+        "responses": {
+          "409": {
+            "description": "Viagem pendente no horário"
+          },
+          "404": {
+            "description": "Horário não encontrado ou inativo"
+          },
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "Removes a schedule; one that already has trips is only deactivated",
+        "operationId": "delete_rota_horario",
+        "tags": [
+          "rotas"
+        ]
+      },
+      "put": {
+        "responses": {
+          "409": {
+            "description": "Viagem pendente no horário ou horário idêntico já ativo"
+          },
+          "404": {
+            "description": "Horário não encontrado ou inativo"
+          },
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/RotaHorarioResponse"
+            }
+          }
+        },
+        "summary": "Replaces a schedule; one that already has trips is versioned under a new id",
+        "operationId": "update_rota_horario",
         "parameters": [
           {
             "name": "payload",
@@ -2075,6 +2242,37 @@
           "users"
         ]
       },
+      "patch": {
+        "responses": {
+          "200": {
+            "description": "Updated",
+            "schema": {
+              "$ref": "#/definitions/UserResponse"
+            }
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "409": {
+            "description": "Conflict"
+          }
+        },
+        "summary": "Updates the logged-in user's profile (nome, telefone, receber_notificacoes, cnh)",
+        "operationId": "update_my_profile",
+        "parameters": [
+          {
+            "name": "payload",
+            "required": true,
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/UpdateProfileRequest"
+            }
+          }
+        ],
+        "tags": [
+          "users"
+        ]
+      },
       "delete": {
         "responses": {
           "200": {
@@ -2100,37 +2298,6 @@
             "in": "body",
             "schema": {
               "$ref": "#/definitions/ExcluirContaRequest"
-            }
-          }
-        ],
-        "tags": [
-          "users"
-        ]
-      },
-      "patch": {
-        "responses": {
-          "200": {
-            "description": "Updated",
-            "schema": {
-              "$ref": "#/definitions/UserResponse"
-            }
-          },
-          "400": {
-            "description": "Validation error"
-          },
-          "409": {
-            "description": "Conflict"
-          }
-        },
-        "summary": "Updates the logged-in user's profile (nome, telefone, receber_notificacoes, cnh)",
-        "operationId": "update_my_profile",
-        "parameters": [
-          {
-            "name": "payload",
-            "required": true,
-            "in": "body",
-            "schema": {
-              "$ref": "#/definitions/UpdateProfileRequest"
             }
           }
         ],
@@ -2817,9 +2984,72 @@
     {
       "name": "telemetria",
       "description": "Telemetria do Veículo Elétrico"
+    },
+    {
+      "name": "parametros-operacao",
+      "description": "Parâmetros da operação sob demanda"
     }
   ],
   "definitions": {
+    "Ausencia": {
+      "properties": {
+        "tipo": {
+          "type": "string",
+          "description": "AUSENCIA: confirmou e não embarcou; DESISTENCIA: cancelou após a partida",
+          "example": "AUSENCIA",
+          "enum": [
+            "AUSENCIA",
+            "DESISTENCIA"
+          ]
+        },
+        "aluno_id": {
+          "type": "string"
+        },
+        "aluno_nome": {
+          "type": "string"
+        },
+        "foto_url": {
+          "type": "string",
+          "description": "URL da foto do aluno; nulo sem foto"
+        },
+        "viagem_id": {
+          "type": "string"
+        },
+        "rota_nome": {
+          "type": "string"
+        },
+        "data": {
+          "type": "string",
+          "description": "Data da viagem (YYYY-MM-DD)"
+        },
+        "registrado_em": {
+          "type": "string",
+          "description": "Fim da viagem (ausência; sem fim registrado, a última atualização dela) ou hora do cancelamento (desistência), ISO"
+        }
+      },
+      "type": "object"
+    },
+    "AusenciasLista": {
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Ausencia"
+          }
+        },
+        "total": {
+          "type": "integer",
+          "description": "Total de registros no período"
+        },
+        "page": {
+          "type": "integer"
+        },
+        "per_page": {
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
     "LoginRequest": {
       "required": [
         "email",
@@ -3022,23 +3252,6 @@
       },
       "type": "object"
     },
-    "ExcluirContaRequest": {
-      "required": [
-        "email",
-        "senha"
-      ],
-      "properties": {
-        "email": {
-          "type": "string",
-          "description": "E-mail da conta"
-        },
-        "senha": {
-          "type": "string",
-          "description": "Senha atual"
-        }
-      },
-      "type": "object"
-    },
     "UpdateProfileRequest": {
       "properties": {
         "nome": {
@@ -3056,6 +3269,23 @@
         "cnh": {
           "type": "string",
           "description": "CNH (apenas motoristas)"
+        }
+      },
+      "type": "object"
+    },
+    "ExcluirContaRequest": {
+      "required": [
+        "email",
+        "senha"
+      ],
+      "properties": {
+        "email": {
+          "type": "string",
+          "description": "E-mail da conta"
+        },
+        "senha": {
+          "type": "string",
+          "description": "Senha atual"
         }
       },
       "type": "object"
@@ -4660,6 +4890,10 @@
         "data": {
           "type": "string",
           "description": "Data (YYYY-MM-DD)"
+        },
+        "horario_rota_id": {
+          "type": "string",
+          "description": "UUID do horário; obrigatório quando a rota tem mais de um horário ativo no dia da semana"
         }
       },
       "type": "object"
@@ -6059,6 +6293,58 @@
         },
         "bateria_min": {
           "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "ParametrosOperacaoRequest": {
+      "required": [
+        "antecedencia_motorista_minutos",
+        "minimo_alunos",
+        "pausa_entre_viagens_minutos"
+      ],
+      "properties": {
+        "minimo_alunos": {
+          "type": "integer",
+          "description": "Mínimo de alunos para iniciar o percurso e no fechamento do buffer (só viagens sob demanda)"
+        },
+        "pausa_entre_viagens_minutos": {
+          "type": "integer",
+          "description": "Pausa mínima do motorista após uma viagem sob demanda, em minutos (só bloqueia novas viagens sob demanda)"
+        },
+        "antecedencia_motorista_minutos": {
+          "type": "integer",
+          "description": "Antecedência mínima com que o motorista precisa ser avisado, em minutos (ainda não aplicado; aguardando definição do gestor)"
+        }
+      },
+      "type": "object"
+    },
+    "ParametrosOperacaoResponse": {
+      "required": [
+        "antecedencia_motorista_minutos",
+        "minimo_alunos",
+        "pausa_entre_viagens_minutos"
+      ],
+      "properties": {
+        "organizacao_id": {
+          "type": "string"
+        },
+        "minimo_alunos": {
+          "type": "integer",
+          "description": "Mínimo de alunos para iniciar o percurso e no fechamento do buffer (só viagens sob demanda)"
+        },
+        "pausa_entre_viagens_minutos": {
+          "type": "integer",
+          "description": "Pausa mínima do motorista após uma viagem sob demanda, em minutos (só bloqueia novas viagens sob demanda)"
+        },
+        "antecedencia_motorista_minutos": {
+          "type": "integer",
+          "description": "Antecedência mínima com que o motorista precisa ser avisado, em minutos (ainda não aplicado; aguardando definição do gestor)"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Última alteração; null enquanto valem os padrões"
         }
       },
       "type": "object"

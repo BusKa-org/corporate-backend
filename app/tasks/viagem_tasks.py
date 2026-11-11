@@ -31,7 +31,8 @@ def realizar_auto_checkin(viagem_id: str, aluno_id: str, tentativa: int) -> None
         conf = AlunosConfirmados.query.filter_by(viagem_id=viagem_id, aluno_id=aluno_id).first()
         viagem = db.session.get(Viagem, viagem_id)
 
-        if not conf or not viagem or conf.embarcou:
+        # A student who dropped out after the job was scheduled is no longer on the list.
+        if not conf or not viagem or conf.embarcou or not conf.confirmacao:
             return
 
         agora = datetime.now(UTC)

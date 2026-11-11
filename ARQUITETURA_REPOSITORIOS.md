@@ -80,6 +80,7 @@ after the fork whose owner §2/§5 does not settle are marked "a classificar".
 | `viagem.py` | mixed | `Viagem`, `ViagemPonto`, `AlunosConfirmados`, `TelemetriaViagem` (Background IP) and `SolicitacaoViagem` (PaqTcPB, ride requests) |
 | `onibus.py` | mixed | `Onibus` (Background IP) and `JanelaDisponibilidade` (PaqTcPB, availability windows) |
 | `credencial_embarque.py` | PaqTcPB | `CredencialEmbarque`, QR boarding |
+| `parametros_operacao.py` | PaqTcPB | `ParametrosOperacao`, on-demand operation parameters per organization |
 | `organizacao.py`, `notificacao.py`, `password_reset.py`, `base.py` | Background IP | unmixed |
 | `consentimento.py`, `retencao_legal.py` | a classificar | LGPD consent and data kept after account deletion |
 | `convite.py` | a classificar | passenger invitations |

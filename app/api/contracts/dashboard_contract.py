@@ -122,7 +122,40 @@ def register_models(api):
         },
     )
 
+    ausencia = api.model(
+        "Ausencia",
+        {
+            "tipo": fields.String(
+                enum=["AUSENCIA", "DESISTENCIA"],
+                description="AUSENCIA: confirmou e não embarcou; DESISTENCIA: cancelou após a partida",
+            ),
+            "aluno_id": fields.String,
+            "aluno_nome": fields.String,
+            "foto_url": fields.String(description="URL da foto do aluno; nulo sem foto"),
+            "viagem_id": fields.String,
+            "rota_nome": fields.String,
+            "data": fields.String(description="Data da viagem (YYYY-MM-DD)"),
+            "registrado_em": fields.String(
+                description=(
+                    "Fim da viagem (ausência; sem fim registrado, a última atualização dela) "
+                    "ou hora do cancelamento (desistência), ISO"
+                )
+            ),
+        },
+    )
+
+    ausencias_lista = api.model(
+        "AusenciasLista",
+        {
+            "items": fields.List(fields.Nested(ausencia)),
+            "total": fields.Integer(description="Total de registros no período"),
+            "page": fields.Integer,
+            "per_page": fields.Integer,
+        },
+    )
+
     return {
+        "ausencias_lista": ausencias_lista,
         "ponto_progresso": ponto_progresso,
         "relatorio_estatisticas": relatorio_estatisticas,
         "ponto_telemetria": ponto_telemetria,
