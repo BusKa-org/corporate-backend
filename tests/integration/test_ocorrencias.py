@@ -34,3 +34,32 @@ def test_resolver_com_id_que_nao_e_uuid_devolve_404(gestor):
     response = gestor.client.patch("/v1/ocorrencias/nao-e-uuid/resolver")
 
     assert response.status_code == 404
+
+
+def test_aluno_nao_reporta_ocorrencia_em_viagem_de_outra_organizacao(
+    aluno, rota, viagem_futura_agendada_com_motorista, other_organizacao, _db
+):
+    rota.organizacao_id = other_organizacao.id
+    _db.session.commit()
+
+    response = aluno.client.post(
+        "/v1/ocorrencias/",
+        json={"tipo": "ATRASO", "viagem_id": str(viagem_futura_agendada_com_motorista.id)},
+    )
+
+    # Same answer as for a trip that does not exist.
+    assert response.status_code == 404
+    assert _db.session.query(Ocorrencia).count() == 0
+
+
+def test_aluno_reporta_ocorrencia_em_viagem_da_organizacao(
+    aluno, viagem_futura_agendada_com_motorista
+):
+    viagem_id = str(viagem_futura_agendada_com_motorista.id)
+
+    response = aluno.client.post(
+        "/v1/ocorrencias/", json={"tipo": "ATRASO", "viagem_id": viagem_id}
+    )
+
+    assert response.status_code == 201
+    assert response.get_json()["viagem_id"] == viagem_id

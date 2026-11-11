@@ -37,9 +37,16 @@ class OcorrenciaService:
 
         viagem_id = dados.get("viagem_id")
         if viagem_id:
+            from app.services.viagens_service import _exigir_viagem_da_organizacao
+
             viagem = db.session.get(Viagem, viagem_id)
             if not viagem:
                 raise NotFoundError("Viagem não encontrada.")
+            try:
+                _exigir_viagem_da_organizacao(viagem, user)
+            except ForbiddenError:
+                # Another organization's trip gets the same answer as a missing one.
+                raise NotFoundError("Viagem não encontrada.") from None
 
         try:
             ocorrencia = Ocorrencia(
