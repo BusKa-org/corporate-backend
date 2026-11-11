@@ -54,6 +54,15 @@ Response: `{id, onibus_id, motorista_id, motorista_nome, dia, hora_inicio, hora_
 `{"horario_saida": "HH:MM", "sentido": "IDA"|"VOLTA"|"CIRCULAR", "dias": ["SEG", ...]}`.
 Repeated weekdays in `dias` are stored once.
 
+A route may have several active schedules on the same weekday (e.g. `IDA` 06:00 and
+`VOLTA` 17:00). Only an exact duplicate is rejected: same `sentido` and `horario_saida` as
+another active schedule of the route on one of the weekdays.
+
+The `horarios` list in `POST /v1/rotas/` follows the same rules: invalid `sentido`,
+`horario_saida` or weekday returns 400 (invalid weekdays used to be silently dropped),
+repeated weekdays are stored once, and exact duplicates (also inside the same request)
+return 409.
+
 Trips read their time and direction from the schedule, so a schedule that already has
 trips (any status) is never rewritten or deleted:
 
@@ -74,8 +83,21 @@ change it came out as `"SentidoViagem.IDA"`; clients parsing that must switch.
 | 400 | invalid body, same rules as creation; route is `SOB_DEMANDA` |
 | 403 | not a gestor; route from another organization |
 | 404 | route not found; schedule not in that route or inactive |
-| 409 | `PUT`/`DELETE`: the schedule has a trip dated today or later that is not `FINALIZADA` / `CANCELADA` |
-| 409 | `POST`/`PUT`: another active schedule of the route already runs on one of the weekdays (trip generation picks one schedule per route and weekday, whatever the direction) |
+| 409 | `PUT`/`DELETE`: the schedule has an `AGENDADA` trip dated today or later, or an `EM_ANDAMENTO` trip of any date |
+| 409 | `POST`/`PUT`: another active schedule of the route has the same `sentido` and `horario_saida` on one of the weekdays |
+
+### Fixed trip generation
+
+`POST /v1/viagens/` body: `{"rota_id": "<uuid>", "data": "YYYY-MM-DD", "horario_rota_id": "<uuid>"?}`.
+
+- Without `horario_rota_id`: uses the route's only active schedule on that weekday. If
+  there are several, returns 400 with them in `error.details.horarios`
+  (`[{id, sentido, horario_saida}]`); send one as `horario_rota_id`.
+- With `horario_rota_id`: it must belong to the route (404) and run on that weekday (400).
+  If it was deactivated by a `PUT`, the active schedule with the same `sentido` and
+  `horario_saida` on that weekday is used; with none, 404.
+- 409 when the route already has a trip on that date with the same `sentido` and
+  `horario_saida`, whatever schedule version it came from.
 
 ### Ride request (RF-10)
 
@@ -200,6 +222,8 @@ Only run in the scheduler process (`RUN_SCHEDULER`).
 ### Changes to existing endpoints
 
 - `POST /v1/viagens/` on an on-demand route returns 400 (trips come from requests).
+- `POST /v1/rotas/<id>/pontos` and `DELETE /v1/rotas/<id>/pontos/<ponto_id>` return 400
+  when `<id>` is not a UUID (it was not validated before), like the other route endpoints.
   On success it now returns 201 with the serialized trip (before, it returned the raw ORM object).
 - `PUT /v1/viagens/<id>/confirmacao` on an on-demand trip returns 400.
 - `PUT /v1/viagens/<id>/cancelar` returns 403 for a trip of another organization, and

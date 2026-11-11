@@ -4728,6 +4728,10 @@
         "data": {
           "type": "string",
           "description": "Data (YYYY-MM-DD)"
+        },
+        "horario_rota_id": {
+          "type": "string",
+          "description": "UUID do horário; obrigatório quando a rota tem mais de um horário ativo no dia da semana"
         }
       },
       "type": "object"
