@@ -37,6 +37,7 @@ from app.models.viagem import (
     Viagem,
     ViagemPonto,
 )
+from app.services import parametros_operacao_service
 from app.services.notificacao_service import NotificacaoService
 from app.tasks.viagem_tasks import realizar_auto_checkin
 from app.utils import audit_logger, tempo
@@ -465,20 +466,29 @@ def disponibilidade_motorista(
     if status == StatusMotorista.EM_ROTA:
         return False, "Motorista já está em rota", None
 
-    liberado_em = None
+    # Recompute from history too: covers trips from before `descanso_ate` existed.
+    fim_descanso_jornada = _fim_descanso_motorista(motorista, agora)
+    liberado_em = fim_descanso_jornada
     if status == StatusMotorista.EM_DESCANSO_OBRIGATORIO:
         liberado_em = motorista.descanso_ate
-    else:
-        # Also recompute from history: covers trips from before `descanso_ate` existed.
-        liberado_em = _fim_descanso_motorista(motorista, agora)
     if liberado_em is not None:
-        horas_max = current_app.config["MOTORISTA_HORAS_MAX_DIRECAO"]
-        minutos_descanso = current_app.config["MOTORISTA_DESCANSO_MINUTOS"]
-        horario = liberado_em.astimezone(fuso).strftime("%H:%M")
-        motivo = (
-            f"Motorista atingiu {horas_max}h de direção contínua e precisa descansar "
-            f"{minutos_descanso} min. Poderá dirigir novamente às {horario}."
-        )
+        liberado_local = liberado_em.astimezone(fuso)
+        horario = liberado_local.strftime("%H:%M")
+        if liberado_local.date() != agora_local.date():
+            horario += liberado_local.strftime(" do dia %d/%m")
+        if fim_descanso_jornada is None:
+            # descanso_ate without a driving-hours rest: it is the organization's pause.
+            motivo = (
+                "Motorista em pausa mínima entre viagens. "
+                f"Poderá dirigir novamente às {horario}."
+            )
+        else:
+            horas_max = current_app.config["MOTORISTA_HORAS_MAX_DIRECAO"]
+            minutos_descanso = current_app.config["MOTORISTA_DESCANSO_MINUTOS"]
+            motivo = (
+                f"Motorista atingiu {horas_max}h de direção contínua e precisa descansar "
+                f"{minutos_descanso} min. Poderá dirigir novamente às {horario}."
+            )
         return False, motivo, liberado_em
 
     if motorista.dias_trabalho:
@@ -516,9 +526,23 @@ def _validar_jornada_motorista(motorista: Motorista, agora: datetime) -> None:
     raise ForbiddenError(motivo or "Motorista indisponível")
 
 
-def _gravar_descanso_apos_viagem(motorista: Motorista, agora: datetime) -> None:
-    """After a started trip ends (finished or cancelled): store the rest end, if owed."""
-    motorista.descanso_ate = _fim_descanso_motorista(motorista, agora)
+def _gravar_descanso_apos_viagem(viagem: Viagem) -> None:
+    """After a started trip ends (finished or cancelled): store the rest end, if owed.
+
+    The later of the driving-hours rest and the organization's pause between trips.
+    """
+    motorista = viagem.motorista
+    fim = viagem.fim_real
+    descanso_ate = _fim_descanso_motorista(motorista, fim)
+    rota_id = _rota_id_da_viagem(viagem)
+    rota = db.session.get(Rota, rota_id) if rota_id else None
+    if rota is not None:
+        parametros = parametros_operacao_service.parametros_da_organizacao(rota.organizacao_id)
+        if parametros.pausa_entre_viagens_minutos > 0:
+            fim_pausa = fim + timedelta(minutes=parametros.pausa_entre_viagens_minutos)
+            if descanso_ate is None or fim_pausa > descanso_ate:
+                descanso_ate = fim_pausa
+    motorista.descanso_ate = descanso_ate
 
 
 def list_viagens_motorista(user_id: str) -> list[Viagem]:
@@ -582,7 +606,7 @@ def controlar_viagem(user_id: str, viagem_id: str, data: dict[str, Any]) -> Viag
             viagem.fim_real = _agora()
             db.session.flush()
             if viagem.motorista is not None:
-                _gravar_descanso_apos_viagem(viagem.motorista, viagem.fim_real)
+                _gravar_descanso_apos_viagem(viagem)
 
             rastros = (
                 TelemetriaViagem.query.filter_by(viagem_id=viagem.id)
@@ -660,7 +684,7 @@ def cancelar_viagem(user_id: str, viagem_id: str) -> dict[str, Any]:
             viagem.fim_real = _agora()
             db.session.flush()
             if viagem.motorista is not None:
-                _gravar_descanso_apos_viagem(viagem.motorista, viagem.fim_real)
+                _gravar_descanso_apos_viagem(viagem)
 
         confirmados = AlunosConfirmados.query.filter_by(viagem_id=viagem.id, confirmacao=True).all()
         data_formatada = viagem.data.strftime("%d/%m/%Y")

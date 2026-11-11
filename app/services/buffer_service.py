@@ -3,17 +3,18 @@
 import logging
 import math
 from datetime import datetime, timedelta
-from zoneinfo import ZoneInfo
-
-from flask import current_app
-from sqlalchemy import func
 
 from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError
 from app.models.base import db
 from app.models.enum import StatusSolicitacao, StatusViagem, UserRole, UserStatus
-from app.models.user import Aluno, Gestor, User
+from app.models.user import Aluno, Gestor, Motorista, User
 from app.models.viagem import AlunosConfirmados, SolicitacaoViagem, Viagem
-from app.services import consentimento_service, embarque_service, parametros_operacao_service
+from app.services import (
+    consentimento_service,
+    embarque_service,
+    parametros_operacao_service,
+    viagens_service,
+)
 from app.services.notificacao_service import NotificacaoService
 from app.utils import tempo
 from app.utils.validators import validate_uuid
@@ -45,11 +46,22 @@ def iniciar_percurso(user_id: str, viagem_id: str) -> Viagem:
 
     parametros = parametros_operacao_service.parametros_da_organizacao(viagem.rota.organizacao_id)
     _exigir_minimo_alunos(viagem, parametros.minimo_alunos)
-    _exigir_pausa_entre_viagens(viagem, parametros.pausa_entre_viagens_minutos)
 
-    # shortcut: once PR #16 merges, call _validar_jornada_motorista(motorista, agora) here (409 when
-    # status_motorista(...) is EM_ROTA, 403 on rest/hours) and clear descanso_ate. EM_ROTA itself is
-    # computed from the trip being EM_ANDAMENTO, so nothing else is stored.
+    # Same lock order as controlar_viagem (trip, then driver).
+    motorista = (
+        db.session.query(Motorista)
+        .filter(Motorista.id == viagem.motorista_id)
+        .with_for_update(of=Motorista)
+        .populate_existing()
+        .one()
+    )
+    try:
+        # 409 while on another trip, 403 during rest/pause or outside working hours.
+        viagens_service._validar_jornada_motorista(motorista, tempo.agora_utc())
+    except Exception:
+        db.session.rollback()
+        raise
+    motorista.descanso_ate = None
     viagem.status = StatusViagem.BUFFER_ABERTO
     viagem.buffer_fim = tempo.agora_utc() + timedelta(minutes=viagem.rota.buffer_minutos)
     db.session.commit()
@@ -69,27 +81,6 @@ def _exigir_minimo_alunos(viagem: Viagem, minimo: int) -> None:
         raise ConflictError(
             f"A viagem precisa de pelo menos {minimo} aluno(s) solicitante(s) para iniciar "
             f"o percurso (atual: {solicitantes})"
-        )
-
-
-def _exigir_pausa_entre_viagens(viagem: Viagem, pausa_minutos: int) -> None:
-    if pausa_minutos == 0:
-        return
-    ultimo_fim = (
-        db.session.query(func.max(Viagem.fim_real))
-        .filter(Viagem.motorista_id == viagem.motorista_id, Viagem.id != viagem.id)
-        .scalar()
-    )
-    if ultimo_fim is None:
-        return
-    liberado_em = ultimo_fim + timedelta(minutes=pausa_minutos)
-    if tempo.agora_utc() < liberado_em:
-        db.session.rollback()
-        fuso = ZoneInfo(current_app.config["TIMEZONE"])
-        horario = liberado_em.astimezone(fuso).strftime("%H:%M")
-        raise ForbiddenError(
-            f"Pausa mínima de {pausa_minutos} min entre viagens. "
-            f"Poderá iniciar o percurso às {horario}."
         )
 
 

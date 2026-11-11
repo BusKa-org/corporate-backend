@@ -4,8 +4,10 @@ from datetime import timedelta
 
 import pytest
 
-from app.models.enum import StatusViagem
+from app.models.enum import StatusMotorista, StatusViagem
 from app.models.parametros_operacao import ParametrosOperacao
+from app.models.user import Motorista
+from app.services.viagens_service import disponibilidade_motorista, status_motorista
 from tests.factories.viagem_factory import ViagemFactory
 
 URL = "/v1/parametros-operacao"
@@ -103,25 +105,50 @@ def test_iniciar_percurso_exige_minimo_de_alunos(
     assert viagem_solicitada.status == StatusViagem.SOLICITADA
 
 
-def test_iniciar_percurso_respeita_pausa_entre_viagens(
-    _db, organizacao, motorista, viagem_solicitada, relogio
+def test_pausa_entre_viagens_vira_descanso_do_motorista(
+    _db, organizacao, motorista, rota_sob_demanda, viagem_solicitada, relogio
 ):
     _salvar(_db, organizacao.id, pausa=10)
-    fim = relogio.agora - timedelta(minutes=5)
+    anterior = ViagemFactory(
+        rota_id=rota_sob_demanda.id,
+        data=relogio.agora.date(),
+        status=StatusViagem.EM_ANDAMENTO,
+        motorista_id=motorista.user.id,
+        inicio_real=relogio.agora - timedelta(minutes=30),
+    )
+    _db.session.add(anterior)
+    _db.session.commit()
+    resp = motorista.client.put(f"/v1/viagens/{anterior.id}/acao", json={"acao": "FINALIZAR"})
+    assert resp.status_code == 200, resp.get_json()
+
+    m = _db.session.get(Motorista, motorista.user.id, populate_existing=True)
+    assert m.descanso_ate == relogio.agora + timedelta(minutes=10)
+    assert status_motorista(m, relogio.agora) == StatusMotorista.EM_DESCANSO_OBRIGATORIO
+    pode, motivo, livre = disponibilidade_motorista(m, relogio.agora)
+    assert pode is False
+    assert livre == relogio.agora + timedelta(minutes=10)
+
+    resp = _iniciar(motorista, viagem_solicitada)
+    assert resp.status_code == 403
+    assert "pausa mínima entre viagens" in resp.get_json()["error"]["message"]
+
+    relogio.avancar(minutes=10)
+    assert _iniciar(motorista, viagem_solicitada).status_code == 200
+
+
+def test_motorista_em_outra_viagem_nao_inicia_percurso(_db, motorista, viagem_solicitada, relogio):
     _db.session.add(
         ViagemFactory(
-            data=fim.date(),
-            status=StatusViagem.FINALIZADA,
+            data=relogio.agora.date(),
+            status=StatusViagem.EM_ANDAMENTO,
             motorista_id=motorista.user.id,
-            inicio_real=fim - timedelta(minutes=30),
-            fim_real=fim,
+            inicio_real=relogio.agora - timedelta(minutes=5),
         )
     )
     _db.session.commit()
 
     resp = _iniciar(motorista, viagem_solicitada)
-    assert resp.status_code == 403
-    assert "Pausa mínima de 10 min" in resp.get_json()["error"]["message"]
 
-    relogio.avancar(minutes=5)
-    assert _iniciar(motorista, viagem_solicitada).status_code == 200
+    assert resp.status_code == 409
+    _db.session.refresh(viagem_solicitada)
+    assert viagem_solicitada.status == StatusViagem.SOLICITADA

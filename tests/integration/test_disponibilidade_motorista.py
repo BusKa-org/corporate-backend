@@ -31,6 +31,17 @@ def test_em_descanso_informa_quando_fica_livre(_db, motorista):
     assert livre == agora + timedelta(minutes=5)
 
 
+def test_descanso_ate_outro_dia_mostra_a_data(app, _db, motorista):
+    agora = datetime.now(UTC)
+    descanso_ate = agora + timedelta(days=1)
+    motorista.user.descanso_ate = descanso_ate
+
+    _, motivo, _ = disponibilidade_motorista(motorista.user, agora)
+
+    local = descanso_ate.astimezone(ZoneInfo(app.config["TIMEZONE"]))
+    assert local.strftime("às %H:%M do dia %d/%m") in motivo
+
+
 def test_descanso_termina_exatamente_em_descanso_ate(_db, motorista):
     agora = datetime.now(UTC)
     motorista.user.descanso_ate = agora
