@@ -8,14 +8,25 @@ def register_models(api):
 
     campos = {
         "minimo_alunos": fields.Integer(
-            required=True, description="Mínimo de alunos solicitantes para iniciar o percurso"
+            required=True,
+            description=(
+                "Mínimo de alunos para iniciar o percurso e no fechamento do buffer "
+                "(só viagens sob demanda)"
+            ),
         ),
         "pausa_entre_viagens_minutos": fields.Integer(
-            required=True, description="Pausa mínima do motorista entre duas viagens, em minutos"
+            required=True,
+            description=(
+                "Pausa mínima do motorista após uma viagem sob demanda, em minutos "
+                "(só bloqueia novas viagens sob demanda)"
+            ),
         ),
         "antecedencia_motorista_minutos": fields.Integer(
             required=True,
-            description="Antecedência mínima com que o motorista precisa ser avisado, em minutos",
+            description=(
+                "Antecedência mínima com que o motorista precisa ser avisado, em minutos "
+                "(ainda não aplicado; aguardando definição do gestor)"
+            ),
         ),
     }
 

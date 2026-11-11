@@ -1,4 +1,4 @@
-"""parametros_operacao: on-demand operation parameters per organization
+"""parametros_operacao: on-demand operation parameters per organization, motorista.pausa_ate
 
 Revision ID: 3f9c2a7e5b14
 Revises: d2e3f4a5b6c7
@@ -35,8 +35,10 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["organizacao_id"], ["organizacao.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("organizacao_id"),
     )
+    op.add_column("motorista", sa.Column("pausa_ate", sa.DateTime(timezone=True), nullable=True))
 
 
 def downgrade() -> None:
     """Downgrade database schema."""
+    op.drop_column("motorista", "pausa_ate")
     op.drop_table("parametros_operacao")

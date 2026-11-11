@@ -36,6 +36,9 @@ def iniciar_percurso(user_id: str, viagem_id: str) -> Viagem:
         raise NotFoundError("Viagem não encontrada")
 
     user = db.session.get(User, user_id)
+    if user and user.role == UserRole.MOTORISTA and viagem.motorista_id is None:
+        db.session.rollback()
+        raise ConflictError("Viagem sem motorista atribuído")
     if not user or user.role != UserRole.MOTORISTA or viagem.motorista_id != user.id:
         db.session.rollback()
         raise ForbiddenError("Apenas o motorista da viagem pode iniciar o percurso")
@@ -53,15 +56,21 @@ def iniciar_percurso(user_id: str, viagem_id: str) -> Viagem:
         .filter(Motorista.id == viagem.motorista_id)
         .with_for_update(of=Motorista)
         .populate_existing()
-        .one()
+        .one_or_none()
     )
+    if motorista is None:
+        db.session.rollback()
+        raise ConflictError("Viagem sem motorista atribuído")
     try:
         # 409 while on another trip (open buffer included), 403 during rest/pause or off hours.
-        viagens_service.validar_jornada_motorista(motorista, tempo.agora_utc())
+        viagens_service.validar_jornada_motorista(
+            motorista, tempo.agora_utc(), considerar_pausa=True
+        )
     except Exception:
         db.session.rollback()
         raise
     motorista.descanso_ate = None
+    motorista.pausa_ate = None
     viagem.status = StatusViagem.BUFFER_ABERTO
     viagem.buffer_fim = tempo.agora_utc() + timedelta(minutes=viagem.rota.buffer_minutos)
     db.session.commit()
@@ -71,8 +80,8 @@ def iniciar_percurso(user_id: str, viagem_id: str) -> Viagem:
 
 
 def _exigir_minimo_alunos(viagem: Viagem, minimo: int) -> None:
-    # Lock the counted rows: the gestor's cancelar_viagem cancels them without travar_viagem,
-    # so the trip lock alone does not stop the count dropping below the minimum.
+    # Lock the counted rows: the gestor's cancelar_viagem cancels them without travar_viagem.
+    # key_share=True emits FOR NO KEY UPDATE, which still blocks that concurrent status UPDATE.
     solicitantes = len(
         db.session.query(SolicitacaoViagem.id)
         .filter_by(viagem_id=viagem.id, status=StatusSolicitacao.ATIVA)
@@ -142,7 +151,7 @@ def colocar_em_rota(viagem: Viagem, momento: datetime, declaradas: list[Solicita
 
 
 def fechar_buffers_expirados() -> int:
-    """Job: an expired buffer goes EM_ANDAMENTO with whoever declared; if none, it is cancelled."""
+    """Job: an expired buffer goes EM_ANDAMENTO, or is cancelled below minimo_alunos."""
     agora = tempo.agora_utc()
     # Lock the trips: an in-flight declaration or cancellation finishes before the
     # close reads the requests. Ordering by id avoids deadlock between two jobs.
@@ -172,13 +181,31 @@ def fechar_buffers_expirados() -> int:
             else:
                 declaradas.append(solicitacao)
 
-        if not declaradas:
-            # RF-15, secondary flow 1: no route accepted, the vehicle goes back to idle.
+        parametros = parametros_operacao_service.parametros_da_organizacao(
+            viagem.rota.organizacao_id
+        )
+        if len(declaradas) < parametros.minimo_alunos:
+            # RF-15, secondary flow 1: too few routes accepted, the vehicle goes back to idle.
             viagem.status = StatusViagem.CANCELADA
+            for solicitacao in declaradas:
+                solicitacao.status = StatusSolicitacao.CANCELADA
+                solicitacao.cancelada_em = fim
+                NotificacaoService._criar_notificacao_interna(
+                    usuario_id=solicitacao.aluno_id,
+                    titulo="Viagem cancelada",
+                    mensagem=(
+                        f"A viagem da rota {viagem.rota.nome} não atingiu o mínimo de "
+                        f"{parametros.minimo_alunos} aluno(s) e foi cancelada. Faça uma nova "
+                        "solicitação se ainda precisar."
+                    ),
+                )
             NotificacaoService._criar_notificacao_interna(
                 usuario_id=viagem.motorista_id,
                 titulo="Viagem cancelada",
-                mensagem="O buffer terminou sem trajetos declarados. O veículo volta a ficar ocioso.",
+                mensagem=(
+                    f"O buffer terminou com {len(declaradas)} trajeto(s) declarado(s), abaixo do "
+                    f"mínimo de {parametros.minimo_alunos}. O veículo volta a ficar ocioso."
+                ),
             )
             continue
 

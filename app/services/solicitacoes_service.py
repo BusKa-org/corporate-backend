@@ -24,10 +24,12 @@ def _buscar_aluno(user_id: str) -> Aluno:
 
 
 def _escolher_motorista(janela):
-    """The window's driver, refused while on another trip, resting or off hours."""
+    """The window's driver, refused while on another trip, resting, paused or off hours."""
     motorista = db.session.get(Motorista, janela.motorista_id)
     assert motorista is not None  # janela.motorista_id is a NOT NULL FK
-    pode, motivo, _ = viagens_service.disponibilidade_motorista(motorista, tempo.agora_utc())
+    pode, motivo, _ = viagens_service.disponibilidade_motorista(
+        motorista, tempo.agora_utc(), considerar_pausa=True
+    )
     if not pode:
         raise ConflictError(f"O motorista desta rota está indisponível no momento. {motivo}")
     return janela.motorista_id

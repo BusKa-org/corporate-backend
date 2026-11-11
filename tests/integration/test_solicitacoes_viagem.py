@@ -202,6 +202,19 @@ def test_motorista_em_descanso_rejeita_nova_viagem(
     assert Viagem.query.count() == 0
 
 
+def test_motorista_em_pausa_rejeita_nova_viagem(
+    _db, aluno, motorista, rota_sob_demanda, janela, relogio
+):
+    motorista.user.pausa_ate = relogio.agora + timedelta(minutes=10)
+    _db.session.commit()
+
+    r = _solicitar(aluno, rota_sob_demanda)
+
+    assert r.status_code == 409
+    assert "pausa mínima entre viagens" in r.get_json()["error"]["message"]
+    assert Viagem.query.count() == 0
+
+
 def test_segundo_aluno_entra_na_mesma_viagem_sem_nova_notificacao(
     aluno, segundo_aluno, motorista, rota_sob_demanda, janela, relogio
 ):
