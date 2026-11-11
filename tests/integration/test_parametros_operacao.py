@@ -152,3 +152,9 @@ def test_motorista_em_outra_viagem_nao_inicia_percurso(_db, motorista, viagem_so
     assert resp.status_code == 409
     _db.session.refresh(viagem_solicitada)
     assert viagem_solicitada.status == StatusViagem.SOLICITADA
+
+
+def test_put_atualiza_updated_at_mesmo_com_valores_iguais(gestor, relogio):
+    primeiro = gestor.client.put(URL, json=VALORES).get_json()["updated_at"]
+    segundo = gestor.client.put(URL, json=VALORES).get_json()["updated_at"]
+    assert segundo > primeiro

@@ -3,6 +3,8 @@
 from typing import Any
 
 from flask import current_app
+from sqlalchemy import func
+from sqlalchemy.dialects.postgresql import insert
 
 from app.core.exceptions import ForbiddenError
 from app.core.transaction import transactional
@@ -38,14 +40,21 @@ def atualizar(user_id: str, data: dict[str, Any]) -> ParametrosOperacao:
     if not user or user.role != UserRole.GESTOR:
         raise ForbiddenError("Apenas gestores podem alterar os parâmetros da operação")
 
+    valores = {
+        "minimo_alunos": data["minimo_alunos"],
+        "pausa_entre_viagens_minutos": data["pausa_entre_viagens_minutos"],
+        "antecedencia_motorista_minutos": data["antecedencia_motorista_minutos"],
+    }
+    # Upsert: two concurrent first saves must not collide on the PK. updated_at is set
+    # explicitly because onupdate is skipped here and a same-values save still counts.
+    comando = insert(ParametrosOperacao).values(organizacao_id=user.organizacao_id, **valores)
+    comando = comando.on_conflict_do_update(
+        index_elements=[ParametrosOperacao.organizacao_id],
+        set_={**valores, "updated_at": func.now()},
+    )
     with transactional():
-        parametros = db.session.get(ParametrosOperacao, user.organizacao_id)
-        if parametros is None:
-            parametros = ParametrosOperacao(organizacao_id=user.organizacao_id)
-            db.session.add(parametros)
-        parametros.minimo_alunos = data["minimo_alunos"]
-        parametros.pausa_entre_viagens_minutos = data["pausa_entre_viagens_minutos"]
-        parametros.antecedencia_motorista_minutos = data["antecedencia_motorista_minutos"]
+        db.session.execute(comando)
 
-    db.session.refresh(parametros)
+    parametros = db.session.get(ParametrosOperacao, user.organizacao_id, populate_existing=True)
+    assert parametros is not None
     return parametros
