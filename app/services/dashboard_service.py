@@ -508,39 +508,44 @@ def listar_ausencias(gestor_id: str, inicio: date, fim: date, page: int, per_pag
     gestor = _get_gestor_or_403(gestor_id, "Apenas gestores podem visualizar ausências")
     organizacao_id = gestor.organizacao_id
 
-    nao_embarcou = juntar_rota(
-        select(
-            literal("AUSENCIA").label("tipo"),
-            AlunosConfirmados.aluno_id.label("aluno_id"),
-            Viagem.id.label("viagem_id"),
-            Viagem.data.label("data"),
-            Rota.nome.label("rota_nome"),
-            # Older finished trips may lack fim_real; updated_at is the finalization write.
-            func.coalesce(Viagem.fim_real, Viagem.updated_at).label("registrado_em"),
+    def ausencias_do_periodo(tipo: str, aluno_id, registrado_em) -> Select:
+        """Shared columns, route join and org/period filters of both UNION branches."""
+        return juntar_rota(
+            select(
+                literal(tipo).label("tipo"),
+                aluno_id.label("aluno_id"),
+                Viagem.id.label("viagem_id"),
+                Viagem.data.label("data"),
+                Rota.nome.label("rota_nome"),
+                registrado_em.label("registrado_em"),
+            ).select_from(Viagem)
+        ).where(
+            Rota.organizacao_id == organizacao_id,
+            Viagem.data >= inicio,
+            Viagem.data <= fim,
         )
-        .select_from(Viagem)
+
+    nao_embarcou = (
+        ausencias_do_periodo(
+            "AUSENCIA",
+            AlunosConfirmados.aluno_id,
+            # Older finished trips may lack fim_real; updated_at is the finalization write.
+            func.coalesce(Viagem.fim_real, Viagem.updated_at),
+        )
         .join(AlunosConfirmados, AlunosConfirmados.viagem_id == Viagem.id)
-    ).where(
-        Rota.organizacao_id == organizacao_id,
-        Viagem.data >= inicio,
-        Viagem.data <= fim,
-        Viagem.status == StatusViagem.FINALIZADA,
-        AlunosConfirmados.confirmacao.is_(True),
-        AlunosConfirmados.embarcou.is_(False),
+        .where(
+            Viagem.status == StatusViagem.FINALIZADA,
+            AlunosConfirmados.confirmacao.is_(True),
+            AlunosConfirmados.embarcou.is_(False),
+        )
     )
 
-    desistiu = juntar_rota(
-        select(
-            literal("DESISTENCIA").label("tipo"),
-            SolicitacaoViagem.aluno_id.label("aluno_id"),
-            Viagem.id.label("viagem_id"),
-            Viagem.data.label("data"),
-            Rota.nome.label("rota_nome"),
-            func.coalesce(SolicitacaoViagem.cancelada_em, SolicitacaoViagem.created_at).label(
-                "registrado_em"
-            ),
+    desistiu = (
+        ausencias_do_periodo(
+            "DESISTENCIA",
+            SolicitacaoViagem.aluno_id,
+            func.coalesce(SolicitacaoViagem.cancelada_em, SolicitacaoViagem.created_at),
         )
-        .select_from(Viagem)
         .join(SolicitacaoViagem, SolicitacaoViagem.viagem_id == Viagem.id)
         .outerjoin(
             AlunosConfirmados,
@@ -549,21 +554,18 @@ def listar_ausencias(gestor_id: str, inicio: date, fim: date, page: int, per_pag
                 AlunosConfirmados.aluno_id == SolicitacaoViagem.aluno_id,
             ),
         )
-    ).where(
-        Rota.organizacao_id == organizacao_id,
-        Viagem.data >= inicio,
-        Viagem.data <= fim,
-        SolicitacaoViagem.status == StatusSolicitacao.DESISTENCIA,
-        Viagem.status != StatusViagem.CANCELADA,
-        # Rows from before the cancel flow refused dropping out after boarding.
-        AlunosConfirmados.embarcou.is_not(True),
+        .where(
+            SolicitacaoViagem.status == StatusSolicitacao.DESISTENCIA,
+            Viagem.status != StatusViagem.CANCELADA,
+            # Rows from before the cancel flow refused dropping out after boarding.
+            AlunosConfirmados.embarcou.is_not(True),
+        )
     )
 
     ausencias = union_all(nao_embarcou, desistiu).subquery()
-    total = db.session.execute(select(func.count()).select_from(ausencias)).scalar_one()
 
     linhas = db.session.execute(
-        select(ausencias, Aluno.nome, Aluno.foto_url)
+        select(ausencias, Aluno.nome, Aluno.foto_url, func.count().over().label("total"))
         .join(Aluno, Aluno.usuario_id == ausencias.c.aluno_id)
         .order_by(
             ausencias.c.data.desc(),
@@ -575,6 +577,18 @@ def listar_ausencias(gestor_id: str, inicio: date, fim: date, page: int, per_pag
         .limit(per_page)
         .offset((page - 1) * per_page)
     ).all()
+
+    if linhas:
+        total = linhas[0].total
+    elif page > 1:
+        # Past the last page the window has no row to ride on, so count apart.
+        total = db.session.execute(
+            select(func.count())
+            .select_from(ausencias)
+            .join(Aluno, Aluno.usuario_id == ausencias.c.aluno_id)
+        ).scalar_one()
+    else:
+        total = 0
 
     items: list[dict] = []
     for linha in linhas:
