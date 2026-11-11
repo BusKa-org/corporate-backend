@@ -118,8 +118,8 @@ class AusenciasResource(Resource):
     @api.doc("listar_ausencias")
     @api.param("inicio", "Início do período, inclusivo (YYYY-MM-DD)", _in="query", required=True)
     @api.param("fim", "Fim do período, inclusivo (YYYY-MM-DD)", _in="query", required=True)
-    @api.param("page", "Página (padrão 1)", _in="query")
-    @api.param("per_page", "Itens por página (padrão 20, máximo 100)", _in="query")
+    @api.param("page", "Página (padrão 1)", _in="query", type=int)
+    @api.param("per_page", "Itens por página (padrão 20, máximo 100)", _in="query", type=int)
     @api.response(200, "Success", models["ausencias_lista"])
     @jwt_required()
     def get(self) -> tuple[dict[str, Any], int]:

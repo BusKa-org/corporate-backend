@@ -136,7 +136,10 @@ def register_models(api):
             "rota_nome": fields.String,
             "data": fields.String(description="Data da viagem (YYYY-MM-DD)"),
             "registrado_em": fields.String(
-                description="Fim da viagem (ausência) ou hora do cancelamento (desistência), ISO"
+                description=(
+                    "Fim da viagem (ausência; sem fim registrado, a última atualização dela) "
+                    "ou hora do cancelamento (desistência), ISO"
+                )
             ),
         },
     )
