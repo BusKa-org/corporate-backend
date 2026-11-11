@@ -1,0 +1,279 @@
+"""On-demand operation parameters per organization and their checks on iniciar-percurso."""
+
+from datetime import datetime, timedelta
+
+import pytest
+
+from app.models.enum import StatusMotorista, StatusViagem, TipoViagem
+from app.models.parametros_operacao import ParametrosOperacao
+from app.models.user import Motorista
+from app.services.viagens_service import disponibilidade_motorista, status_motorista
+from tests.factories.viagem_factory import ViagemFactory
+
+URL = "/v1/parametros-operacao"
+
+VALORES = {
+    "minimo_alunos": 3,
+    "pausa_entre_viagens_minutos": 15,
+    "antecedencia_motorista_minutos": 20,
+}
+
+
+def _salvar(_db, organizacao_id, minimo_alunos=1, pausa=0, antecedencia=0):
+    _db.session.add(
+        ParametrosOperacao(
+            organizacao_id=organizacao_id,
+            minimo_alunos=minimo_alunos,
+            pausa_entre_viagens_minutos=pausa,
+            antecedencia_motorista_minutos=antecedencia,
+        )
+    )
+    _db.session.commit()
+
+
+def _iniciar(motorista, viagem):
+    return motorista.client.post(f"/v1/viagens/{viagem.id}/iniciar-percurso")
+
+
+def test_sem_registro_retorna_padroes_do_settings(gestor, app):
+    resp = gestor.client.get(URL)
+
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["minimo_alunos"] == app.config["OPERACAO_MINIMO_ALUNOS_PADRAO"]
+    assert body["pausa_entre_viagens_minutos"] == (
+        app.config["OPERACAO_PAUSA_ENTRE_VIAGENS_MINUTOS_PADRAO"]
+    )
+    assert body["antecedencia_motorista_minutos"] == (
+        app.config["OPERACAO_ANTECEDENCIA_MOTORISTA_MINUTOS_PADRAO"]
+    )
+    assert body["updated_at"] is None
+
+
+def test_motorista_le_e_aluno_recebe_403(motorista, aluno):
+    assert motorista.client.get(URL).status_code == 200
+    assert aluno.client.get(URL).status_code == 403
+
+
+def test_gestor_salva_e_vale_so_para_a_propria_organizacao(gestor, other_gestor, motorista):
+    resp = gestor.client.put(URL, json=VALORES)
+
+    assert resp.status_code == 200
+    assert resp.get_json()["updated_at"] is not None
+    for campo, valor in VALORES.items():
+        assert motorista.client.get(URL).get_json()[campo] == valor
+    assert other_gestor.client.get(URL).get_json()["minimo_alunos"] == 1
+
+    resp = gestor.client.put(URL, json={**VALORES, "minimo_alunos": 2})
+    assert resp.get_json()["minimo_alunos"] == 2
+
+
+def test_motorista_nao_altera(motorista):
+    assert motorista.client.put(URL, json=VALORES).status_code == 403
+
+
+@pytest.mark.parametrize(
+    "alteracao",
+    [
+        {"minimo_alunos": 0},
+        {"pausa_entre_viagens_minutos": -1},
+        {"antecedencia_motorista_minutos": 1441},
+        {"minimo_alunos": "muitos"},
+        {"pausa_entre_viagens_minutos": None},
+        {"minimo_alunos": True},
+        {"pausa_entre_viagens_minutos": 3.0},
+    ],
+)
+def test_valores_invalidos_400(gestor, alteracao):
+    assert gestor.client.put(URL, json={**VALORES, **alteracao}).status_code == 400
+
+
+def test_campo_ausente_400(gestor):
+    body = dict(VALORES)
+    del body["antecedencia_motorista_minutos"]
+    assert gestor.client.put(URL, json=body).status_code == 400
+
+
+def test_iniciar_percurso_exige_minimo_de_alunos(
+    _db, organizacao, motorista, viagem_solicitada, relogio
+):
+    _salvar(_db, organizacao.id, minimo_alunos=2)
+
+    resp = _iniciar(motorista, viagem_solicitada)
+
+    assert resp.status_code == 409
+    assert "pelo menos 2 aluno" in resp.get_json()["error"]["message"]
+    _db.session.refresh(viagem_solicitada)
+    assert viagem_solicitada.status == StatusViagem.SOLICITADA
+
+
+def test_pausa_entre_viagens_fica_em_pausa_ate(
+    _db, organizacao, motorista, rota_sob_demanda, viagem_solicitada, relogio
+):
+    _salvar(_db, organizacao.id, pausa=10)
+    anterior = ViagemFactory(
+        rota_id=rota_sob_demanda.id,
+        data=relogio.agora.date(),
+        status=StatusViagem.EM_ANDAMENTO,
+        motorista_id=motorista.user.id,
+        inicio_real=relogio.agora - timedelta(minutes=30),
+    )
+    _db.session.add(anterior)
+    _db.session.commit()
+    resp = motorista.client.put(f"/v1/viagens/{anterior.id}/acao", json={"acao": "FINALIZAR"})
+    assert resp.status_code == 200, resp.get_json()
+
+    m = _db.session.get(Motorista, motorista.user.id, populate_existing=True)
+    assert m.descanso_ate is None
+    assert m.pausa_ate == relogio.agora + timedelta(minutes=10)
+    # The pause is not the legal rest: status and fixed-trip availability ignore it.
+    assert status_motorista(m, relogio.agora) == StatusMotorista.ATIVO
+    assert disponibilidade_motorista(m, relogio.agora)[0] is True
+    pode, motivo, livre = disponibilidade_motorista(m, relogio.agora, considerar_pausa=True)
+    assert pode is False
+    assert motivo.startswith("Motorista em pausa mínima entre viagens.")
+    assert livre == relogio.agora + timedelta(minutes=10)
+
+    resp = _iniciar(motorista, viagem_solicitada)
+    assert resp.status_code == 403
+    assert "pausa mínima entre viagens" in resp.get_json()["error"]["message"]
+
+    relogio.avancar(minutes=10)
+    assert _iniciar(motorista, viagem_solicitada).status_code == 200
+    m = _db.session.get(Motorista, motorista.user.id, populate_existing=True)
+    assert m.pausa_ate is None
+
+
+@pytest.mark.parametrize("status", [StatusViagem.EM_ANDAMENTO, StatusViagem.BUFFER_ABERTO])
+def test_motorista_em_outra_viagem_nao_inicia_percurso(
+    _db, motorista, viagem_solicitada, relogio, status
+):
+    _db.session.add(
+        ViagemFactory(
+            data=relogio.agora.date(),
+            status=status,
+            motorista_id=motorista.user.id,
+            inicio_real=relogio.agora - timedelta(minutes=5),
+        )
+    )
+    _db.session.commit()
+
+    resp = _iniciar(motorista, viagem_solicitada)
+
+    assert resp.status_code == 409
+    _db.session.refresh(viagem_solicitada)
+    assert viagem_solicitada.status == StatusViagem.SOLICITADA
+
+
+def test_put_atualiza_updated_at_mesmo_com_valores_iguais(gestor, relogio):
+    primeiro = gestor.client.put(URL, json=VALORES).get_json()["updated_at"]
+    assert datetime.fromisoformat(primeiro) == relogio.agora
+
+    relogio.avancar(minutes=1)
+    segundo = gestor.client.put(URL, json=VALORES).get_json()["updated_at"]
+    assert datetime.fromisoformat(segundo) == relogio.agora
+
+
+def _finalizar(_db, motorista, rota, inicio):
+    anterior = ViagemFactory(
+        rota_id=rota.id,
+        data=inicio.date(),
+        status=StatusViagem.EM_ANDAMENTO,
+        motorista_id=motorista.user.id,
+        inicio_real=inicio,
+    )
+    _db.session.add(anterior)
+    _db.session.commit()
+    resp = motorista.client.put(f"/v1/viagens/{anterior.id}/acao", json={"acao": "FINALIZAR"})
+    assert resp.status_code == 200, resp.get_json()
+
+
+def test_pausa_nao_vale_apos_viagem_de_horario_fixo(_db, organizacao, motorista, rota, relogio):
+    _salvar(_db, organizacao.id, pausa=30)
+    rota_fixa = rota
+    assert rota_fixa.tipo == TipoViagem.FIXA
+    _finalizar(_db, motorista, rota_fixa, relogio.agora - timedelta(minutes=30))
+
+    m = _db.session.get(Motorista, motorista.user.id, populate_existing=True)
+    assert m.descanso_ate is None
+    proxima = ViagemFactory(
+        rota_id=rota_fixa.id, data=relogio.agora.date(), motorista_id=motorista.user.id
+    )
+    _db.session.add(proxima)
+    _db.session.commit()
+    resp = motorista.client.put(f"/v1/viagens/{proxima.id}/acao", json={"acao": "INICIAR"})
+    assert resp.status_code == 200, resp.get_json()
+
+
+def test_mensagem_de_pausa_quando_ela_termina_depois_do_descanso_da_jornada(
+    _db, app, organizacao, motorista, rota_sob_demanda, viagem_solicitada, relogio
+):
+    horas_max = app.config["MOTORISTA_HORAS_MAX_DIRECAO"]
+    descanso = app.config["MOTORISTA_DESCANSO_MINUTOS"]
+    _salvar(_db, organizacao.id, pausa=descanso + 20)
+    _finalizar(_db, motorista, rota_sob_demanda, relogio.agora - timedelta(hours=horas_max))
+
+    resp = _iniciar(motorista, viagem_solicitada)
+    assert resp.status_code == 403
+    assert "pausa mínima entre viagens" in resp.get_json()["error"]["message"]
+
+
+def test_mensagem_de_jornada_quando_o_descanso_termina_depois_da_pausa(
+    _db, app, organizacao, motorista, rota_sob_demanda, viagem_solicitada, relogio
+):
+    horas_max = app.config["MOTORISTA_HORAS_MAX_DIRECAO"]
+    _salvar(_db, organizacao.id, pausa=5)
+    _finalizar(_db, motorista, rota_sob_demanda, relogio.agora - timedelta(hours=horas_max))
+
+    resp = _iniciar(motorista, viagem_solicitada)
+    assert resp.status_code == 403
+    assert "direção contínua" in resp.get_json()["error"]["message"]
+
+
+def test_pausa_sob_demanda_nao_bloqueia_viagem_fixa(
+    _db, organizacao, motorista, rota, rota_sob_demanda, relogio
+):
+    _salvar(_db, organizacao.id, pausa=30)
+    _finalizar(_db, motorista, rota_sob_demanda, relogio.agora - timedelta(minutes=30))
+
+    relogio.avancar(minutes=15)
+    fixa = ViagemFactory(rota_id=rota.id, data=relogio.agora.date(), motorista_id=motorista.user.id)
+    _db.session.add(fixa)
+    _db.session.commit()
+    resp = motorista.client.put(f"/v1/viagens/{fixa.id}/acao", json={"acao": "INICIAR"})
+    assert resp.status_code == 200, resp.get_json()
+
+
+def test_descanso_legal_do_historico_mostra_mensagem_do_ctb(
+    _db, app, motorista, rota_sob_demanda, relogio
+):
+    horas_max = app.config["MOTORISTA_HORAS_MAX_DIRECAO"]
+    _db.session.add(
+        ViagemFactory(
+            rota_id=rota_sob_demanda.id,
+            data=relogio.agora.date(),
+            status=StatusViagem.FINALIZADA,
+            motorista_id=motorista.user.id,
+            inicio_real=relogio.agora - timedelta(hours=horas_max),
+            fim_real=relogio.agora,
+        )
+    )
+    # Old history: nothing stored in descanso_ate; a shorter pause is pending.
+    motorista.user.pausa_ate = relogio.agora + timedelta(minutes=5)
+    _db.session.commit()
+
+    pode, motivo, _ = disponibilidade_motorista(
+        motorista.user, relogio.agora, considerar_pausa=True
+    )
+    assert pode is False
+    assert "direção contínua" in motivo
+
+
+def test_iniciar_percurso_sem_motorista_409(_db, motorista, viagem_solicitada):
+    viagem_solicitada.motorista_id = None
+    _db.session.commit()
+
+    resp = _iniciar(motorista, viagem_solicitada)
+
+    assert resp.status_code == 409
+    assert resp.get_json()["error"]["message"] == "Viagem sem motorista atribuído"

@@ -37,10 +37,13 @@ from app.models.viagem import (
     Viagem,
     ViagemPonto,
 )
+from app.services import parametros_operacao_service
 from app.services.notificacao_service import NotificacaoService
+from app.services.rotas_service import travar_rota
 from app.tasks.viagem_tasks import realizar_auto_checkin
 from app.utils import audit_logger, tempo
 from app.utils.geo_utils import calcular_distancia_metros
+from app.utils.validators import validate_uuid
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +79,18 @@ def _rota_id_da_viagem(viagem: Viagem):
     if viagem.horario_rota:
         return viagem.horario_rota.rota_id
     return None
+
+
+def _exigir_viagem_da_organizacao(
+    viagem: Viagem, user: User, mensagem: str = "Acesso negado"
+) -> None:
+    """Raise ForbiddenError unless the trip's route belongs to the user's organização."""
+    rota_id = _rota_id_da_viagem(viagem)
+    if rota_id is None:
+        raise ForbiddenError(mensagem)
+    rota = db.session.get(Rota, rota_id)
+    if not rota or rota.organizacao_id != user.organizacao_id:
+        raise ForbiddenError(mensagem)
 
 
 def _popular_dados_da_viagem(viagem_obj: Viagem, rota_obj: Rota) -> None:
@@ -335,6 +350,55 @@ def listar_pontos_embarque(user_id: str, viagem_id: str) -> list[dict]:
     return resultado
 
 
+def _resolver_horario(rota: Rota, dia: DiaDaSemana, horario_rota_id: Any) -> HorarioRota:
+    """Active schedule of the route for the weekday: the one asked for, or the only one.
+
+    Raises: NotFoundError, ValidationError
+    """
+    ativos_no_dia = (
+        db.session.query(HorarioRota)
+        .join(DiasOperacao)
+        .filter(
+            HorarioRota.rota_id == rota.id,
+            HorarioRota.ativo.is_(True),
+            DiasOperacao.dia == dia,
+        )
+        .order_by(HorarioRota.horario_saida)
+    )
+
+    if horario_rota_id is None:
+        candidatos = ativos_no_dia.all()
+        if not candidatos:
+            raise NotFoundError(f"Horário não encontrado para a rota {rota.nome} em {dia.value}")
+        if len(candidatos) > 1:
+            opcoes = []
+            for h in candidatos:
+                opcoes.append(
+                    {
+                        "id": str(h.id),
+                        "sentido": h.sentido.value,
+                        "horario_saida": h.horario_saida.strftime("%H:%M"),
+                    }
+                )
+            raise ValidationError(
+                f"A rota tem {len(candidatos)} horários em {dia.value}; informe horario_rota_id",
+                details={"horarios": opcoes},
+            )
+        return candidatos[0]
+
+    horario = db.session.get(HorarioRota, horario_rota_id)
+    if not horario or horario.rota_id != rota.id:
+        raise NotFoundError("Horário não encontrado nesta rota")
+
+    if not horario.ativo:
+        raise NotFoundError("Horário não está mais ativo; use o horário atual")
+
+    for dia_operacao in horario.dias:
+        if dia_operacao.dia == dia:
+            return horario
+    raise ValidationError(f"O horário informado não opera em {dia.value}")
+
+
 def gerar_viagem(user_id: str, data_input: dict) -> Viagem:
     """Generate ONE trip for ONE specific route (manual mode).
 
@@ -352,7 +416,7 @@ def gerar_viagem(user_id: str, data_input: dict) -> Viagem:
         raise ValidationError("Data é obrigatória")
 
     rota = db.session.get(Rota, rota_id)
-    if not rota:
+    if not rota or not rota.ativa:
         raise NotFoundError("Rota não encontrada")
 
     if rota.organizacao_id != user.organizacao_id:
@@ -366,18 +430,22 @@ def gerar_viagem(user_id: str, data_input: dict) -> Viagem:
 
     dia_semana = _get_dia_semana_enum(data_viagem)
 
-    horario_selecionado = (
-        db.session.query(HorarioRota)
-        .join(DiasOperacao)
-        .filter(HorarioRota.rota_id == rota.id, DiasOperacao.dia == dia_semana)
-        .first()
-    )
-    if not horario_selecionado:
-        raise NotFoundError(f"Horário não encontrado para a rota {rota.nome} no dia {dia_semana}")
+    # Same lock as the schedule edits in rotas_service: two generators, or a generator
+    # and an edit, run one after the other, and every read below sees the committed state.
+    travar_rota(rota.id)
+    horario_selecionado = _resolver_horario(rota, dia_semana, data_input.get("horario_rota_id"))
 
+    # By time and direction, not horario_rota_id: a versioned schedule gets a new id.
     existente = (
         db.session.query(Viagem.id)
-        .filter_by(data=data_viagem, horario_rota_id=horario_selecionado.id)
+        .join(HorarioRota, Viagem.horario_rota_id == HorarioRota.id)
+        .filter(
+            HorarioRota.rota_id == rota.id,
+            HorarioRota.sentido == horario_selecionado.sentido,
+            HorarioRota.horario_saida == horario_selecionado.horario_saida,
+            Viagem.data == data_viagem,
+            Viagem.status != StatusViagem.CANCELADA,
+        )
         .first()
     )
     if existente:
@@ -470,15 +538,19 @@ def _fim_descanso_motorista(motorista: Motorista, agora: datetime) -> datetime |
     )
 
 
+# An open buffer already commits the driver: they are about to leave on that trip.
+ESTADOS_EM_ROTA = (StatusViagem.BUFFER_ABERTO, StatusViagem.EM_ANDAMENTO)
+
+
 def motoristas_em_viagem(motorista_ids: list[Any]) -> set[Any]:
-    """Ids, among `motorista_ids`, of drivers with a trip EM_ANDAMENTO (one query)."""
+    """Ids, among `motorista_ids`, of drivers with a trip in ESTADOS_EM_ROTA (one query)."""
     if not motorista_ids:
         return set()
     linhas = (
         db.session.query(Viagem.motorista_id)
         .filter(
             Viagem.motorista_id.in_(motorista_ids),
-            Viagem.status == StatusViagem.EM_ANDAMENTO,
+            Viagem.status.in_(ESTADOS_EM_ROTA),
         )
         .distinct()
         .all()
@@ -500,7 +572,7 @@ def status_motorista(
         em_viagem = db.session.query(
             exists().where(
                 Viagem.motorista_id == motorista.id,
-                Viagem.status == StatusViagem.EM_ANDAMENTO,
+                Viagem.status.in_(ESTADOS_EM_ROTA),
             )
         ).scalar()
     if em_viagem:
@@ -510,13 +582,22 @@ def status_motorista(
     return StatusMotorista.ATIVO
 
 
+def _horario_liberacao(liberado_em: datetime, agora_local: datetime) -> str:
+    liberado_local = liberado_em.astimezone(agora_local.tzinfo)
+    horario = liberado_local.strftime("%H:%M")
+    if liberado_local.date() != agora_local.date():
+        horario += liberado_local.strftime(" do dia %d/%m")
+    return horario
+
+
 def disponibilidade_motorista(
-    motorista: Motorista, agora: datetime
+    motorista: Motorista, agora: datetime, considerar_pausa: bool = False
 ) -> tuple[bool, str | None, datetime | None]:
     """Whether the driver can start a trip at `agora`, without raising.
 
     Returns (pode_trabalhar, motivo, livre_a_partir_de). `livre_a_partir_de` is only
-    known for a mandatory rest; it is None otherwise.
+    known for a mandatory rest or pause; it is None otherwise. `considerar_pausa` is for
+    on-demand flows only: the organization pause never blocks a fixed trip.
     """
     fuso = ZoneInfo(current_app.config["TIMEZONE"])
     agora_local = agora.astimezone(fuso)
@@ -531,10 +612,18 @@ def disponibilidade_motorista(
     else:
         # Also recompute from history: covers trips from before `descanso_ate` existed.
         liberado_em = _fim_descanso_motorista(motorista, agora)
+    pausa_ate = motorista.pausa_ate if considerar_pausa else None
+    if pausa_ate is not None and pausa_ate > agora:
+        if liberado_em is None or pausa_ate > liberado_em:
+            horario = _horario_liberacao(pausa_ate, agora_local)
+            motivo = (
+                f"Motorista em pausa mínima entre viagens. Poderá dirigir novamente às {horario}."
+            )
+            return False, motivo, pausa_ate
     if liberado_em is not None:
         horas_max = current_app.config["MOTORISTA_HORAS_MAX_DIRECAO"]
         minutos_descanso = current_app.config["MOTORISTA_DESCANSO_MINUTOS"]
-        horario = liberado_em.astimezone(fuso).strftime("%H:%M")
+        horario = _horario_liberacao(liberado_em, agora_local)
         motivo = (
             f"Motorista atingiu {horas_max}h de direção contínua e precisa descansar "
             f"{minutos_descanso} min. Poderá dirigir novamente às {horario}."
@@ -566,9 +655,11 @@ def disponibilidade_motorista(
     return True, None, None
 
 
-def _validar_jornada_motorista(motorista: Motorista, agora: datetime) -> None:
+def validar_jornada_motorista(
+    motorista: Motorista, agora: datetime, considerar_pausa: bool = False
+) -> None:
     """Block starting a trip while on another trip, during rest or outside working hours."""
-    pode, motivo, _ = disponibilidade_motorista(motorista, agora)
+    pode, motivo, _ = disponibilidade_motorista(motorista, agora, considerar_pausa)
     if pode:
         return
     if status_motorista(motorista, agora) == StatusMotorista.EM_ROTA:
@@ -576,9 +667,20 @@ def _validar_jornada_motorista(motorista: Motorista, agora: datetime) -> None:
     raise ForbiddenError(motivo or "Motorista indisponível")
 
 
-def _gravar_descanso_apos_viagem(motorista: Motorista, agora: datetime) -> None:
-    """After a started trip ends (finished or cancelled): store the rest end, if owed."""
-    motorista.descanso_ate = _fim_descanso_motorista(motorista, agora)
+def _gravar_descanso_apos_viagem(viagem: Viagem) -> None:
+    """After a started trip ends (finished or cancelled): store the rest end, if owed.
+
+    The organization pause goes to `pausa_ate` and only follows on-demand trips.
+    """
+    motorista = viagem.motorista
+    fim = viagem.fim_real
+    motorista.descanso_ate = _fim_descanso_motorista(motorista, fim)
+    # On-demand trips always have rota_id; fixed ones may only have horario_rota.
+    rota = viagem.rota
+    if rota is not None and rota.tipo == TipoViagem.SOB_DEMANDA:
+        parametros = parametros_operacao_service.parametros_da_organizacao(rota.organizacao_id)
+        if parametros.pausa_entre_viagens_minutos > 0:
+            motorista.pausa_ate = fim + timedelta(minutes=parametros.pausa_entre_viagens_minutos)
 
 
 def list_viagens_motorista(user_id: str) -> list[Viagem]:
@@ -628,7 +730,7 @@ def controlar_viagem(user_id: str, viagem_id: str, data: dict[str, Any]) -> Viag
                     .populate_existing()
                     .one()
                 )
-                _validar_jornada_motorista(motorista, agora)
+                validar_jornada_motorista(motorista, agora)
                 motorista.descanso_ate = None
             viagem.status = StatusViagem.EM_ANDAMENTO
             viagem.inicio_real = agora
@@ -642,7 +744,7 @@ def controlar_viagem(user_id: str, viagem_id: str, data: dict[str, Any]) -> Viag
             viagem.fim_real = _agora()
             db.session.flush()
             if viagem.motorista is not None:
-                _gravar_descanso_apos_viagem(viagem.motorista, viagem.fim_real)
+                _gravar_descanso_apos_viagem(viagem)
 
             rastros = (
                 TelemetriaViagem.query.filter_by(viagem_id=viagem.id)
@@ -706,9 +808,7 @@ def cancelar_viagem(user_id: str, viagem_id: str) -> dict[str, Any]:
     if not viagem:
         raise NotFoundError("Viagem não encontrada")
 
-    rota = db.session.get(Rota, _rota_id_da_viagem(viagem))
-    if not rota or rota.organizacao_id != user.organizacao_id:
-        raise ForbiddenError("Acesso negado")
+    _exigir_viagem_da_organizacao(viagem, user)
 
     if viagem.status in (StatusViagem.FINALIZADA, StatusViagem.CANCELADA):
         raise ValidationError(f"Não é possível cancelar uma viagem com status {viagem.status.name}")
@@ -720,7 +820,7 @@ def cancelar_viagem(user_id: str, viagem_id: str) -> dict[str, Any]:
             viagem.fim_real = _agora()
             db.session.flush()
             if viagem.motorista is not None:
-                _gravar_descanso_apos_viagem(viagem.motorista, viagem.fim_real)
+                _gravar_descanso_apos_viagem(viagem)
 
         confirmados = AlunosConfirmados.query.filter_by(viagem_id=viagem.id, confirmacao=True).all()
         data_formatada = viagem.data.strftime("%d/%m/%Y")
@@ -848,21 +948,18 @@ def atualizar_localizacao(user_id: str, viagem_id: str, data: dict) -> dict:
 def obter_localizacao_onibus(user_id: str, viagem_id: str) -> dict:
     """Return the bus's current location (driver GPS) for a trip in progress.
 
-    The student (confirmed on the trip) or the trip's driver may query it.
+    The student (confirmed on the trip), the trip's driver or a manager of the
+    trip's organization may query it.
     """
     user = db.session.get(User, user_id)
     if not user:
         raise ForbiddenError("Acesso negado")
 
-    viagem = db.session.get(Viagem, viagem_id)
+    viagem = db.session.get(Viagem, validate_uuid(viagem_id, "ID da viagem"))
     if not viagem:
         raise NotFoundError("Viagem não encontrada")
 
-    if viagem.status != StatusViagem.EM_ANDAMENTO:
-        raise ValidationError(
-            "A localização do ônibus só está disponível enquanto a viagem está em andamento."
-        )
-
+    # Authorize before the status check so outsiders cannot probe a trip's state.
     if user.role == UserRole.MOTORISTA:
         if viagem.motorista_id != user.id:
             raise ForbiddenError("Apenas o motorista desta viagem pode consultar a localização.")
@@ -872,9 +969,21 @@ def obter_localizacao_onibus(user_id: str, viagem_id: str) -> dict:
             raise ForbiddenError(
                 "Você precisa estar confirmado nesta viagem para ver a localização do ônibus."
             )
+    elif user.role == UserRole.GESTOR:
+        _exigir_viagem_da_organizacao(
+            viagem,
+            user,
+            "Apenas gestores da organização desta viagem podem consultar a localização.",
+        )
     else:
         raise ForbiddenError(
-            "Apenas alunos confirmados ou o motorista podem consultar a localização do ônibus."
+            "Apenas alunos confirmados, o motorista ou o gestor podem consultar a localização"
+            " do ônibus."
+        )
+
+    if viagem.status != StatusViagem.EM_ANDAMENTO:
+        raise ValidationError(
+            "A localização do ônibus só está disponível enquanto a viagem está em andamento."
         )
 
     return {

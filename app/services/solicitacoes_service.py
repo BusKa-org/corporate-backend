@@ -8,7 +8,7 @@ from app.models.base import db
 from app.models.enum import StatusSolicitacao, StatusViagem, TipoViagem, UserRole
 from app.models.onibus import Onibus
 from app.models.rota import Rota
-from app.models.user import Aluno, User
+from app.models.user import Aluno, Motorista, User
 from app.models.viagem import AlunosConfirmados, SolicitacaoViagem, Viagem
 from app.services import capacidade_service, janelas_service, viagens_service
 from app.services.notificacao_service import NotificacaoService
@@ -23,9 +23,15 @@ def _buscar_aluno(user_id: str) -> Aluno:
     return aluno
 
 
-# shortcut: once PR #16 merges, check disponibilidade_motorista(motorista, agora) here and refuse
-# (with livre_a_partir_de in the message) so a request never goes to a resting or off-hours driver.
 def _escolher_motorista(janela):
+    """The window's driver, refused while on another trip, resting, paused or off hours."""
+    motorista = db.session.get(Motorista, janela.motorista_id)
+    assert motorista is not None  # janela.motorista_id is a NOT NULL FK
+    pode, motivo, _ = viagens_service.disponibilidade_motorista(
+        motorista, tempo.agora_utc(), considerar_pausa=True
+    )
+    if not pode:
+        raise ConflictError(f"O motorista desta rota está indisponível no momento. {motivo}")
     return janela.motorista_id
 
 
@@ -49,7 +55,7 @@ def solicitar_viagem(user_id: str, rota_id: str) -> SolicitacaoViagem:
     aluno = _buscar_aluno(user_id)
 
     rota = db.session.get(Rota, validate_uuid(rota_id, "ID da rota"))
-    if not rota:
+    if not rota or not rota.ativa:
         raise NotFoundError("Rota não encontrada")
 
     if rota.organizacao_id != aluno.organizacao_id:
@@ -285,7 +291,7 @@ def buscar_rodada_ativa(user_id: str, rota_id: str) -> dict:
         raise ForbiddenError("Acesso negado")
 
     rota = db.session.get(Rota, validate_uuid(rota_id, "ID da rota"))
-    if not rota:
+    if not rota or not rota.ativa:
         raise NotFoundError("Rota não encontrada")
 
     if rota.organizacao_id != user.organizacao_id:

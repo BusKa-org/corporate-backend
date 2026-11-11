@@ -252,7 +252,7 @@ class ViagemLocalizacaoResource(Resource):
     @jwt_required()
     @limite_tempo_real
     def get(self, id):
-        """(Student/Driver) Gets the bus's current location (trip in progress)."""
+        """(Student/Driver/Manager) Gets the bus's current location (trip in progress)."""
         user_id = get_jwt_identity()
         result = viagens_service.obter_localizacao_onibus(user_id, id)
         return result, 200

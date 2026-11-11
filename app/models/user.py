@@ -73,6 +73,8 @@ class Motorista(User):
 
     # End of the mandatory rest, saved when a trip ends. Null = no rest owed.
     descanso_ate = db.Column(db.DateTime(timezone=True), nullable=True)
+    # Organization pause after an on-demand trip; only on-demand flows read it.
+    pausa_ate = db.Column(db.DateTime(timezone=True), nullable=True)
     # Computed by the service for the response (trips + descanso_ate); not a column.
     # __allow_unmapped__ lets SQLAlchemy ignore this annotation without Mapped[].
     __allow_unmapped__ = True
