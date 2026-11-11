@@ -83,11 +83,10 @@ def _exigir_viagem_da_organizacao(
     viagem: Viagem, user: User, mensagem: str = "Acesso negado"
 ) -> None:
     """Raise ForbiddenError unless the trip's route belongs to the user's organização."""
-    rota_id = _rota_id_da_viagem(viagem)
-    if rota_id is None:
-        raise ForbiddenError(mensagem)
-    rota = db.session.get(Rota, rota_id)
-    if not rota or rota.organizacao_id != user.organizacao_id:
+    rota = viagem.rota
+    if rota is None and viagem.horario_rota is not None:
+        rota = viagem.horario_rota.rota
+    if rota is None or rota.organizacao_id != user.organizacao_id:
         raise ForbiddenError(mensagem)
 
 
