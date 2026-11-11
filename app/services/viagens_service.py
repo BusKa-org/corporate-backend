@@ -1,6 +1,7 @@
 """Trips (Viagem) service - trip management, student confirmations."""
 
 import logging
+import uuid
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -26,6 +27,7 @@ from app.models.enum import (
     StatusViagem,
     TipoViagem,
     UserRole,
+    UserStatus,
 )
 from app.models.geo import Ponto
 from app.models.rota import DiasOperacao, HorarioRota, Rota, RotaAluno, RotaPonto
@@ -37,7 +39,7 @@ from app.models.viagem import (
     Viagem,
     ViagemPonto,
 )
-from app.services import parametros_operacao_service
+from app.services import capacidade_service, parametros_operacao_service
 from app.services.notificacao_service import NotificacaoService
 from app.services.rotas_service import travar_rota
 from app.tasks.viagem_tasks import realizar_auto_checkin
@@ -193,6 +195,7 @@ def confirmar_presenca_aluno(
         db.session.execute(
             select(User.id).where(User.id == aluno.usuario_id).with_for_update(key_share=True)
         )
+        capacidade_service.exigir_conta_ativa(aluno.usuario_id)
 
         if viagem.status == StatusViagem.EM_ANDAMENTO and not confirmacao:
             desistencia = _desistir_apos_partida(viagem, aluno)
@@ -350,6 +353,22 @@ def listar_pontos_embarque(user_id: str, viagem_id: str) -> list[dict]:
     return resultado
 
 
+def exigir_motorista_ativo(motorista_id: Any, organizacao_id: Any) -> uuid.UUID:
+    """Lock the driver row first: a concurrent deactivation either sees the new work or wins."""
+    motorista_uuid = validate_uuid(str(motorista_id), "ID do motorista")
+    db.session.execute(
+        select(User.id).where(User.id == motorista_uuid).with_for_update(key_share=True)
+    )
+    motorista = db.session.get(Motorista, motorista_uuid, populate_existing=True)
+    if not motorista:
+        raise NotFoundError("Motorista não encontrado")
+    if motorista.organizacao_id != organizacao_id:
+        raise ValidationError("Motorista não pertence à organização")
+    if motorista.status != UserStatus.ACTIVE:
+        raise ValidationError("Motorista sem cadastro ativo")
+    return motorista_uuid
+
+
 def _resolver_horario(rota: Rota, dia: DiaDaSemana, horario_rota_id: Any) -> HorarioRota:
     """Active schedule of the route for the weekday: the one asked for, or the only one.
 
@@ -454,6 +473,8 @@ def gerar_viagem(user_id: str, data_input: dict) -> Viagem:
         )
 
     with transactional():
+        if motorista_id:
+            exigir_motorista_ativo(motorista_id, rota.organizacao_id)
         nova_viagem = Viagem(
             data=data_viagem,
             horario_rota_id=horario_selecionado.id,

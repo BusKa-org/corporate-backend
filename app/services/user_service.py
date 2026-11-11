@@ -4,6 +4,7 @@ import logging
 from datetime import UTC, datetime
 from typing import Any, cast
 
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import with_polymorphic
 from werkzeug.security import check_password_hash, generate_password_hash
 
@@ -16,10 +17,21 @@ from app.core.exceptions import (
     ValidationError,
 )
 from app.models.base import db
-from app.models.enum import UserRole, UserStatus
-from app.models.user import Gestor, Motorista, User
+from app.models.enum import StatusViagem, UserRole, UserStatus
+from app.models.onibus import JanelaDisponibilidade
+from app.models.rota import Rota
+from app.models.user import Aluno, Gestor, Motorista, User
+from app.models.viagem import Viagem
+from app.services import solicitacoes_service
 from app.services.viagens_service import motoristas_em_viagem, status_motorista
-from app.utils import audit_logger, validate_cpf, validate_email, validate_password, validate_uuid
+from app.utils import (
+    audit_logger,
+    tempo,
+    validate_cpf,
+    validate_email,
+    validate_password,
+    validate_uuid,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -365,6 +377,150 @@ def delete_motorista(gestor_id: str, motorista_id: str) -> None:
         raise AppError(
             "Não é possível remover este motorista pois ele possui viagens vinculadas", 400
         )
+
+
+def _get_conta_gerenciavel(gestor: Gestor, user_id: str, roles: tuple[UserRole, ...]) -> User:
+    if str(user_id) == str(gestor.id):
+        raise ValidationError("Você não pode alterar a situação da sua própria conta")
+    user = _get_user_or_404(user_id)
+    # Organization first: another org's gestor gets the same 403 whatever the role or status.
+    if user.organizacao_id != gestor.organizacao_id:
+        raise ForbiddenError("Proibido alterar contas de outra organização")
+    if user.role not in roles or user.status == UserStatus.DELETED:
+        raise NotFoundError("Usuário não encontrado")
+    return user
+
+
+def _exigir_motorista_sem_compromissos(motorista_id: Any) -> None:
+    """The gestor reassigns trips and windows first; a disabled driver cannot run them."""
+    em_andamento = (
+        db.session.query(Viagem.id)
+        .filter(Viagem.motorista_id == motorista_id, Viagem.status == StatusViagem.EM_ANDAMENTO)
+        .first()
+    )
+    if em_andamento:
+        raise ConflictError(solicitacoes_service.EM_VIAGEM)
+
+    viagem_futura = (
+        db.session.query(Viagem.id)
+        .filter(
+            Viagem.motorista_id == motorista_id,
+            or_(
+                and_(
+                    Viagem.status == StatusViagem.AGENDADA,
+                    Viagem.data >= tempo.agora_local().date(),
+                ),
+                # An open on-demand round blocks whatever its date (it may cross midnight).
+                Viagem.status.in_([StatusViagem.SOLICITADA, StatusViagem.BUFFER_ABERTO]),
+            ),
+        )
+        .first()
+    )
+    janela = (
+        db.session.query(JanelaDisponibilidade.id)
+        .filter(JanelaDisponibilidade.motorista_id == motorista_id)
+        .first()
+    )
+    if viagem_futura or janela:
+        raise ConflictError(
+            "Reatribua as viagens futuras e as janelas de disponibilidade do motorista "
+            "antes de desativá-lo"
+        )
+
+    rotas = (
+        db.session.query(Rota.nome)
+        .filter(Rota.motorista_padrao_id == motorista_id)
+        .order_by(Rota.nome)
+        .all()
+    )
+    if rotas:
+        nomes: list[str] = []
+        for rota in rotas:
+            nomes.append(rota.nome)
+        raise ConflictError(
+            "Defina outro motorista padrão nas rotas antes de desativá-lo: " + ", ".join(nomes)
+        )
+
+
+def _mudar_status(
+    gestor_id: str,
+    user_id: str,
+    de: tuple[UserStatus, ...],
+    para: UserStatus,
+    msg_conflito: str,
+    action: str,
+    roles: tuple[UserRole, ...] = (UserRole.ALUNO, UserRole.MOTORISTA),
+) -> User:
+    """Gestor moves an account of its organization from one of `de` to `para`."""
+    gestor = _get_gestor_or_403(gestor_id, "Apenas gestores podem alterar a situação de contas")
+    user = _get_conta_gerenciavel(gestor, user_id, roles)
+    # Cheap answer before locking the student's trips; re-checked under the lock below.
+    if user.status not in de:
+        raise ConflictError(msg_conflito)
+
+    try:
+        viagens_travadas: dict[Any, Viagem] = {}
+        if para == UserStatus.DISABLED and isinstance(user, Aluno):
+            # Same lock order as the rest of the system: vehicle and trip before the student.
+            viagens_travadas = solicitacoes_service.travar_viagens_do_aluno(user.id)
+
+        # Plain FOR UPDATE: it waits for the KEY SHARE locks that new trips/windows/routes take.
+        db.session.execute(select(User.id).where(User.id == user.id).with_for_update())
+        db.session.refresh(user)
+        if user.status not in de:
+            raise ConflictError(msg_conflito)
+
+        if para == UserStatus.DISABLED:
+            if isinstance(user, Aluno):
+                solicitacoes_service.liberar_aluno(user, viagens_travadas)
+            else:
+                _exigir_motorista_sem_compromissos(user.id)
+            # Stop push notifications; the app registers a new token on the next login.
+            user.fcm_token = None
+
+        user.status = para
+        db.session.commit()
+    except AppError:
+        db.session.rollback()
+        raise
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error changing account status: {e}", exc_info=True)
+        raise AppError("Erro ao alterar a situação da conta", 500)
+
+    audit_logger.log_user_action(
+        action=action,
+        user_id=gestor_id,
+        resource_type="user",
+        resource_id=user_id,
+    )
+    _preencher_status_motoristas([user])
+    return user
+
+
+def desativar_conta(gestor_id: str, user_id: str) -> User:
+    """Gestor deactivates a passenger or driver account; login and existing tokens stop working."""
+    # Only ACTIVE accounts, so reactivating back to ACTIVE never skips a pending signup/approval.
+    return _mudar_status(
+        gestor_id,
+        user_id,
+        de=(UserStatus.ACTIVE,),
+        para=UserStatus.DISABLED,
+        msg_conflito="Apenas contas ativas podem ser desativadas",
+        action="desativar_conta",
+    )
+
+
+def reativar_conta(gestor_id: str, user_id: str) -> User:
+    """Gestor reactivates a deactivated passenger or driver account."""
+    return _mudar_status(
+        gestor_id,
+        user_id,
+        de=(UserStatus.DISABLED,),
+        para=UserStatus.ACTIVE,
+        msg_conflito="Apenas contas desativadas podem ser reativadas",
+        action="reativar_conta",
+    )
 
 
 def update_fcm_token(user_id: str, data: dict[str, Any]) -> None:
