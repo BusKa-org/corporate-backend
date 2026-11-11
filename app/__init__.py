@@ -41,6 +41,7 @@ from .api.controllers.viagens_controller import api as viagem_ns
 from .core.config import Settings
 from .models import Ocorrencia  # noqa: F401 — registers table with SQLAlchemy
 from .models.base import db
+from .services import consentimento_service
 from .utils import (
     check_production_security,
     setup_logging,
@@ -258,6 +259,7 @@ Inclua o header: `Authorization: Bearer <seu_token>`
 
     register_jwt_handlers(jwt)
     register_error_handlers(app)
+    app.before_request(consentimento_service.exigir_consentimento_do_motorista)
     register_api_error_handlers(api)
 
     # OpenAPI export endpoint

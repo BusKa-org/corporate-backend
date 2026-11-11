@@ -267,6 +267,8 @@ def motorista(client, app, _db, organizacao):
     m = MotoristaFactory(organizacao_id=organizacao.id)
     _db.session.add(m)
     _db.session.commit()
+    _db.session.add(Consentimento(usuario_id=m.id, versao=VERSAO_TERMO_VIGENTE, acao=ACEITE))
+    _db.session.commit()
 
     with app.app_context():
         token = create_access_token(identity=str(m.id))
@@ -279,6 +281,8 @@ def motorista(client, app, _db, organizacao):
 def other_motorista(client, app, _db, other_organizacao):
     m = MotoristaFactory(organizacao_id=other_organizacao.id)
     _db.session.add(m)
+    _db.session.commit()
+    _db.session.add(Consentimento(usuario_id=m.id, versao=VERSAO_TERMO_VIGENTE, acao=ACEITE))
     _db.session.commit()
 
     with app.app_context():

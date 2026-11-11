@@ -1,4 +1,7 @@
+import pytest
+
 from app.models.enum import UserStatus
+from app.services.consentimento_service import VERSAO_TERMO_VIGENTE
 from tests.factories.user_factory import GestorFactory, MotoristaFactory
 
 
@@ -10,7 +13,7 @@ def _novo_motorista(_db, organizacao_id):
 
 
 def _ativar(actor, motorista_id):
-    return actor.client.post(f"/v1/users/motoristas/{motorista_id}/ativar")
+    return actor.client.post(f"/v1/users/{motorista_id}/ativar")
 
 
 def test_gestor_ativa_motorista_recem_criado(gestor):
@@ -59,18 +62,58 @@ def test_motorista_nao_pode_ativar_motorista(_db, motorista, organizacao):
     assert r.status_code == 403
 
 
-def test_ativar_motorista_pendente_de_aprovacao(_db, gestor, organizacao):
+def test_ativar_motorista_pendente_de_aprovacao_retorna_409(_db, gestor, organizacao):
+    # Nothing sets PENDING_APPROVAL on drivers; only a pending signup is activated.
     m = _novo_motorista(_db, organizacao.id)
     m.status = UserStatus.PENDING_APPROVAL
     _db.session.commit()
 
-    r = _ativar(gestor, m.id)
+    assert _ativar(gestor, m.id).status_code == 409
 
-    assert r.status_code == 200, r.get_json()
-    assert r.get_json()["status"] == "ACTIVE"
+
+def test_ativacao_nao_preenche_signup_completed_at(_db, gestor, organizacao):
+    m = _novo_motorista(_db, organizacao.id)
+
+    assert _ativar(gestor, m.id).status_code == 200
     # The driver did not finish the signup; activation does not pretend it did.
     _db.session.refresh(m)
     assert m.signup_completed_at is None
+
+
+def test_motorista_ativado_sem_consentimento_precisa_aceitar_o_termo(app, client, _db, gestor):
+    r = gestor.client.post(
+        "/v1/users/motoristas",
+        json={
+            "nome": "Motorista Sem Termo",
+            "email": "sem.termo@example.com",
+            "cpf": "529.982.247-25",
+            "password": "SenhaForte123!",
+            "cnh": "12345678901",
+            "telefone": "83999990000",
+        },
+    )
+    assert r.status_code == 201, r.get_json()
+    motorista_id = r.get_json()["id"]
+    assert _ativar(gestor, motorista_id).status_code == 200
+
+    login = client.post(
+        "/v1/auth/login", json={"email": "sem.termo@example.com", "password": "SenhaForte123!"}
+    )
+    assert login.status_code == 200, login.get_json()
+    assert login.get_json()["consentimento_pendente"] is True
+    headers = {"Authorization": f"Bearer {login.get_json()['token']}"}
+
+    # RF-09: no driver feature before accepting the terms, only profile and consent.
+    assert client.get("/v1/viagens/minhas", headers=headers).status_code == 403
+    assert client.get("/v1/rotas/", headers=headers).status_code == 403
+    assert client.get("/v1/users/me", headers=headers).status_code == 200
+    assert client.get("/v1/consentimento", headers=headers).status_code == 200
+
+    aceite = client.post(
+        "/v1/consentimento", json={"versao": VERSAO_TERMO_VIGENTE}, headers=headers
+    )
+    assert aceite.status_code in (200, 201), aceite.get_json()
+    assert client.get("/v1/viagens/minhas", headers=headers).status_code == 200
 
 
 def test_ativar_aluno_ou_gestor_retorna_404(_db, gestor, aluno, organizacao):
@@ -110,4 +153,46 @@ def test_gestor_nao_ativo_nao_ativa_motorista(_db, gestor, organizacao):
 
 
 def test_ativar_id_invalido_retorna_400(gestor):
+    assert _ativar(gestor, "nao-e-uuid").status_code == 400
+
+
+@pytest.mark.parametrize("acao", ["desativar", "reativar"])
+def test_gestor_nao_ativo_nao_desativa_nem_reativa(_db, gestor, aluno, acao):
+    if acao == "reativar":
+        aluno.user.status = UserStatus.DISABLED
+    status_antes = aluno.user.status
+    gestor.user.status = UserStatus.PENDING_SIGNUP
+    _db.session.commit()
+
+    r = gestor.client.post(f"/v1/users/{aluno.user.id}/{acao}")
+
+    assert r.status_code == 403
+    assert "conta ativa" in r.get_json()["error"]["message"]
+    _db.session.refresh(aluno.user)
+    assert aluno.user.status == status_antes
+
+
+def test_gestor_nao_ativo_nao_cadastra_motorista(_db, gestor):
+    gestor.user.status = UserStatus.PENDING_SIGNUP
+    _db.session.commit()
+
+    r = gestor.client.post(
+        "/v1/users/motoristas",
+        json={
+            "nome": "Motorista Novo",
+            "email": "novo.motorista@example.com",
+            "cpf": "529.982.247-25",
+            "password": "SenhaForte123!",
+            "cnh": "12345678901",
+            "telefone": "83999990000",
+        },
+    )
+
+    assert r.status_code == 403
+
+
+def test_id_invalido_e_400_mesmo_com_gestor_nao_ativo(_db, gestor):
+    gestor.user.status = UserStatus.PENDING_SIGNUP
+    _db.session.commit()
+
     assert _ativar(gestor, "nao-e-uuid").status_code == 400

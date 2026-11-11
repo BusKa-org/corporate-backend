@@ -36,11 +36,6 @@ from app.utils import (
 logger = logging.getLogger(__name__)
 
 
-def _require_active(user: User) -> None:
-    if user.status != UserStatus.ACTIVE:
-        raise ForbiddenError("Cadastro precisa ser finalizado antes de usar o app")
-
-
 def _get_user_or_404(user_id: str) -> User:
     """Get user by ID or raise NotFoundError."""
     validate_uuid(user_id, "User ID")
@@ -51,11 +46,16 @@ def _get_user_or_404(user_id: str) -> User:
 
 
 def _get_gestor_or_403(
-    user_id: str, message: str = "Apenas gestores podem executar esta ação"
+    user_id: str,
+    message: str = "Apenas gestores podem executar esta ação",
+    require_active: bool = False,
 ) -> Gestor:
+    """`require_active` is for account mutations: a pending or disabled gestor only reads."""
     user = _get_user_or_404(user_id)
     if user.role != UserRole.GESTOR:
         raise ForbiddenError(message)
+    if require_active and user.status != UserStatus.ACTIVE:
+        raise ForbiddenError("Apenas gestores com conta ativa podem gerenciar contas")
     return cast(Gestor, user)
 
 
@@ -173,7 +173,9 @@ def _aplicar_jornada(motorista: Motorista, data: dict[str, Any]) -> None:
 
 def create_motorista(gestor_id: str, data: dict[str, Any]) -> Motorista:
     """Create a new driver (gestor only)."""
-    gestor = _get_gestor_or_403(gestor_id, "Apenas gestores podem cadastrar motoristas")
+    gestor = _get_gestor_or_403(
+        gestor_id, "Apenas gestores podem cadastrar motoristas", require_active=True
+    )
 
     email = validate_email(data.get("email", ""))
     cpf_clean = validate_cpf(data.get("cpf", ""))
@@ -217,7 +219,9 @@ def create_motorista(gestor_id: str, data: dict[str, Any]) -> Motorista:
 
 def update_motorista(gestor_id: str, motorista_id: str, data: dict[str, Any]) -> Motorista:
     """Gestor updates a driver of the same organizacao, including working hours."""
-    gestor = _get_gestor_or_403(gestor_id, "Apenas gestores podem editar motoristas")
+    gestor = _get_gestor_or_403(
+        gestor_id, "Apenas gestores podem editar motoristas", require_active=True
+    )
 
     user = _get_user_or_404(motorista_id)
     if user.role != UserRole.MOTORISTA:
@@ -353,7 +357,9 @@ def delete_motorista(gestor_id: str, motorista_id: str) -> None:
 
     Raises: ForbiddenError, NotFoundError, AppError
     """
-    gestor = _get_gestor_or_403(gestor_id, "Apenas gestores podem remover motoristas")
+    gestor = _get_gestor_or_403(
+        gestor_id, "Apenas gestores podem remover motoristas", require_active=True
+    )
 
     motorista = db.session.get(User, motorista_id)
     if not motorista or motorista.role != UserRole.MOTORISTA:
@@ -448,10 +454,11 @@ def _mudar_status(
     roles: tuple[UserRole, ...] = (UserRole.ALUNO, UserRole.MOTORISTA),
 ) -> User:
     """Gestor moves an account of its organization from one of `de` to `para`."""
-    gestor = _get_gestor_or_403(gestor_id, "Apenas gestores podem alterar a situação de contas")
-    # shortcut: only these endpoints require an ACTIVE gestor; the shared lookup breaks
-    # dashboard callers, revisit when every gestor flow enforces it.
-    _require_active(gestor)
+    # A bad id is always 400, before any check on the caller.
+    validate_uuid(user_id, "User ID")
+    gestor = _get_gestor_or_403(
+        gestor_id, "Apenas gestores podem alterar a situação de contas", require_active=True
+    )
     user = _get_conta_gerenciavel(gestor, user_id, roles)
 
     try:
@@ -501,7 +508,7 @@ def ativar_motorista(gestor_id: str, motorista_id: str) -> Motorista:
     user = _mudar_status(
         gestor_id,
         motorista_id,
-        de=(UserStatus.PENDING_SIGNUP, UserStatus.PENDING_APPROVAL),
+        de=(UserStatus.PENDING_SIGNUP,),
         para=UserStatus.ACTIVE,
         msg_conflito="Somente motoristas com cadastro pendente podem ser ativados",
         action="ativar_motorista",

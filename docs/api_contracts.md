@@ -31,6 +31,10 @@ On `desativar`:
 A disabled driver gets no new work: window creation, manual trip creation and the
 on-demand driver choice re-check that the driver is `ACTIVE` after locking the driver row.
 
+Checks run in this order, and the first failing one answers: `id` not a UUID (400), caller
+not an `ACTIVE` gestor (403), own account (400), other organization (403), not found (404),
+state (409). The same order applies to `POST /v1/users/<id>/ativar`.
+
 | Status | When |
 |---|---|
 | 400 | `id` is not a UUID; target is the gestor's own account |
@@ -413,16 +417,21 @@ ao e-mail de um convite pendente; um PIN novo só sai 60 segundos depois do ante
 
 ## Ativação de motorista (RF-02, RF-06)
 
-`POST /v1/users/motoristas/<motorista_id>/ativar`: gestor da mesma organização. Sem body.
+`POST /v1/users/<id>/ativar`: gestor `ACTIVE` da mesma organização. Sem body.
 O motorista criado pelo gestor nasce `PENDING_SIGNUP`; esta rota o passa para `ACTIVE`
 (exigido, por exemplo, para receber janela de disponibilidade). Retorna 200 com o usuário.
+A ordem das checagens é a mesma de `desativar`/`reativar`.
+
+A ativação não registra aceite do termo (RF-09). Todo motorista sem o aceite da versão
+vigente recebe 403 em qualquer rota autenticada, exceto `/v1/auth/*`, `/v1/consentimento`
+e `GET /v1/users/me`, até aceitar o termo em `POST /v1/consentimento`.
 
 | Status | When |
 |---|---|
-| 400 | `motorista_id` não é um UUID |
+| 400 | `id` não é um UUID; é a própria conta do gestor |
 | 403 | não é gestor ou o gestor não está `ACTIVE`; conta de outra organização (qualquer papel ou status) |
 | 404 | não encontrado, não é motorista, ou motorista `DELETED` |
-| 409 | cadastro não está pendente (já `ACTIVE`, ou `DISABLED`) |
+| 409 | cadastro não está `PENDING_SIGNUP` (já `ACTIVE`, ou `DISABLED`) |
 
 ## Rate limit
 
