@@ -98,10 +98,11 @@ def excluir_conta(user_id: str, email: str, senha: str) -> None:
     # Same lock order as the rest of the system: vehicle and trip before the student.
     viagens_travadas = solicitacoes_service.travar_viagens_do_aluno(user_id)
 
-    # Lock the account: a second simultaneous request waits and already sees it anonymized.
-    db.session.execute(select(User.id).where(User.id == user_id).with_for_update(key_share=True))
+    # Plain FOR UPDATE: two FOR KEY SHARE locks do not conflict, so a second simultaneous
+    # request would not wait. With this one it waits and re-reads the account already deleted.
+    db.session.execute(select(User.id).where(User.id == user_id).with_for_update())
     user = db.session.get(User, user_id, populate_existing=True)
-    if user is None:
+    if user is None or user.status == UserStatus.DELETED:
         raise NotFoundError("Usuário não encontrado")
     if user.role != UserRole.ALUNO:
         raise ForbiddenError("Somente passageiros podem excluir a própria conta")

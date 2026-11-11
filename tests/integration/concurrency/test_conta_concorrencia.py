@@ -173,8 +173,9 @@ def test_exclusao_dupla_da_conta_anonimiza_uma_vez(app, _db, aluno):
 
     codigos = status_de(respostas)
     assert codigos[0] == 200
-    # The second sees the account already deleted (credentials do not match) or hits the retention.
-    assert codigos[1] in (401, 409)
+    # The second waits on the account lock and sees it deleted (404), or the token is
+    # already refused (401) if it only starts after the first committed.
+    assert codigos[1] in (401, 404)
     _db.session.expire_all()
     retencao = _db.session.get(RetencaoLegal, aluno.user.id)
     assert retencao.email == email

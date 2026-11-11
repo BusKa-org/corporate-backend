@@ -93,6 +93,7 @@ class UserProfile(Resource):
             200: "Conta excluída",
             401: "Credenciais inválidas",
             403: "Somente passageiros podem excluir a conta",
+            404: "Conta já excluída",
             409: "Viagem em andamento",
         },
     )
