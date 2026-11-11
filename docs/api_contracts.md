@@ -125,9 +125,28 @@ consent and notifications on, with the minutes left in the buffer.
 
 | Status | When |
 |---|---|
-| 403 | not the trip's driver |
+| 403 | not the trip's driver; driver still inside `pausa_entre_viagens_minutos` after their last trip ended (the message says when they can start) |
 | 404 | trip not found |
-| 409 | trip is not `SOLICITADA` |
+| 409 | trip is not `SOLICITADA`; fewer active requests than `minimo_alunos` |
+
+### Operation parameters (RF-10, RF-11)
+
+| Method | Path | Who |
+|---|---|---|
+| `GET` | `/v1/parametros-operacao` | gestor or motorista of the organization |
+| `PUT` | `/v1/parametros-operacao` | gestor |
+
+Body and response: `{minimo_alunos, pausa_entre_viagens_minutos, antecedencia_motorista_minutos}`
+(response adds `organizacao_id` and `updated_at`). All three are required on `PUT`.
+`minimo_alunos` is 1..1000; the minutes are 0..1440. Until the gestor saves them, `GET`
+returns the `OPERACAO_*_PADRAO` defaults with `updated_at: null`.
+`minimo_alunos` and `pausa_entre_viagens_minutos` are checked on `iniciar-percurso`;
+`antecedencia_motorista_minutos` is stored only, not enforced yet.
+
+| Status | When |
+|---|---|
+| 400 | missing field, not an integer, or out of range |
+| 403 | `GET`: student; `PUT`: not a gestor |
 
 ### Request cancellation (RF-19)
 

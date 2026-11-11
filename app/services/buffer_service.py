@@ -3,13 +3,17 @@
 import logging
 import math
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+
+from flask import current_app
+from sqlalchemy import func
 
 from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError
 from app.models.base import db
 from app.models.enum import StatusSolicitacao, StatusViagem, UserRole, UserStatus
 from app.models.user import Aluno, Gestor, User
 from app.models.viagem import AlunosConfirmados, SolicitacaoViagem, Viagem
-from app.services import consentimento_service, embarque_service
+from app.services import consentimento_service, embarque_service, parametros_operacao_service
 from app.services.notificacao_service import NotificacaoService
 from app.utils import tempo
 from app.utils.validators import validate_uuid
@@ -39,6 +43,10 @@ def iniciar_percurso(user_id: str, viagem_id: str) -> Viagem:
         db.session.rollback()
         raise ConflictError(f"A viagem não pode iniciar o percurso no status {viagem.status.value}")
 
+    parametros = parametros_operacao_service.parametros_da_organizacao(viagem.rota.organizacao_id)
+    _exigir_minimo_alunos(viagem, parametros.minimo_alunos)
+    _exigir_pausa_entre_viagens(viagem, parametros.pausa_entre_viagens_minutos)
+
     # shortcut: once PR #16 merges, call _validar_jornada_motorista(motorista, agora) here (409 when
     # status_motorista(...) is EM_ROTA, 403 on rest/hours) and clear descanso_ate. EM_ROTA itself is
     # computed from the trip being EM_ANDAMENTO, so nothing else is stored.
@@ -48,6 +56,41 @@ def iniciar_percurso(user_id: str, viagem_id: str) -> Viagem:
 
     notificar_abertura_buffer(viagem)
     return viagem
+
+
+def _exigir_minimo_alunos(viagem: Viagem, minimo: int) -> None:
+    solicitantes = (
+        db.session.query(SolicitacaoViagem.id)
+        .filter_by(viagem_id=viagem.id, status=StatusSolicitacao.ATIVA)
+        .count()
+    )
+    if solicitantes < minimo:
+        db.session.rollback()
+        raise ConflictError(
+            f"A viagem precisa de pelo menos {minimo} aluno(s) solicitante(s) para iniciar "
+            f"o percurso (atual: {solicitantes})"
+        )
+
+
+def _exigir_pausa_entre_viagens(viagem: Viagem, pausa_minutos: int) -> None:
+    if pausa_minutos == 0:
+        return
+    ultimo_fim = (
+        db.session.query(func.max(Viagem.fim_real))
+        .filter(Viagem.motorista_id == viagem.motorista_id, Viagem.id != viagem.id)
+        .scalar()
+    )
+    if ultimo_fim is None:
+        return
+    liberado_em = ultimo_fim + timedelta(minutes=pausa_minutos)
+    if tempo.agora_utc() < liberado_em:
+        db.session.rollback()
+        fuso = ZoneInfo(current_app.config["TIMEZONE"])
+        horario = liberado_em.astimezone(fuso).strftime("%H:%M")
+        raise ForbiddenError(
+            f"Pausa mínima de {pausa_minutos} min entre viagens. "
+            f"Poderá iniciar o percurso às {horario}."
+        )
 
 
 def notificar_abertura_buffer(viagem: Viagem) -> None:

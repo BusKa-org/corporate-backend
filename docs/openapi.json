@@ -2727,6 +2727,57 @@
           "viagens"
         ]
       }
+    },
+    "/v1/parametros-operacao": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/ParametrosOperacaoResponse"
+            }
+          },
+          "403": {
+            "description": "Não é gestor nem motorista"
+          }
+        },
+        "summary": "On-demand operation parameters of the logged-in user's organization",
+        "operationId": "get_parametros_operacao",
+        "tags": [
+          "parametros-operacao"
+        ]
+      },
+      "put": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/ParametrosOperacaoResponse"
+            }
+          },
+          "400": {
+            "description": "Valores inválidos"
+          },
+          "403": {
+            "description": "Não é gestor"
+          }
+        },
+        "summary": "Saves the organization's on-demand operation parameters (gestor)",
+        "operationId": "put_parametros_operacao",
+        "parameters": [
+          {
+            "name": "payload",
+            "required": true,
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/ParametrosOperacaoRequest"
+            }
+          }
+        ],
+        "tags": [
+          "parametros-operacao"
+        ]
+      }
     }
   },
   "info": {
@@ -2817,6 +2868,10 @@
     {
       "name": "telemetria",
       "description": "Telemetria do Veículo Elétrico"
+    },
+    {
+      "name": "parametros-operacao",
+      "description": "Parâmetros da operação sob demanda"
     }
   ],
   "definitions": {
@@ -6059,6 +6114,58 @@
         },
         "bateria_min": {
           "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "ParametrosOperacaoRequest": {
+      "required": [
+        "antecedencia_motorista_minutos",
+        "minimo_alunos",
+        "pausa_entre_viagens_minutos"
+      ],
+      "properties": {
+        "minimo_alunos": {
+          "type": "integer",
+          "description": "Mínimo de alunos solicitantes para iniciar o percurso"
+        },
+        "pausa_entre_viagens_minutos": {
+          "type": "integer",
+          "description": "Pausa mínima do motorista entre duas viagens, em minutos"
+        },
+        "antecedencia_motorista_minutos": {
+          "type": "integer",
+          "description": "Antecedência mínima com que o motorista precisa ser avisado, em minutos"
+        }
+      },
+      "type": "object"
+    },
+    "ParametrosOperacaoResponse": {
+      "required": [
+        "antecedencia_motorista_minutos",
+        "minimo_alunos",
+        "pausa_entre_viagens_minutos"
+      ],
+      "properties": {
+        "organizacao_id": {
+          "type": "string"
+        },
+        "minimo_alunos": {
+          "type": "integer",
+          "description": "Mínimo de alunos solicitantes para iniciar o percurso"
+        },
+        "pausa_entre_viagens_minutos": {
+          "type": "integer",
+          "description": "Pausa mínima do motorista entre duas viagens, em minutos"
+        },
+        "antecedencia_motorista_minutos": {
+          "type": "integer",
+          "description": "Antecedência mínima com que o motorista precisa ser avisado, em minutos"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Última alteração; null enquanto valem os padrões"
         }
       },
       "type": "object"

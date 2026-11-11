@@ -95,6 +95,17 @@ class Settings:
             max_val=self.ROTA_PRAZO_INICIO_MINUTOS_MAX,
         )
 
+        # On-demand operation parameters, per organization: used until the manager saves them.
+        self.OPERACAO_MINIMO_ALUNOS_PADRAO = self._get_int(
+            "OPERACAO_MINIMO_ALUNOS_PADRAO", default=1, min_val=1, max_val=1000
+        )
+        self.OPERACAO_PAUSA_ENTRE_VIAGENS_MINUTOS_PADRAO = self._get_int(
+            "OPERACAO_PAUSA_ENTRE_VIAGENS_MINUTOS_PADRAO", default=0, min_val=0, max_val=1440
+        )
+        self.OPERACAO_ANTECEDENCIA_MOTORISTA_MINUTOS_PADRAO = self._get_int(
+            "OPERACAO_ANTECEDENCIA_MOTORISTA_MINUTOS_PADRAO", default=0, min_val=0, max_val=1440
+        )
+
         # Driver working hours. CTB (Law 9.503/97) art. 67-C §1-A, added by Law
         # 13.103/2015: in passenger transport, 30 min rest every 4 h of driving (may be split).
         self.MOTORISTA_HORAS_MAX_DIRECAO = self._get_int(

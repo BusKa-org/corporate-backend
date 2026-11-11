@@ -32,6 +32,7 @@ from .api.controllers.instituicao_controller import api as inst_ns
 from .api.controllers.notificacao_controller import api as notificacoes_ns
 from .api.controllers.ocorrencia_controller import api as ocorrencias_ns
 from .api.controllers.onibus_controller import api as onibus_ns
+from .api.controllers.parametros_operacao_controller import api as parametros_operacao_ns
 from .api.controllers.pontos_controller import api as pontos_ns
 from .api.controllers.rotas_controller import api as rotas_ns
 from .api.controllers.routing_controller import api as routing_ns
@@ -117,6 +118,13 @@ def create_app(
     app.config["ROTA_BUFFER_MINUTOS_MAX"] = settings.ROTA_BUFFER_MINUTOS_MAX
     app.config["ROTA_PRAZO_INICIO_MINUTOS_PADRAO"] = settings.ROTA_PRAZO_INICIO_MINUTOS_PADRAO
     app.config["ROTA_PRAZO_INICIO_MINUTOS_MAX"] = settings.ROTA_PRAZO_INICIO_MINUTOS_MAX
+    app.config["OPERACAO_MINIMO_ALUNOS_PADRAO"] = settings.OPERACAO_MINIMO_ALUNOS_PADRAO
+    app.config["OPERACAO_PAUSA_ENTRE_VIAGENS_MINUTOS_PADRAO"] = (
+        settings.OPERACAO_PAUSA_ENTRE_VIAGENS_MINUTOS_PADRAO
+    )
+    app.config["OPERACAO_ANTECEDENCIA_MOTORISTA_MINUTOS_PADRAO"] = (
+        settings.OPERACAO_ANTECEDENCIA_MOTORISTA_MINUTOS_PADRAO
+    )
     app.config["FOTOS_ALUNO_DIR"] = settings.FOTOS_ALUNO_DIR or os.path.join(
         app.instance_path, "fotos_aluno"
     )
@@ -249,6 +257,7 @@ Inclua o header: `Authorization: Bearer <seu_token>`
     api.add_namespace(dashboard_ns, path="/v1/dashboard")
     api.add_namespace(embarque_ns, path="/v1/embarque")
     api.add_namespace(telemetria_ns, path="/v1/telemetria")
+    api.add_namespace(parametros_operacao_ns, path="/v1/parametros-operacao")
 
     # Client-specific extensions — see `plugins` param contract on the signature.
     for register in (_discover_plugins() if plugins is None else plugins):
