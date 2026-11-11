@@ -71,10 +71,13 @@ def iniciar_percurso(user_id: str, viagem_id: str) -> Viagem:
 
 
 def _exigir_minimo_alunos(viagem: Viagem, minimo: int) -> None:
-    solicitantes = (
+    # Lock the counted rows (after the trip, like cancellation): a concurrent cancel
+    # waits for the start instead of dropping the count below the minimum.
+    solicitantes = len(
         db.session.query(SolicitacaoViagem.id)
         .filter_by(viagem_id=viagem.id, status=StatusSolicitacao.ATIVA)
-        .count()
+        .with_for_update(key_share=True)
+        .all()
     )
     if solicitantes < minimo:
         db.session.rollback()
