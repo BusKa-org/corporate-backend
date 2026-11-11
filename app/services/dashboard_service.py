@@ -508,7 +508,8 @@ def listar_ausencias(gestor_id: str, inicio: date, fim: date, page: int, per_pag
     Unlike the RF-21 indicators this list names students, so it is manager only.
 
     `registrado_em` never moves after the fact: the trip's end for a no-show and the
-    dropout time for a dropout, falling back to the scheduled departure in local time
+    dropout time for a dropout (`desistencia_em`, or the request's `cancelada_em`, never
+    its `created_at`), falling back to the scheduled departure in local time
     (the trip date at 00:00 for on-demand trips), which is never null.
     """
     gestor = _get_gestor_or_403(gestor_id, "Apenas gestores podem visualizar ausências")
@@ -563,9 +564,7 @@ def listar_ausencias(gestor_id: str, inicio: date, fim: date, page: int, per_pag
         select(
             SolicitacaoViagem.viagem_id,
             SolicitacaoViagem.aluno_id,
-            func.max(
-                func.coalesce(SolicitacaoViagem.cancelada_em, SolicitacaoViagem.created_at)
-            ).label("registrado_em"),
+            func.max(SolicitacaoViagem.cancelada_em).label("registrado_em"),
         )
         .where(SolicitacaoViagem.status == StatusSolicitacao.DESISTENCIA)
         .group_by(SolicitacaoViagem.viagem_id, SolicitacaoViagem.aluno_id)

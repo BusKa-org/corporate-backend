@@ -369,8 +369,8 @@ período (datas inclusivas, pela data da viagem). Outro papel: 403.
   solicitação `DESISTENCIA` (RF-19), uma linha por viagem e aluno mesmo com solicitações
   repetidas (vale a mais recente). Cancelamento antes da partida devolve a vaga e não aparece.
 - `registrado_em` não muda depois: `AUSENCIA` usa o fim da viagem (`fim_real`);
-  `DESISTENCIA` usa a hora da desistência (`desistencia_em`, ou `cancelada_em` e então
-  `created_at` da solicitação). Sem esses valores, cai na partida prevista em hora local
+  `DESISTENCIA` usa a hora da desistência (`desistencia_em`, ou `cancelada_em` da
+  solicitação). Sem esses valores, cai na partida prevista em hora local
   (`data` + `horario_saida`, ou `data` às 00:00 em viagem sob demanda), então nunca é nulo.
 - Calculado dos dados existentes, sem tabela nova. Ordem: data desc, nome do aluno, e
   `viagem_id`/`aluno_id`/`tipo` para desempate estável entre páginas.

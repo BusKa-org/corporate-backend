@@ -1,4 +1,4 @@
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, time
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -207,6 +207,25 @@ def test_desistencia_repetida_aparece_uma_vez(_db, gestor, rota, alunos):
     assert body["total"] == 1
     assert len(body["items"]) == 1
     assert body["items"][0]["registrado_em"] == ultima.isoformat()
+
+
+def test_desistencia_sem_cancelada_em_usa_a_partida_prevista(app, _db, gestor, rota, alunos):
+    viagem = _viagem(_db, rota, status=StatusViagem.EM_ANDAMENTO)
+    _db.session.add(
+        SolicitacaoViagemFactory(
+            viagem_id=viagem.id,
+            aluno_id=alunos[0].id,
+            status=StatusSolicitacao.DESISTENCIA,
+            cancelada_em=None,
+        )
+    )
+    _db.session.commit()
+
+    body = gestor.client.get(URL).get_json()
+
+    # Not the request's created_at: on-demand trips fall back to the trip date at 00:00.
+    meia_noite = datetime.combine(DIA, time(0, 0), tzinfo=ZoneInfo(app.config["TIMEZONE"]))
+    assert datetime.fromisoformat(body["items"][0]["registrado_em"]) == meia_noite
 
 
 def test_desistencia_de_viagem_fixa_depois_da_partida(_db, gestor, horario_rota, alunos):
