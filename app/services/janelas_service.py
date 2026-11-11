@@ -8,10 +8,10 @@ from sqlalchemy import select
 from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError, ValidationError
 from app.core.transaction import transactional
 from app.models.base import db
-from app.models.enum import DiaDaSemana, UserRole, UserStatus
+from app.models.enum import DiaDaSemana, UserRole
 from app.models.onibus import JanelaDisponibilidade, Onibus
-from app.models.user import Motorista, User
-from app.services import onibus_service
+from app.models.user import User
+from app.services import onibus_service, viagens_service
 from app.services.viagens_service import _get_dia_semana_enum
 from app.utils.validators import validate_uuid
 
@@ -94,35 +94,25 @@ def criar_janela(user_id: str, onibus_id: str, data: dict[str, Any]) -> JanelaDi
     if hora_fim <= hora_inicio:
         raise ValidationError("O horário de fim deve ser posterior ao horário de início")
 
-    motorista = db.session.get(Motorista, data["motorista_id"])
-    if not motorista:
-        raise NotFoundError("Motorista não encontrado")
-    if motorista.organizacao_id != onibus.organizacao_id:
-        raise ValidationError("Motorista não pertence à organização do veículo")
-
     with transactional():
         # Lock vehicle and driver so concurrent creations cannot slip past the conflict check
         db.session.execute(select(Onibus.id).where(Onibus.id == onibus.id).with_for_update())
-        db.session.execute(
-            select(User.id).where(User.id == motorista.id).with_for_update(key_share=True)
+        motorista_id = viagens_service.exigir_motorista_ativo(
+            data["motorista_id"], onibus.organizacao_id
         )
-        # Re-read after the lock: a concurrent deactivation may have just committed.
-        db.session.refresh(motorista)
-        if motorista.status != UserStatus.ACTIVE:
-            raise ValidationError("Motorista sem cadastro ativo")
 
         if _existe_sobreposicao(
             JanelaDisponibilidade.onibus_id == onibus.id, dia, hora_inicio, hora_fim
         ):
             raise ConflictError("Já existe uma janela deste veículo nesse dia e horário")
         if _existe_sobreposicao(
-            JanelaDisponibilidade.motorista_id == motorista.id, dia, hora_inicio, hora_fim
+            JanelaDisponibilidade.motorista_id == motorista_id, dia, hora_inicio, hora_fim
         ):
             raise ConflictError("O motorista já possui uma janela nesse dia e horário")
 
         janela = JanelaDisponibilidade(
             onibus_id=onibus.id,
-            motorista_id=motorista.id,
+            motorista_id=motorista_id,
             dia=dia,
             hora_inicio=hora_inicio,
             hora_fim=hora_fim,

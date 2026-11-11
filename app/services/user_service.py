@@ -4,7 +4,7 @@ import logging
 from datetime import UTC, datetime
 from typing import Any, cast
 
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import with_polymorphic
 from werkzeug.security import check_password_hash, generate_password_hash
 
@@ -411,10 +411,14 @@ def _exigir_motorista_sem_compromissos(motorista_id: Any) -> None:
         db.session.query(Viagem.id)
         .filter(
             Viagem.motorista_id == motorista_id,
-            Viagem.status.in_(
-                [StatusViagem.AGENDADA, StatusViagem.SOLICITADA, StatusViagem.BUFFER_ABERTO]
+            or_(
+                and_(
+                    Viagem.status == StatusViagem.AGENDADA,
+                    Viagem.data >= tempo.agora_local().date(),
+                ),
+                # An open on-demand round blocks whatever its date (it may cross midnight).
+                Viagem.status.in_([StatusViagem.SOLICITADA, StatusViagem.BUFFER_ABERTO]),
             ),
-            Viagem.data >= tempo.agora_local().date(),
         )
         .first()
     )
@@ -460,6 +464,9 @@ def _mudar_status(
         gestor_id, "Apenas gestores podem alterar a situação de contas", require_active=True
     )
     user = _get_conta_gerenciavel(gestor, user_id, roles)
+    # Cheap answer before locking the student's trips; re-checked under the lock below.
+    if user.status not in de:
+        raise ConflictError(msg_conflito)
 
     try:
         viagens_travadas: dict[Any, Viagem] = {}
@@ -467,9 +474,8 @@ def _mudar_status(
             # Same lock order as the rest of the system: vehicle and trip before the student.
             viagens_travadas = solicitacoes_service.travar_viagens_do_aluno(user.id)
 
-        db.session.execute(
-            select(User.id).where(User.id == user.id).with_for_update(key_share=True)
-        )
+        # Plain FOR UPDATE: it waits for the KEY SHARE locks that new trips/windows/routes take.
+        db.session.execute(select(User.id).where(User.id == user.id).with_for_update())
         db.session.refresh(user)
         if user.status not in de:
             raise ConflictError(msg_conflito)

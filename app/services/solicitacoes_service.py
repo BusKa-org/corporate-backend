@@ -244,24 +244,47 @@ def travar_viagens_do_aluno(aluno_id) -> dict[uuid.UUID, Viagem]:
     for confirmacao in _confirmacoes_futuras_do_aluno(aluno_id):
         if confirmacao.viagem_id not in viagem_ids:
             viagem_ids.append(confirmacao.viagem_id)
-    # Always in id order, so two calls never wait on each other's trips.
-    viagens = db.session.query(Viagem).filter(Viagem.id.in_(viagem_ids)).order_by(Viagem.id).all()
+
+    veiculo_ids: list[uuid.UUID] = []
+    for viagem in db.session.query(Viagem).filter(Viagem.id.in_(viagem_ids)).all():
+        if viagem.veiculo_id and viagem.veiculo_id not in veiculo_ids:
+            veiculo_ids.append(viagem.veiculo_id)
+    # Every vehicle first, then every trip, each in id order: locking trip by trip (vehicle,
+    # trip, vehicle, trip...) could take two vehicles in opposite orders and deadlock.
+    db.session.execute(
+        select(Onibus.id)
+        .where(Onibus.id.in_(veiculo_ids))
+        .order_by(Onibus.id)
+        .with_for_update(key_share=True)
+    )
+    viagens = (
+        db.session.query(Viagem)
+        .filter(Viagem.id.in_(viagem_ids))
+        .order_by(Viagem.id)
+        .with_for_update(key_share=True)
+        .populate_existing()
+        .all()
+    )
 
     viagens_travadas: dict[uuid.UUID, Viagem] = {}
     for viagem in viagens:
-        travada = travar_viagem(viagem)
-        viagens_travadas[travada.id] = travada
+        viagens_travadas[viagem.id] = viagem
     return viagens_travadas
 
 
-def liberar_aluno(aluno: Aluno, viagens_travadas: dict[uuid.UUID, Viagem]) -> None:
+def liberar_aluno(
+    aluno: Aluno,
+    viagens_travadas: dict[uuid.UUID, Viagem],
+    msg_em_viagem: str = EM_VIAGEM,
+    retirar_confirmacoes: bool = True,
+) -> None:
     """Cancel the student's requests (RF-19) and withdraw future confirmations, without commit.
 
     `viagens_travadas` comes from `travar_viagens_do_aluno`, and the student row must be
     locked since then, so no new request or confirmation can appear.
     """
     if aluno_em_viagem_em_andamento(aluno.usuario_id):
-        raise ConflictError(EM_VIAGEM)
+        raise ConflictError(msg_em_viagem)
 
     solicitacoes = solicitacoes_ativas_do_aluno(aluno.usuario_id)
     confirmacoes = _confirmacoes_futuras_do_aluno(aluno.usuario_id)
@@ -276,10 +299,12 @@ def liberar_aluno(aluno: Aluno, viagens_travadas: dict[uuid.UUID, Viagem]) -> No
             # Joined a trip between the read and the lock: locking it now would invert the order.
             raise ConflictError("As viagens da conta mudaram. Tente novamente.")
         if travada.status == StatusViagem.EM_ANDAMENTO:
-            raise ConflictError(EM_VIAGEM)
+            raise ConflictError(msg_em_viagem)
 
     for solicitacao in solicitacoes:
         cancelar_na_viagem_travada(aluno, viagens_travadas[solicitacao.viagem_id])
+    if not retirar_confirmacoes:
+        return
     # Same effect as the student cancelling the confirmation.
     for confirmacao in confirmacoes:
         confirmacao.confirmacao = False
@@ -288,7 +313,7 @@ def liberar_aluno(aluno: Aluno, viagens_travadas: dict[uuid.UUID, Viagem]) -> No
 
 
 def cancelar_na_viagem_travada(aluno: Aluno, viagem: Viagem) -> SolicitacaoViagem:
-    """Cancellation rules (RF-19), without commit. The trip must come from `travar_viagem`."""
+    """Cancellation rules (RF-19), without commit. The trip must be locked (`travar_viagem`)."""
     solicitacao = (
         db.session.query(SolicitacaoViagem)
         .filter_by(
