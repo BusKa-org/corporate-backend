@@ -4,6 +4,7 @@ import logging
 from datetime import UTC, datetime
 from typing import Any, cast
 
+from sqlalchemy import select
 from sqlalchemy.orm import with_polymorphic
 from werkzeug.security import check_password_hash, generate_password_hash
 
@@ -16,12 +17,24 @@ from app.core.exceptions import (
     ValidationError,
 )
 from app.models.base import db
-from app.models.enum import UserRole, UserStatus
-from app.models.user import Gestor, Motorista, User
+from app.models.enum import StatusViagem, UserRole, UserStatus
+from app.models.onibus import JanelaDisponibilidade
+from app.models.user import Aluno, Gestor, Motorista, User
+from app.models.viagem import AlunosConfirmados, Viagem
+from app.services import solicitacoes_service
 from app.services.viagens_service import motoristas_em_viagem, status_motorista
-from app.utils import audit_logger, validate_cpf, validate_email, validate_password, validate_uuid
+from app.utils import (
+    audit_logger,
+    tempo,
+    validate_cpf,
+    validate_email,
+    validate_password,
+    validate_uuid,
+)
 
 logger = logging.getLogger(__name__)
+
+EM_VIAGEM = "A conta está em uma viagem em andamento. Aguarde o fim da viagem."
 
 
 def _require_active(user: User) -> None:
@@ -367,54 +380,176 @@ def delete_motorista(gestor_id: str, motorista_id: str) -> None:
         )
 
 
-def _get_conta_gerenciavel(gestor: Gestor, user_id: str) -> User:
+def _get_conta_gerenciavel(gestor: Gestor, user_id: str, roles: tuple[UserRole, ...]) -> User:
     if str(user_id) == str(gestor.id):
         raise ValidationError("Você não pode alterar a situação da sua própria conta")
     user = _get_user_or_404(user_id)
-    if user.role not in (UserRole.ALUNO, UserRole.MOTORISTA) or user.status == UserStatus.DELETED:
-        raise NotFoundError("Usuário não encontrado")
+    # Organization first: another org's gestor gets the same 403 whatever the role or status.
     if user.organizacao_id != gestor.organizacao_id:
         raise ForbiddenError("Proibido alterar contas de outra organização")
+    if user.role not in roles or user.status == UserStatus.DELETED:
+        raise NotFoundError("Usuário não encontrado")
+    return user
+
+
+def _travar_viagens_das_solicitacoes(aluno_id: Any) -> dict[Any, Viagem]:
+    # Imported here: conta_service -> aluno_service -> user_service would be circular.
+    from app.services import conta_service
+
+    viagens_travadas: dict[Any, Viagem] = {}
+    for solicitacao in conta_service._solicitacoes_ativas(aluno_id):
+        viagem = solicitacoes_service.travar_viagem(solicitacao.viagem)
+        viagens_travadas[viagem.id] = viagem
+    return viagens_travadas
+
+
+def _liberar_aluno(aluno: Aluno, viagens_travadas: dict[Any, Viagem]) -> None:
+    """Free the student's seats (RF-19) so a disabled account does not hold capacity."""
+    from app.services import conta_service
+
+    if conta_service._tem_viagem_em_andamento(aluno.id):
+        raise ConflictError(EM_VIAGEM)
+
+    # With the account locked no new request appears; re-read the existing ones.
+    solicitacoes = conta_service._solicitacoes_ativas(aluno.id)
+    for solicitacao in solicitacoes:
+        travada = viagens_travadas.get(solicitacao.viagem_id)
+        if travada is None:
+            # Joined a trip between the read and the lock; locking it now would invert the order.
+            raise ConflictError("As solicitações do passageiro mudaram. Tente novamente.")
+        if travada.status == StatusViagem.EM_ANDAMENTO:
+            raise ConflictError(EM_VIAGEM)
+    for solicitacao in solicitacoes:
+        solicitacoes_service.cancelar_na_viagem_travada(
+            aluno, viagens_travadas[solicitacao.viagem_id]
+        )
+
+    # Fixed-route attendance: same effect as the student cancelling the confirmation.
+    confirmacoes = (
+        db.session.query(AlunosConfirmados)
+        .join(Viagem, Viagem.id == AlunosConfirmados.viagem_id)
+        .filter(
+            AlunosConfirmados.aluno_id == aluno.id,
+            AlunosConfirmados.confirmacao.is_(True),
+            Viagem.status == StatusViagem.AGENDADA,
+            Viagem.data >= tempo.agora_local().date(),
+        )
+        .all()
+    )
+    for registro in confirmacoes:
+        registro.confirmacao = False
+        registro.ponto_embarque_id = None
+        registro.ponto_destino_id = None
+
+
+def _exigir_motorista_sem_compromissos(motorista_id: Any) -> None:
+    """The gestor reassigns trips and windows first; a disabled driver cannot run them."""
+    em_andamento = (
+        db.session.query(Viagem.id)
+        .filter(Viagem.motorista_id == motorista_id, Viagem.status == StatusViagem.EM_ANDAMENTO)
+        .first()
+    )
+    if em_andamento:
+        raise ConflictError(EM_VIAGEM)
+
+    viagem_futura = (
+        db.session.query(Viagem.id)
+        .filter(
+            Viagem.motorista_id == motorista_id,
+            Viagem.status.in_(
+                [StatusViagem.AGENDADA, StatusViagem.SOLICITADA, StatusViagem.BUFFER_ABERTO]
+            ),
+            Viagem.data >= tempo.agora_local().date(),
+        )
+        .first()
+    )
+    janela = (
+        db.session.query(JanelaDisponibilidade.id)
+        .filter(JanelaDisponibilidade.motorista_id == motorista_id)
+        .first()
+    )
+    if viagem_futura or janela:
+        raise ConflictError(
+            "Reatribua as viagens futuras e as janelas de disponibilidade do motorista "
+            "antes de desativá-lo"
+        )
+
+
+def _mudar_status(
+    gestor_id: str,
+    user_id: str,
+    de: tuple[UserStatus, ...],
+    para: UserStatus,
+    msg_conflito: str,
+    action: str,
+    roles: tuple[UserRole, ...] = (UserRole.ALUNO, UserRole.MOTORISTA),
+) -> User:
+    """Gestor moves an account of its organization from one of `de` to `para`."""
+    gestor = _get_gestor_or_403(gestor_id, "Apenas gestores podem alterar a situação de contas")
+    user = _get_conta_gerenciavel(gestor, user_id, roles)
+
+    try:
+        viagens_travadas: dict[Any, Viagem] = {}
+        if para == UserStatus.DISABLED and user.role == UserRole.ALUNO:
+            # Same lock order as the rest of the system: vehicle and trip before the student.
+            viagens_travadas = _travar_viagens_das_solicitacoes(user.id)
+
+        db.session.execute(select(User.id).where(User.id == user.id).with_for_update())
+        db.session.refresh(user)
+        if user.status not in de:
+            raise ConflictError(msg_conflito)
+
+        if para == UserStatus.DISABLED:
+            if isinstance(user, Aluno):
+                _liberar_aluno(user, viagens_travadas)
+            else:
+                _exigir_motorista_sem_compromissos(user.id)
+            # Stop push notifications; the app registers a new token on the next login.
+            user.fcm_token = None
+
+        user.status = para
+        db.session.commit()
+    except AppError:
+        db.session.rollback()
+        raise
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error changing account status: {e}", exc_info=True)
+        raise AppError("Erro ao alterar a situação da conta", 500)
+
+    audit_logger.log_user_action(
+        action=action,
+        user_id=gestor_id,
+        resource_type="user",
+        resource_id=user_id,
+    )
+    _preencher_status_motoristas([user])
     return user
 
 
 def desativar_conta(gestor_id: str, user_id: str) -> User:
     """Gestor deactivates a passenger or driver account; login and existing tokens stop working."""
-    gestor = _get_gestor_or_403(gestor_id, "Apenas gestores podem desativar contas")
-    user = _get_conta_gerenciavel(gestor, user_id)
     # Only ACTIVE accounts, so reactivating back to ACTIVE never skips a pending signup/approval.
-    if user.status != UserStatus.ACTIVE:
-        raise ConflictError("Apenas contas ativas podem ser desativadas")
-
-    user.status = UserStatus.DISABLED
-    db.session.commit()
-    audit_logger.log_user_action(
+    return _mudar_status(
+        gestor_id,
+        user_id,
+        de=(UserStatus.ACTIVE,),
+        para=UserStatus.DISABLED,
+        msg_conflito="Apenas contas ativas podem ser desativadas",
         action="desativar_conta",
-        user_id=gestor_id,
-        resource_type="user",
-        resource_id=user_id,
     )
-    _preencher_status_motoristas([user])
-    return user
 
 
 def reativar_conta(gestor_id: str, user_id: str) -> User:
     """Gestor reactivates a deactivated passenger or driver account."""
-    gestor = _get_gestor_or_403(gestor_id, "Apenas gestores podem reativar contas")
-    user = _get_conta_gerenciavel(gestor, user_id)
-    if user.status != UserStatus.DISABLED:
-        raise ConflictError("Apenas contas desativadas podem ser reativadas")
-
-    user.status = UserStatus.ACTIVE
-    db.session.commit()
-    audit_logger.log_user_action(
+    return _mudar_status(
+        gestor_id,
+        user_id,
+        de=(UserStatus.DISABLED,),
+        para=UserStatus.ACTIVE,
+        msg_conflito="Apenas contas desativadas podem ser reativadas",
         action="reativar_conta",
-        user_id=gestor_id,
-        resource_type="user",
-        resource_id=user_id,
     )
-    _preencher_status_motoristas([user])
-    return user
 
 
 def update_fcm_token(user_id: str, data: dict[str, Any]) -> None:
