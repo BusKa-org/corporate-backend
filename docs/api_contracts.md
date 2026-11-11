@@ -127,7 +127,7 @@ Returns 201 with `{id, viagem_id, status, created_at, viagem: {id, status, rota_
 | 400 | fixed route; route without a default vehicle; outside the window (the message lists today's hours, or says there is no operation today) |
 | 403 | no consent; not a student; route from another organization |
 | 404 | route not found |
-| 409 | student already has an active request (also the same trip twice) or is in a trip en route; vehicle en route; vehicle serving another route |
+| 409 | student already has an active request (also the same trip twice) or is in a trip en route; vehicle en route; vehicle serving another route; the window's driver is unavailable for a new trip (on another trip, resting/pausing, or off hours; the message says until when when known) |
 
 ### Active round of a route (RF-12, secondary flow)
 
@@ -195,9 +195,38 @@ consent and notifications on, with the minutes left in the buffer.
 
 | Status | When |
 |---|---|
-| 403 | not the trip's driver |
+| 403 | not the trip's driver; driver in mandatory rest (`descanso_ate`, CTB message) or in the organization pause (`pausa_ate`, "pausa mínima entre viagens" message); both say when they can start, with the date when it is not today; or outside their working days/hours |
 | 404 | trip not found |
-| 409 | trip is not `SOLICITADA` |
+| 409 | trip has no driver ("Viagem sem motorista atribuído"); trip is not `SOLICITADA`; fewer active requests than `minimo_alunos`; driver already has another trip `BUFFER_ABERTO` or `EM_ANDAMENTO` (both show the driver as `EM_ROTA`) |
+
+When the buffer closes (job), the trip is cancelled instead of going `EM_ANDAMENTO` if fewer
+than `minimo_alunos` students declared a route: their requests become `CANCELADA` and the
+students and the driver are notified.
+
+### Operation parameters (RF-10, RF-11)
+
+| Method | Path | Who |
+|---|---|---|
+| `GET` | `/v1/parametros-operacao` | gestor or motorista of the organization |
+| `PUT` | `/v1/parametros-operacao` | gestor |
+
+Body and response: `{minimo_alunos, pausa_entre_viagens_minutos, antecedencia_motorista_minutos}`
+(response adds `organizacao_id` and `updated_at`). All three are required on `PUT`.
+`minimo_alunos` is 1..1000; the minutes are 0..1440. Until the gestor saves them, `GET`
+returns the `OPERACAO_*_PADRAO` defaults with `updated_at: null`.
+These parameters apply to on-demand trips only. `minimo_alunos` is checked on
+`iniciar-percurso` and again when the buffer closes. `pausa_entre_viagens_minutos` is stored
+apart from the legal rest: when a started on-demand trip ends, `motorista.pausa_ate =
+fim_real + pausa` (`descanso_ate` keeps only the driving-hours rest). Only on-demand flows read
+`pausa_ate` (`iniciar-percurso` and choosing the driver for a new request); a fixed trip's
+`INICIAR` and the `EM_DESCANSO_OBRIGATORIO` status ignore it. `antecedencia_motorista_minutos`
+is stored only: ainda não aplicado; aguardando definição do gestor.
+A concurrent first `PUT` is an upsert (no 409), and every `PUT` refreshes `updated_at`.
+
+| Status | When |
+|---|---|
+| 400 | missing field, not a JSON integer (`true`, `3.0` and `"3"` are rejected), or out of range |
+| 403 | `GET`: student; `PUT`: not a gestor |
 
 ### Request cancellation (RF-19)
 

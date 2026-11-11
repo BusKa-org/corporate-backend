@@ -37,6 +37,7 @@ from app.models.viagem import (
     Viagem,
     ViagemPonto,
 )
+from app.services import parametros_operacao_service
 from app.services.notificacao_service import NotificacaoService
 from app.services.rotas_service import travar_rota
 from app.tasks.viagem_tasks import realizar_auto_checkin
@@ -477,15 +478,19 @@ def _fim_descanso_motorista(motorista: Motorista, agora: datetime) -> datetime |
     )
 
 
+# An open buffer already commits the driver: they are about to leave on that trip.
+ESTADOS_EM_ROTA = (StatusViagem.BUFFER_ABERTO, StatusViagem.EM_ANDAMENTO)
+
+
 def motoristas_em_viagem(motorista_ids: list[Any]) -> set[Any]:
-    """Ids, among `motorista_ids`, of drivers with a trip EM_ANDAMENTO (one query)."""
+    """Ids, among `motorista_ids`, of drivers with a trip in ESTADOS_EM_ROTA (one query)."""
     if not motorista_ids:
         return set()
     linhas = (
         db.session.query(Viagem.motorista_id)
         .filter(
             Viagem.motorista_id.in_(motorista_ids),
-            Viagem.status == StatusViagem.EM_ANDAMENTO,
+            Viagem.status.in_(ESTADOS_EM_ROTA),
         )
         .distinct()
         .all()
@@ -507,7 +512,7 @@ def status_motorista(
         em_viagem = db.session.query(
             exists().where(
                 Viagem.motorista_id == motorista.id,
-                Viagem.status == StatusViagem.EM_ANDAMENTO,
+                Viagem.status.in_(ESTADOS_EM_ROTA),
             )
         ).scalar()
     if em_viagem:
@@ -517,13 +522,22 @@ def status_motorista(
     return StatusMotorista.ATIVO
 
 
+def _horario_liberacao(liberado_em: datetime, agora_local: datetime) -> str:
+    liberado_local = liberado_em.astimezone(agora_local.tzinfo)
+    horario = liberado_local.strftime("%H:%M")
+    if liberado_local.date() != agora_local.date():
+        horario += liberado_local.strftime(" do dia %d/%m")
+    return horario
+
+
 def disponibilidade_motorista(
-    motorista: Motorista, agora: datetime
+    motorista: Motorista, agora: datetime, considerar_pausa: bool = False
 ) -> tuple[bool, str | None, datetime | None]:
     """Whether the driver can start a trip at `agora`, without raising.
 
     Returns (pode_trabalhar, motivo, livre_a_partir_de). `livre_a_partir_de` is only
-    known for a mandatory rest; it is None otherwise.
+    known for a mandatory rest or pause; it is None otherwise. `considerar_pausa` is for
+    on-demand flows only: the organization pause never blocks a fixed trip.
     """
     fuso = ZoneInfo(current_app.config["TIMEZONE"])
     agora_local = agora.astimezone(fuso)
@@ -538,10 +552,18 @@ def disponibilidade_motorista(
     else:
         # Also recompute from history: covers trips from before `descanso_ate` existed.
         liberado_em = _fim_descanso_motorista(motorista, agora)
+    pausa_ate = motorista.pausa_ate if considerar_pausa else None
+    if pausa_ate is not None and pausa_ate > agora:
+        if liberado_em is None or pausa_ate > liberado_em:
+            horario = _horario_liberacao(pausa_ate, agora_local)
+            motivo = (
+                f"Motorista em pausa mínima entre viagens. Poderá dirigir novamente às {horario}."
+            )
+            return False, motivo, pausa_ate
     if liberado_em is not None:
         horas_max = current_app.config["MOTORISTA_HORAS_MAX_DIRECAO"]
         minutos_descanso = current_app.config["MOTORISTA_DESCANSO_MINUTOS"]
-        horario = liberado_em.astimezone(fuso).strftime("%H:%M")
+        horario = _horario_liberacao(liberado_em, agora_local)
         motivo = (
             f"Motorista atingiu {horas_max}h de direção contínua e precisa descansar "
             f"{minutos_descanso} min. Poderá dirigir novamente às {horario}."
@@ -573,9 +595,11 @@ def disponibilidade_motorista(
     return True, None, None
 
 
-def _validar_jornada_motorista(motorista: Motorista, agora: datetime) -> None:
+def validar_jornada_motorista(
+    motorista: Motorista, agora: datetime, considerar_pausa: bool = False
+) -> None:
     """Block starting a trip while on another trip, during rest or outside working hours."""
-    pode, motivo, _ = disponibilidade_motorista(motorista, agora)
+    pode, motivo, _ = disponibilidade_motorista(motorista, agora, considerar_pausa)
     if pode:
         return
     if status_motorista(motorista, agora) == StatusMotorista.EM_ROTA:
@@ -583,9 +607,20 @@ def _validar_jornada_motorista(motorista: Motorista, agora: datetime) -> None:
     raise ForbiddenError(motivo or "Motorista indisponível")
 
 
-def _gravar_descanso_apos_viagem(motorista: Motorista, agora: datetime) -> None:
-    """After a started trip ends (finished or cancelled): store the rest end, if owed."""
-    motorista.descanso_ate = _fim_descanso_motorista(motorista, agora)
+def _gravar_descanso_apos_viagem(viagem: Viagem) -> None:
+    """After a started trip ends (finished or cancelled): store the rest end, if owed.
+
+    The organization pause goes to `pausa_ate` and only follows on-demand trips.
+    """
+    motorista = viagem.motorista
+    fim = viagem.fim_real
+    motorista.descanso_ate = _fim_descanso_motorista(motorista, fim)
+    # On-demand trips always have rota_id; fixed ones may only have horario_rota.
+    rota = viagem.rota
+    if rota is not None and rota.tipo == TipoViagem.SOB_DEMANDA:
+        parametros = parametros_operacao_service.parametros_da_organizacao(rota.organizacao_id)
+        if parametros.pausa_entre_viagens_minutos > 0:
+            motorista.pausa_ate = fim + timedelta(minutes=parametros.pausa_entre_viagens_minutos)
 
 
 def list_viagens_motorista(user_id: str) -> list[Viagem]:
@@ -635,7 +670,7 @@ def controlar_viagem(user_id: str, viagem_id: str, data: dict[str, Any]) -> Viag
                     .populate_existing()
                     .one()
                 )
-                _validar_jornada_motorista(motorista, agora)
+                validar_jornada_motorista(motorista, agora)
                 motorista.descanso_ate = None
             viagem.status = StatusViagem.EM_ANDAMENTO
             viagem.inicio_real = agora
@@ -649,7 +684,7 @@ def controlar_viagem(user_id: str, viagem_id: str, data: dict[str, Any]) -> Viag
             viagem.fim_real = _agora()
             db.session.flush()
             if viagem.motorista is not None:
-                _gravar_descanso_apos_viagem(viagem.motorista, viagem.fim_real)
+                _gravar_descanso_apos_viagem(viagem)
 
             rastros = (
                 TelemetriaViagem.query.filter_by(viagem_id=viagem.id)
@@ -725,7 +760,7 @@ def cancelar_viagem(user_id: str, viagem_id: str) -> dict[str, Any]:
             viagem.fim_real = _agora()
             db.session.flush()
             if viagem.motorista is not None:
-                _gravar_descanso_apos_viagem(viagem.motorista, viagem.fim_real)
+                _gravar_descanso_apos_viagem(viagem)
 
         confirmados = AlunosConfirmados.query.filter_by(viagem_id=viagem.id, confirmacao=True).all()
         data_formatada = viagem.data.strftime("%d/%m/%Y")

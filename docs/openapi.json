@@ -1307,18 +1307,6 @@
           "onibus"
         ]
       },
-      "delete": {
-        "responses": {
-          "200": {
-            "description": "Success"
-          }
-        },
-        "summary": "Removes a bus",
-        "operationId": "delete_onibus",
-        "tags": [
-          "onibus"
-        ]
-      },
       "patch": {
         "responses": {
           "200": {
@@ -1340,6 +1328,18 @@
             }
           }
         ],
+        "tags": [
+          "onibus"
+        ]
+      },
+      "delete": {
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "Removes a bus",
+        "operationId": "delete_onibus",
         "tags": [
           "onibus"
         ]
@@ -1420,6 +1420,57 @@
         "operationId": "delete_janela",
         "tags": [
           "onibus"
+        ]
+      }
+    },
+    "/v1/parametros-operacao": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/ParametrosOperacaoResponse"
+            }
+          },
+          "403": {
+            "description": "Não é gestor nem motorista"
+          }
+        },
+        "summary": "On-demand operation parameters of the logged-in user's organization",
+        "operationId": "get_parametros_operacao",
+        "tags": [
+          "parametros-operacao"
+        ]
+      },
+      "put": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/ParametrosOperacaoResponse"
+            }
+          },
+          "400": {
+            "description": "Valores inválidos"
+          },
+          "403": {
+            "description": "Não é gestor"
+          }
+        },
+        "summary": "Saves the organization's on-demand operation parameters (gestor)",
+        "operationId": "put_parametros_operacao",
+        "parameters": [
+          {
+            "name": "payload",
+            "required": true,
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/ParametrosOperacaoRequest"
+            }
+          }
+        ],
+        "tags": [
+          "parametros-operacao"
         ]
       }
     },
@@ -1665,17 +1716,82 @@
       },
       "post": {
         "responses": {
+          "409": {
+            "description": "Horário idêntico (mesmo horário, sentido e dia) já ativo"
+          },
           "201": {
             "description": "Created",
             "schema": {
               "$ref": "#/definitions/RotaHorarioResponse"
             }
-          },
-          "409": {
-            "description": "Horário idêntico (mesmo horário, sentido e dia) já ativo"
           }
         },
         "operationId": "add_rota_horario",
+        "parameters": [
+          {
+            "name": "payload",
+            "required": true,
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/RotaHorarioCreateRequest"
+            }
+          }
+        ],
+        "tags": [
+          "rotas"
+        ]
+      }
+    },
+    "/v1/rotas/{id}/horarios/{horario_id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "horario_id",
+          "in": "path",
+          "required": true,
+          "type": "string"
+        }
+      ],
+      "delete": {
+        "responses": {
+          "409": {
+            "description": "Viagem pendente no horário"
+          },
+          "404": {
+            "description": "Horário não encontrado ou inativo"
+          },
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "Removes a schedule; one that already has trips is only deactivated",
+        "operationId": "delete_rota_horario",
+        "tags": [
+          "rotas"
+        ]
+      },
+      "put": {
+        "responses": {
+          "409": {
+            "description": "Viagem pendente no horário ou horário idêntico já ativo"
+          },
+          "404": {
+            "description": "Horário não encontrado ou inativo"
+          },
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/RotaHorarioResponse"
+            }
+          }
+        },
+        "summary": "Replaces a schedule; one that already has trips is versioned under a new id",
+        "operationId": "update_rota_horario",
         "parameters": [
           {
             "name": "payload",
@@ -2081,6 +2197,37 @@
           "users"
         ]
       },
+      "patch": {
+        "responses": {
+          "200": {
+            "description": "Updated",
+            "schema": {
+              "$ref": "#/definitions/UserResponse"
+            }
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "409": {
+            "description": "Conflict"
+          }
+        },
+        "summary": "Updates the logged-in user's profile (nome, telefone, receber_notificacoes, cnh)",
+        "operationId": "update_my_profile",
+        "parameters": [
+          {
+            "name": "payload",
+            "required": true,
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/UpdateProfileRequest"
+            }
+          }
+        ],
+        "tags": [
+          "users"
+        ]
+      },
       "delete": {
         "responses": {
           "200": {
@@ -2106,37 +2253,6 @@
             "in": "body",
             "schema": {
               "$ref": "#/definitions/ExcluirContaRequest"
-            }
-          }
-        ],
-        "tags": [
-          "users"
-        ]
-      },
-      "patch": {
-        "responses": {
-          "200": {
-            "description": "Updated",
-            "schema": {
-              "$ref": "#/definitions/UserResponse"
-            }
-          },
-          "400": {
-            "description": "Validation error"
-          },
-          "409": {
-            "description": "Conflict"
-          }
-        },
-        "summary": "Updates the logged-in user's profile (nome, telefone, receber_notificacoes, cnh)",
-        "operationId": "update_my_profile",
-        "parameters": [
-          {
-            "name": "payload",
-            "required": true,
-            "in": "body",
-            "schema": {
-              "$ref": "#/definitions/UpdateProfileRequest"
             }
           }
         ],
@@ -2733,71 +2849,6 @@
           "viagens"
         ]
       }
-    },
-    "/v1/rotas/{id}/horarios/{horario_id}": {
-      "parameters": [
-        {
-          "name": "id",
-          "in": "path",
-          "required": true,
-          "type": "string"
-        },
-        {
-          "name": "horario_id",
-          "in": "path",
-          "required": true,
-          "type": "string"
-        }
-      ],
-      "put": {
-        "responses": {
-          "409": {
-            "description": "Viagem pendente no horário ou horário idêntico já ativo"
-          },
-          "404": {
-            "description": "Horário não encontrado ou inativo"
-          },
-          "200": {
-            "description": "Success",
-            "schema": {
-              "$ref": "#/definitions/RotaHorarioResponse"
-            }
-          }
-        },
-        "summary": "Replaces a schedule; one that already has trips is versioned under a new id",
-        "operationId": "update_rota_horario",
-        "parameters": [
-          {
-            "name": "payload",
-            "required": true,
-            "in": "body",
-            "schema": {
-              "$ref": "#/definitions/RotaHorarioCreateRequest"
-            }
-          }
-        ],
-        "tags": [
-          "rotas"
-        ]
-      },
-      "delete": {
-        "responses": {
-          "409": {
-            "description": "Viagem pendente no horário"
-          },
-          "404": {
-            "description": "Horário não encontrado ou inativo"
-          },
-          "200": {
-            "description": "Success"
-          }
-        },
-        "summary": "Removes a schedule; one that already has trips is only deactivated",
-        "operationId": "delete_rota_horario",
-        "tags": [
-          "rotas"
-        ]
-      }
     }
   },
   "info": {
@@ -2888,6 +2939,10 @@
     {
       "name": "telemetria",
       "description": "Telemetria do Veículo Elétrico"
+    },
+    {
+      "name": "parametros-operacao",
+      "description": "Parâmetros da operação sob demanda"
     }
   ],
   "definitions": {
@@ -3093,23 +3148,6 @@
       },
       "type": "object"
     },
-    "ExcluirContaRequest": {
-      "required": [
-        "email",
-        "senha"
-      ],
-      "properties": {
-        "email": {
-          "type": "string",
-          "description": "E-mail da conta"
-        },
-        "senha": {
-          "type": "string",
-          "description": "Senha atual"
-        }
-      },
-      "type": "object"
-    },
     "UpdateProfileRequest": {
       "properties": {
         "nome": {
@@ -3127,6 +3165,23 @@
         "cnh": {
           "type": "string",
           "description": "CNH (apenas motoristas)"
+        }
+      },
+      "type": "object"
+    },
+    "ExcluirContaRequest": {
+      "required": [
+        "email",
+        "senha"
+      ],
+      "properties": {
+        "email": {
+          "type": "string",
+          "description": "E-mail da conta"
+        },
+        "senha": {
+          "type": "string",
+          "description": "Senha atual"
         }
       },
       "type": "object"
@@ -6134,6 +6189,58 @@
         },
         "bateria_min": {
           "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "ParametrosOperacaoRequest": {
+      "required": [
+        "antecedencia_motorista_minutos",
+        "minimo_alunos",
+        "pausa_entre_viagens_minutos"
+      ],
+      "properties": {
+        "minimo_alunos": {
+          "type": "integer",
+          "description": "Mínimo de alunos para iniciar o percurso e no fechamento do buffer (só viagens sob demanda)"
+        },
+        "pausa_entre_viagens_minutos": {
+          "type": "integer",
+          "description": "Pausa mínima do motorista após uma viagem sob demanda, em minutos (só bloqueia novas viagens sob demanda)"
+        },
+        "antecedencia_motorista_minutos": {
+          "type": "integer",
+          "description": "Antecedência mínima com que o motorista precisa ser avisado, em minutos (ainda não aplicado; aguardando definição do gestor)"
+        }
+      },
+      "type": "object"
+    },
+    "ParametrosOperacaoResponse": {
+      "required": [
+        "antecedencia_motorista_minutos",
+        "minimo_alunos",
+        "pausa_entre_viagens_minutos"
+      ],
+      "properties": {
+        "organizacao_id": {
+          "type": "string"
+        },
+        "minimo_alunos": {
+          "type": "integer",
+          "description": "Mínimo de alunos para iniciar o percurso e no fechamento do buffer (só viagens sob demanda)"
+        },
+        "pausa_entre_viagens_minutos": {
+          "type": "integer",
+          "description": "Pausa mínima do motorista após uma viagem sob demanda, em minutos (só bloqueia novas viagens sob demanda)"
+        },
+        "antecedencia_motorista_minutos": {
+          "type": "integer",
+          "description": "Antecedência mínima com que o motorista precisa ser avisado, em minutos (ainda não aplicado; aguardando definição do gestor)"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Última alteração; null enquanto valem os padrões"
         }
       },
       "type": "object"
