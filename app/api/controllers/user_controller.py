@@ -125,14 +125,13 @@ class UserDesativar(Resource):
     @api.doc(
         "desativar_conta",
         responses={
-            200: "Conta desativada",
-            400: "Própria conta",
+            400: "Própria conta ou ID inválido",
             403: "Forbidden",
             404: "Not found",
-            409: "Conta não está ativa",
+            409: "Conta não está ativa, em viagem ou com compromissos futuros",
         },
     )
-    @api.response(200, "Success", models["user_response"])
+    @api.response(200, "Conta desativada", models["user_response"])
     @jwt_required()
     def post(self, id: str) -> tuple[dict[str, Any], int]:
         """Manager deactivates a passenger or driver account"""
@@ -147,14 +146,13 @@ class UserReativar(Resource):
     @api.doc(
         "reativar_conta",
         responses={
-            200: "Conta reativada",
-            400: "Própria conta",
+            400: "Própria conta ou ID inválido",
             403: "Forbidden",
             404: "Not found",
             409: "Conta não está desativada",
         },
     )
-    @api.response(200, "Success", models["user_response"])
+    @api.response(200, "Conta reativada", models["user_response"])
     @jwt_required()
     def post(self, id: str) -> tuple[dict[str, Any], int]:
         """Manager reactivates a deactivated passenger or driver account"""
