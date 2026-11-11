@@ -7,6 +7,33 @@ Any authenticated endpoint returns 401 `TOKEN_REVOKED` when the token's user no 
 or has a status that login refuses (`DELETED`, `DISABLED`, `PENDING_APPROVAL`). A deleted or
 deactivated account loses access at once, without waiting for the token to expire.
 
+## Account deactivation
+
+| Method | Path | Who |
+|---|---|---|
+| `POST` | `/v1/users/<id>/desativar` | gestor |
+| `POST` | `/v1/users/<id>/reativar` | gestor |
+
+Only passenger (`ALUNO`) and driver (`MOTORISTA`) accounts of the gestor's organization.
+`desativar` moves `ACTIVE` to `DISABLED`; `reativar` moves `DISABLED` back to `ACTIVE`.
+Both return the user (`UserResponse`).
+
+On `desativar`:
+
+- the account's `fcm_token` is cleared, so it stops getting pushes;
+- a passenger's active on-demand requests are cancelled with the RF-19 rules (the leg goes
+  back to capacity, a trip left with no one is cancelled) and confirmations on future
+  scheduled trips are withdrawn;
+- a driver with a future trip (`AGENDADA`, `SOLICITADA`, `BUFFER_ABERTO`) or any
+  availability window is refused with 409: the gestor reassigns them first.
+
+| Status | When |
+|---|---|
+| 400 | `id` is not a UUID; target is the gestor's own account |
+| 403 | caller is not a gestor; account from another organization (any role or status) |
+| 404 | user not found, not a passenger/driver, or deleted |
+| 409 | `desativar` on an account that is not `ACTIVE`, or on one in a trip `EM_ANDAMENTO`, or on a driver with future trips/windows; `reativar` on one that is not `DISABLED` |
+
 ## On-demand trip lifecycle (RF-05, RF-10 to RF-19)
 
 Trip states for `SOB_DEMANDA` routes:
