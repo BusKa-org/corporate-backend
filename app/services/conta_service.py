@@ -95,12 +95,16 @@ def _apagar_dados_sem_valor_estatistico(aluno_id) -> None:
 
 
 def excluir_conta(user_id: str, email: str, senha: str) -> None:
+    # Cheap pre-check so an already deleted account takes no locks; re-checked after the lock.
+    user = db.session.get(User, user_id)
+    if user is None or user.status == UserStatus.DELETED:
+        raise NotFoundError("Usuário não encontrado")
+
     # Same lock order as the rest of the system: vehicle and trip before the student.
     viagens_travadas = solicitacoes_service.travar_viagens_do_aluno(user_id)
 
-    # Plain FOR UPDATE: two FOR KEY SHARE locks do not conflict, so a second simultaneous
-    # request would not wait. With this one it waits and re-reads the account already deleted.
-    db.session.execute(select(User.id).where(User.id == user_id).with_for_update())
+    # FOR NO KEY UPDATE serializes two deletions without blocking FK KEY SHARE locks of inserts.
+    db.session.execute(select(User.id).where(User.id == user_id).with_for_update(key_share=True))
     user = db.session.get(User, user_id, populate_existing=True)
     if user is None or user.status == UserStatus.DELETED:
         raise NotFoundError("Usuário não encontrado")
