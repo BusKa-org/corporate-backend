@@ -37,6 +37,10 @@ logger = logging.getLogger(__name__)
 # equipe, sem validação jurídica formal. Passado o prazo, e-mail e CPF viram hashes.
 ANOS_DE_RETENCAO = 10
 LIMITE_ANONIMIZACAO_POR_EXECUCAO = 500
+EM_VIAGEM = (
+    "Você está em uma viagem em andamento. Conclua ou cancele a participação "
+    "antes de excluir a conta."
+)
 
 
 def _anonimizar(user: User) -> None:
@@ -119,7 +123,10 @@ def excluir_conta(user_id: str, email: str, senha: str) -> None:
 
     with transactional():
         # Raises 409 while in a trip; else gives the legs back like the student cancelling.
-        solicitacoes_service.liberar_aluno(user, viagens_travadas)
+        # Confirmations are left alone: the bulk delete below removes them.
+        solicitacoes_service.liberar_aluno(
+            user, viagens_travadas, msg_em_viagem=EM_VIAGEM, retirar_confirmacoes=False
+        )
         _apagar_ponto_casa(user)
         _apagar_dados_sem_valor_estatistico(aluno_id)
         db.session.add(

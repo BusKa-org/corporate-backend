@@ -188,15 +188,16 @@ def test_viagem_iniciada_ao_travar_a_confirmacao_fixa_retorna_409(
         )
     )
     _db.session.commit()
-    travar_original = solicitacoes_service.travar_viagem
+    travar_original = solicitacoes_service.travar_viagens_do_aluno
 
-    def travar_e_iniciar(viagem):
+    def travar_e_iniciar(aluno_id):
         # The trip started (and committed) just before this lock was granted.
-        travada = travar_original(viagem)
-        travada.status = StatusViagem.EM_ANDAMENTO
-        return travada
+        travadas = travar_original(aluno_id)
+        for travada in travadas.values():
+            travada.status = StatusViagem.EM_ANDAMENTO
+        return travadas
 
-    monkeypatch.setattr(solicitacoes_service, "travar_viagem", travar_e_iniciar)
+    monkeypatch.setattr(solicitacoes_service, "travar_viagens_do_aluno", travar_e_iniciar)
 
     r = gestor.client.post(f"/v1/users/{aluno.user.id}/desativar")
     assert r.status_code == 409, r.get_data(as_text=True)
@@ -243,3 +244,55 @@ def test_solicitacao_nao_vai_para_motorista_desativado(
     r = aluno.client.post(f"/v1/rotas/{rota_sob_demanda.id}/solicitacoes")
     assert r.status_code == 400, r.get_data(as_text=True)
     assert Viagem.query.filter_by(rota_id=rota_sob_demanda.id).count() == 0
+
+
+@pytest.mark.integration
+def test_rodada_sob_demanda_de_ontem_ainda_bloqueia_o_motorista(
+    _db, gestor, motorista, viagem_solicitada, relogio
+):
+    # The round was requested yesterday and never started: it still waits for this driver.
+    relogio.avancar(days=1)
+
+    r = gestor.client.post(f"/v1/users/{motorista.user.id}/desativar")
+    assert r.status_code == 409, r.get_data(as_text=True)
+    assert "Reatribua as viagens futuras" in r.get_json()["error"]["message"]
+
+
+@pytest.mark.integration
+def test_desativar_conta_ja_desativada_nao_trava_viagens(_db, gestor, aluno, monkeypatch):
+    aluno.user.status = UserStatus.DISABLED
+    _db.session.commit()
+
+    def nao_deveria_travar(aluno_id):
+        raise AssertionError("trips locked for an account that is already disabled")
+
+    monkeypatch.setattr(solicitacoes_service, "travar_viagens_do_aluno", nao_deveria_travar)
+
+    r = gestor.client.post(f"/v1/users/{aluno.user.id}/desativar")
+    assert r.status_code == 409, r.get_data(as_text=True)
+
+
+@pytest.mark.integration
+def test_motorista_desativado_nao_vira_motorista_padrao_de_rota(_db, gestor, motorista, rota):
+    motorista.user.status = UserStatus.DISABLED
+    _db.session.commit()
+
+    r = gestor.client.put(
+        f"/v1/rotas/{rota.id}", json={"motorista_padrao_id": str(motorista.user.id)}
+    )
+    assert r.status_code == 400, r.get_data(as_text=True)
+    assert r.get_json()["error"]["message"] == "Motorista sem cadastro ativo"
+
+    r = gestor.client.post(
+        "/v1/rotas/", json={"nome": "Nova", "motorista_padrao_id": str(motorista.user.id)}
+    )
+    assert r.status_code == 400, r.get_data(as_text=True)
+    assert r.get_json()["error"]["message"] == "Motorista sem cadastro ativo"
+
+
+@pytest.mark.integration
+def test_motorista_de_outra_organizacao_nao_vira_motorista_padrao(gestor, rota, other_motorista):
+    r = gestor.client.put(
+        f"/v1/rotas/{rota.id}", json={"motorista_padrao_id": str(other_motorista.user.id)}
+    )
+    assert r.status_code == 400, r.get_data(as_text=True)

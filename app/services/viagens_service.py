@@ -1,6 +1,7 @@
 """Trips (Viagem) service - trip management, student confirmations."""
 
 import logging
+import uuid
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -279,8 +280,8 @@ def listar_pontos_embarque(user_id: str, viagem_id: str) -> list[dict]:
     return resultado
 
 
-def _exigir_motorista_ativo(motorista_id: Any, organizacao_id: Any) -> None:
-    """Lock the driver row first: a concurrent deactivation either sees the new trip or wins."""
+def exigir_motorista_ativo(motorista_id: Any, organizacao_id: Any) -> uuid.UUID:
+    """Lock the driver row first: a concurrent deactivation either sees the new work or wins."""
     motorista_uuid = validate_uuid(str(motorista_id), "ID do motorista")
     db.session.execute(
         select(User.id).where(User.id == motorista_uuid).with_for_update(key_share=True)
@@ -289,9 +290,10 @@ def _exigir_motorista_ativo(motorista_id: Any, organizacao_id: Any) -> None:
     if not motorista:
         raise NotFoundError("Motorista não encontrado")
     if motorista.organizacao_id != organizacao_id:
-        raise ValidationError("Motorista não pertence à organização da rota")
+        raise ValidationError("Motorista não pertence à organização")
     if motorista.status != UserStatus.ACTIVE:
         raise ValidationError("Motorista sem cadastro ativo")
+    return motorista_uuid
 
 
 def gerar_viagem(user_id: str, data_input: dict) -> Viagem:
@@ -346,7 +348,7 @@ def gerar_viagem(user_id: str, data_input: dict) -> Viagem:
 
     with transactional():
         if motorista_id:
-            _exigir_motorista_ativo(motorista_id, rota.organizacao_id)
+            exigir_motorista_ativo(motorista_id, rota.organizacao_id)
         nova_viagem = Viagem(
             data=data_viagem,
             horario_rota_id=horario_selecionado.id,

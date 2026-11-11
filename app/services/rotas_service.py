@@ -19,6 +19,7 @@ from app.models.geo import Ponto
 from app.models.rota import DiasOperacao, HorarioRota, Rota, RotaAluno, RotaPonto
 from app.models.user import User
 from app.models.viagem import Viagem
+from app.services import viagens_service
 from app.utils import audit_logger, validate_uuid
 
 logger = logging.getLogger(__name__)
@@ -147,6 +148,8 @@ def create_rota(gestor_id: str, data: dict[str, Any]) -> Rota:
         motorista_id = data.get("motorista_padrao_id")
         if not motorista_id and user.role == UserRole.MOTORISTA:
             motorista_id = user.id
+        if motorista_id:
+            motorista_id = viagens_service.exigir_motorista_ativo(motorista_id, user.organizacao_id)
 
         rota = Rota(
             nome=nome,
@@ -207,6 +210,9 @@ def create_rota(gestor_id: str, data: dict[str, Any]) -> Rota:
 
         return rota
 
+    except AppError:
+        db.session.rollback()
+        raise
     except Exception as e:
         db.session.rollback()
         logger.error(f"Error creating route: {e}")
@@ -466,7 +472,12 @@ def update_rota(user_id: str, rota_id: str, data: dict[str, Any]) -> Rota:
             updated_fields.append("nome")
 
         if "motorista_padrao_id" in data:
-            rota.motorista_padrao_id = data.get("motorista_padrao_id")
+            motorista_id = data.get("motorista_padrao_id")
+            if motorista_id:
+                motorista_id = viagens_service.exigir_motorista_ativo(
+                    motorista_id, rota.organizacao_id
+                )
+            rota.motorista_padrao_id = motorista_id
             updated_fields.append("motorista_padrao_id")
 
         if "veiculo_padrao_id" in data:
@@ -491,6 +502,9 @@ def update_rota(user_id: str, rota_id: str, data: dict[str, Any]) -> Rota:
 
         return rota
 
+    except AppError:
+        db.session.rollback()
+        raise
     except Exception as e:
         db.session.rollback()
         logger.error(f"Error updating route {rota_id}: {e}", exc_info=True)
