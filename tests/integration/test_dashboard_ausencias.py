@@ -1,4 +1,5 @@
 from datetime import UTC, date, datetime
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -41,7 +42,7 @@ def alunos(_db, organizacao):
     return lista
 
 
-def test_lista_ausentes_e_desistentes_do_periodo(_db, gestor, rota, alunos, other_organizacao):
+def test_lista_ausentes_e_desistentes_do_periodo(app, _db, gestor, rota, alunos, other_organizacao):
     ana, bruno, carla, davi = alunos
     finalizada = _viagem(_db, rota)
     _confirmado(_db, finalizada, ana, embarcou=False)
@@ -90,8 +91,8 @@ def test_lista_ausentes_e_desistentes_do_periodo(_db, gestor, rota, alunos, othe
             "viagem_id": str(finalizada.id),
             "rota_nome": rota.nome,
             "data": "2026-03-10",
-            # No fim_real on this trip: falls back to its last update.
-            "registrado_em": finalizada.updated_at.isoformat(),
+            # No fim_real and no timetable: the trip date at 00:00 local time.
+            "registrado_em": body["items"][0]["registrado_em"],
         },
         {
             "tipo": "DESISTENCIA",
@@ -104,6 +105,9 @@ def test_lista_ausentes_e_desistentes_do_periodo(_db, gestor, rota, alunos, othe
             "registrado_em": cancelada_em.isoformat(),
         },
     ]
+    fuso = ZoneInfo(app.config["TIMEZONE"])
+    registrado_em = datetime.fromisoformat(body["items"][0]["registrado_em"])
+    assert registrado_em == datetime(2026, 3, 10, tzinfo=fuso)
 
 
 def test_pagina_as_ausencias(_db, gestor, rota, alunos):
@@ -145,7 +149,7 @@ def test_ausencia_usa_o_fim_real_da_viagem(_db, gestor, rota, alunos):
     assert body["items"][0]["registrado_em"] == fim_real.isoformat()
 
 
-def test_viagem_de_rota_fixa_aparece_como_ausencia(_db, gestor, horario_rota, alunos):
+def test_viagem_de_rota_fixa_aparece_como_ausencia(app, _db, gestor, horario_rota, alunos):
     # Fixed trips only carry horario_rota_id; the route comes through the schedule.
     viagem = ViagemFactory(
         horario_rota_id=horario_rota.id, status=StatusViagem.FINALIZADA, data=DIA
@@ -160,6 +164,11 @@ def test_viagem_de_rota_fixa_aparece_como_ausencia(_db, gestor, horario_rota, al
     assert body["total"] == 1
     assert body["items"][0]["tipo"] == "AUSENCIA"
     assert body["items"][0]["viagem_id"] == str(viagem.id)
+    # No fim_real: the scheduled departure, which later writes to the trip never move.
+    partida = datetime.combine(
+        DIA, horario_rota.horario_saida, tzinfo=ZoneInfo(app.config["TIMEZONE"])
+    )
+    assert datetime.fromisoformat(body["items"][0]["registrado_em"]) == partida
 
 
 def test_desistencia_ignora_viagem_cancelada(_db, gestor, rota, alunos):
@@ -183,6 +192,46 @@ def test_desistencia_ignora_quem_embarcou(_db, gestor, rota, alunos):
     body = gestor.client.get(URL).get_json()
 
     assert [i["aluno_nome"] for i in body["items"]] == ["Bruno"]
+
+
+def test_desistencia_repetida_aparece_uma_vez(_db, gestor, rota, alunos):
+    # The API never leaves two DESISTENCIA rows, but older data might.
+    viagem = _viagem(_db, rota, status=StatusViagem.EM_ANDAMENTO)
+    ultima = datetime(2026, 3, 10, 8, 0, tzinfo=UTC)
+    _desistencia(_db, viagem, alunos[0], datetime(2026, 3, 10, 7, 0, tzinfo=UTC))
+    _desistencia(_db, viagem, alunos[0], ultima)
+    _db.session.commit()
+
+    body = gestor.client.get(URL).get_json()
+
+    assert body["total"] == 1
+    assert len(body["items"]) == 1
+    assert body["items"][0]["registrado_em"] == ultima.isoformat()
+
+
+def test_desistencia_de_viagem_fixa_depois_da_partida(_db, gestor, horario_rota, alunos):
+    viagem = ViagemFactory(
+        horario_rota_id=horario_rota.id, status=StatusViagem.FINALIZADA, data=DIA
+    )
+    _db.session.add(viagem)
+    _db.session.flush()
+    desistencia_em = datetime(2026, 3, 10, 7, 45, tzinfo=UTC)
+    _db.session.add(
+        AlunosConfirmadosFactory(
+            viagem_id=viagem.id,
+            aluno_id=alunos[0].id,
+            confirmacao=False,
+            embarcou=False,
+            desistencia_em=desistencia_em,
+        )
+    )
+    _db.session.commit()
+
+    body = gestor.client.get(URL).get_json()
+
+    assert body["total"] == 1
+    assert body["items"][0]["tipo"] == "DESISTENCIA"
+    assert body["items"][0]["registrado_em"] == desistencia_em.isoformat()
 
 
 def test_paginas_nao_repetem_nem_perdem_empates(_db, gestor, rota, organizacao):
