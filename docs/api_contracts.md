@@ -146,6 +146,7 @@ Returns 200 with the request (same shape as above).
 | 400 | trip `FINALIZADA` / `CANCELADA` |
 | 403 | not a student |
 | 404 | trip not found, or the student has no active request on it |
+| 409 | trip `EM_ANDAMENTO` and the student already boarded |
 
 ### Scheduler jobs
 
@@ -166,7 +167,8 @@ Only run in the scheduler process (`RUN_SCHEDULER`).
 
 - `POST /v1/viagens/` on an on-demand route returns 400 (trips come from requests).
   On success it now returns 201 with the serialized trip (before, it returned the raw ORM object).
-- `PUT /v1/viagens/<id>/confirmacao` on an on-demand trip returns 400.
+- `PUT /v1/viagens/<id>/confirmacao` on an on-demand trip returns 400, and on a trip that is
+  no longer `AGENDADA` returns 409 (the attendance is kept as the trip's record).
 - `PUT /v1/viagens/<id>/cancelar` returns 403 for a trip of another organization, and
   also cancels and notifies the active requests of the trip.
 - Trip listings, the student agenda and the dashboard include on-demand trips.

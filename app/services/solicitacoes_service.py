@@ -196,13 +196,15 @@ def cancelar_na_viagem_travada(aluno: Aluno, viagem: Viagem) -> SolicitacaoViage
             f"Não é possível cancelar a solicitação de uma viagem com status {viagem.status.name}"
         )
 
-    solicitacao.cancelada_em = tempo.agora_utc()
-
     if viagem.status == StatusViagem.EM_ANDAMENTO:
+        passageiro = db.session.get(AlunosConfirmados, (viagem.id, aluno.usuario_id))
+        if passageiro and passageiro.embarcou:
+            raise ConflictError("Você já embarcou nesta viagem e não pode mais desistir dela")
+
+        solicitacao.cancelada_em = tempo.agora_utc()
         # The seat is not reopened: the vehicle already left counting on the passenger.
         solicitacao.status = StatusSolicitacao.DESISTENCIA
         # Leaves the driver's boarding list (RF-16/RF-17).
-        passageiro = db.session.get(AlunosConfirmados, (viagem.id, aluno.usuario_id))
         if passageiro:
             passageiro.confirmacao = False
         if viagem.motorista_id:
@@ -218,6 +220,7 @@ def cancelar_na_viagem_travada(aluno: Aluno, viagem: Viagem) -> SolicitacaoViage
             f"Não é possível cancelar a solicitação de uma viagem com status {viagem.status.name}"
         )
 
+    solicitacao.cancelada_em = tempo.agora_utc()
     # The load vector only counts ATIVA requests: cancelling already gives the leg back (RF-14).
     solicitacao.status = StatusSolicitacao.CANCELADA
     db.session.flush()
