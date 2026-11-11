@@ -260,6 +260,17 @@ def test_rf07_motorista_de_outra_organizacao_nao_sonda_o_status_da_viagem(
 
 
 @pytest.mark.integration
+def test_rf07_aluno_nao_confirmado_nao_sonda_o_status_pela_localizacao_aluno(
+    viagem_futura_agendada_com_motorista, aluno
+):
+    r = aluno.client.post(
+        f"/v1/viagens/{viagem_futura_agendada_com_motorista.id}/localizacao-aluno",
+        json={"latitude": -7.2, "longitude": -35.9},
+    )
+    assert r.status_code == 403
+
+
+@pytest.mark.integration
 def test_rf07_localizacao_so_com_viagem_em_andamento(
     viagem_futura_agendada_com_motorista, motorista
 ):

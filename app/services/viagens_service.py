@@ -859,12 +859,13 @@ def atualizar_localizacao_aluno(user_id: str, viagem_id: str, data: dict) -> dic
     if not viagem:
         raise NotFoundError("Viagem não encontrada.")
 
-    if viagem.status != StatusViagem.EM_ANDAMENTO:
-        raise ValidationError("A viagem precisa de estar em andamento para rastrear o embarque.")
-
+    # Authorize before the status check so outsiders cannot probe a trip's state.
     conf = AlunosConfirmados.query.filter_by(viagem_id=viagem.id, aluno_id=user_id).first()
     if not conf or not conf.confirmacao:
         raise ForbiddenError("O utilizador não está confirmado nesta viagem.")
+
+    if viagem.status != StatusViagem.EM_ANDAMENTO:
+        raise ValidationError("A viagem precisa de estar em andamento para rastrear o embarque.")
 
     if conf.embarcou:
         return {
