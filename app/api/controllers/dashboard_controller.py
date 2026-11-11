@@ -34,7 +34,7 @@ relatorio_parser.add_argument(
 )
 
 
-@api.route("/viagens/<string:viagem_id>/progresso")
+@api.route("/viagens/<uuid:viagem_id>/progresso")
 class ProgressoViagemResource(Resource):
     @api.doc("progresso_viagem")
     @api.marshal_list_with(models["ponto_progresso"], code=HTTPStatus.OK)
@@ -42,7 +42,7 @@ class ProgressoViagemResource(Resource):
     def get(self, viagem_id):
         """Gets a trip's progress (the fixed stops visited)."""
         current_user_id = get_jwt_identity()
-        progresso = obter_progresso_viagem(gestor_id=current_user_id, viagem_id=viagem_id)
+        progresso = obter_progresso_viagem(gestor_id=current_user_id, viagem_id=str(viagem_id))
         return progresso, 200
 
 
@@ -101,7 +101,7 @@ class IndicadoresExportacaoResource(Resource):
         )
 
 
-@api.route("/viagens/<string:viagem_id>/trajeto-real")
+@api.route("/viagens/<uuid:viagem_id>/trajeto-real")
 class TrajetoRealViagemResource(Resource):
     @api.doc("trajeto_real_viagem")
     @api.marshal_list_with(models["ponto_telemetria"], code=200)
@@ -109,7 +109,7 @@ class TrajetoRealViagemResource(Resource):
     def get(self, viagem_id):
         """Gets the full GPS trail (actual route) of a trip."""
         current_user_id = get_jwt_identity()
-        rastros = obter_telemetria_viagem(gestor_id=current_user_id, viagem_id=viagem_id)
+        rastros = obter_telemetria_viagem(gestor_id=current_user_id, viagem_id=str(viagem_id))
         return rastros, 200
 
 

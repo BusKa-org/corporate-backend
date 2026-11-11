@@ -4,11 +4,10 @@ from datetime import date, datetime
 from typing import Any
 
 from marshmallow import ValidationError as MarshmallowValidationError, fields, validates_schema
-from marshmallow.validate import OneOf
+from marshmallow.validate import OneOf, Range
 
 from app.models.enum import StatusViagem
 from app.schemas.common import BaseSchema, PaginacaoQuerySchema
-from app.schemas.validators import validate_uuid4
 
 # -------------------------
 # Common helpers / fields
@@ -104,6 +103,13 @@ class ViagemAcaoRequestSchema(BaseSchema):
     acao = fields.String(required=True, validate=OneOf(["INICIAR", "FINALIZAR"]))
 
 
+class LocalizacaoRequestSchema(BaseSchema):
+    """POST /viagens/<id>/localizacao and /localizacao-aluno"""
+
+    latitude = fields.Float(required=True, validate=Range(min=-90, max=90))
+    longitude = fields.Float(required=True, validate=Range(min=-180, max=180))
+
+
 class ViagemListQuerySchema(PaginacaoQuerySchema):
     """GET /viagens?data_inicio=...&status=..."""
 
@@ -112,8 +118,8 @@ class ViagemListQuerySchema(PaginacaoQuerySchema):
     data_fim = DateISOField(required=False, allow_none=True)
 
     status = EnumByNameField(StatusViagem, required=False, allow_none=True)
-    motorista_id = fields.String(required=False, allow_none=True, validate=validate_uuid4)
-    rota_id = fields.String(required=False, allow_none=True, validate=validate_uuid4)
+    motorista_id = fields.UUID(required=False, allow_none=True)
+    rota_id = fields.UUID(required=False, allow_none=True)
 
     @validates_schema
     def validate_date_range(self, data: dict[str, Any], **kwargs) -> None:

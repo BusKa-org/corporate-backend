@@ -17,7 +17,6 @@ from app.services import (
 )
 from app.services.notificacao_service import NotificacaoService
 from app.utils import tempo
-from app.utils.validators import validate_uuid
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +27,7 @@ def iniciar_percurso(user_id: str, viagem_id: str) -> Viagem:
     # NO KEY: a request joining the round only needs the trip's key (FK).
     viagem = (
         db.session.query(Viagem)
-        .filter(Viagem.id == validate_uuid(viagem_id, "ID da viagem"))
+        .filter(Viagem.id == viagem_id)
         .with_for_update(key_share=True)
         .first()
     )
