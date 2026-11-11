@@ -1603,6 +1603,9 @@
       },
       "delete": {
         "responses": {
+          "409": {
+            "description": "Viagem pendente na rota"
+          },
           "200": {
             "description": "Success"
           }
@@ -1667,6 +1670,9 @@
             "schema": {
               "$ref": "#/definitions/RotaHorarioResponse"
             }
+          },
+          "409": {
+            "description": "Horário idêntico (mesmo horário, sentido e dia) já ativo"
           }
         },
         "operationId": "add_rota_horario",
@@ -2725,6 +2731,71 @@
         ],
         "tags": [
           "viagens"
+        ]
+      }
+    },
+    "/v1/rotas/{id}/horarios/{horario_id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "horario_id",
+          "in": "path",
+          "required": true,
+          "type": "string"
+        }
+      ],
+      "put": {
+        "responses": {
+          "409": {
+            "description": "Viagem pendente no horário ou horário idêntico já ativo"
+          },
+          "404": {
+            "description": "Horário não encontrado ou inativo"
+          },
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/RotaHorarioResponse"
+            }
+          }
+        },
+        "summary": "Replaces a schedule; one that already has trips is versioned under a new id",
+        "operationId": "update_rota_horario",
+        "parameters": [
+          {
+            "name": "payload",
+            "required": true,
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/RotaHorarioCreateRequest"
+            }
+          }
+        ],
+        "tags": [
+          "rotas"
+        ]
+      },
+      "delete": {
+        "responses": {
+          "409": {
+            "description": "Viagem pendente no horário"
+          },
+          "404": {
+            "description": "Horário não encontrado ou inativo"
+          },
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "Removes a schedule; one that already has trips is only deactivated",
+        "operationId": "delete_rota_horario",
+        "tags": [
+          "rotas"
         ]
       }
     }
@@ -4660,6 +4731,10 @@
         "data": {
           "type": "string",
           "description": "Data (YYYY-MM-DD)"
+        },
+        "horario_rota_id": {
+          "type": "string",
+          "description": "UUID do horário; obrigatório quando a rota tem mais de um horário ativo no dia da semana"
         }
       },
       "type": "object"

@@ -49,7 +49,7 @@ def solicitar_viagem(user_id: str, rota_id: str) -> SolicitacaoViagem:
     aluno = _buscar_aluno(user_id)
 
     rota = db.session.get(Rota, validate_uuid(rota_id, "ID da rota"))
-    if not rota:
+    if not rota or not rota.ativa:
         raise NotFoundError("Rota não encontrada")
 
     if rota.organizacao_id != aluno.organizacao_id:
@@ -279,7 +279,7 @@ def buscar_rodada_ativa(user_id: str, rota_id: str) -> dict:
         raise ForbiddenError("Acesso negado")
 
     rota = db.session.get(Rota, validate_uuid(rota_id, "ID da rota"))
-    if not rota:
+    if not rota or not rota.ativa:
         raise NotFoundError("Rota não encontrada")
 
     if rota.organizacao_id != user.organizacao_id:

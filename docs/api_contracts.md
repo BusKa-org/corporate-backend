@@ -42,6 +42,76 @@ Response: `{id, onibus_id, motorista_id, motorista_nome, dia, hora_inicio, hora_
 | 404 | vehicle, driver or window (for that vehicle) not found |
 | 409 | overlaps another window of the same vehicle that day, or of the same driver on any vehicle that day |
 
+### Fixed route schedules (RF-05)
+
+| Method | Path | Who |
+|---|---|---|
+| `POST` | `/v1/rotas/<id>/horarios` | gestor |
+| `PUT` | `/v1/rotas/<id>/horarios/<horario_id>` | gestor |
+| `DELETE` | `/v1/rotas/<id>/horarios/<horario_id>` | gestor |
+
+`PUT` body is the same as `POST` and replaces the whole schedule:
+`{"horario_saida": "HH:MM", "sentido": "IDA"|"VOLTA"|"CIRCULAR", "dias": ["SEG", ...]}`.
+Repeated weekdays in `dias` are stored once; an empty `dias` returns 400.
+
+A route may have several active schedules on the same weekday (e.g. `IDA` 06:00 and
+`VOLTA` 17:00). Only an exact duplicate is rejected: same `sentido` and `horario_saida` as
+another active schedule of the route on one of the weekdays.
+
+The `horarios` list in `POST /v1/rotas/` follows the same rules: invalid `sentido`,
+`horario_saida` or weekday, or an empty `dias`, returns 400 (invalid weekdays used to be silently dropped),
+repeated weekdays are stored once, and exact duplicates (also inside the same request)
+return 409.
+
+Trips read their time and direction from the schedule, so a schedule that already has
+trips (any status) is never rewritten or deleted:
+
+- `PUT` on a schedule with trips deactivates it and creates a new one with the new values.
+  The response is the new schedule, with a **new `id`**; use it from then on. A schedule
+  with no trips is updated in place and keeps its `id`.
+- `DELETE` on a schedule with trips only deactivates it; one with no trips is deleted.
+- Inactive schedules no longer appear in `GET /v1/rotas/<id>/horarios` or in
+  `GET /v1/rotas/<id>`, trips are no longer generated from them, and `PUT`/`DELETE` on
+  them return 404. Their past trips keep `horario_rota_id`, `horario_inicio` and `tipo`.
+
+`sentido` in schedule responses (`POST`, `PUT`, `GET /v1/rotas/<id>/horarios`,
+`GET /v1/rotas/<id>`) is the plain value `"IDA"` / `"VOLTA"` / `"CIRCULAR"`. Before this
+change it came out as `"SentidoViagem.IDA"`; clients parsing that must switch.
+
+| Status | When |
+|---|---|
+| 400 | invalid body, same rules as creation; route is `SOB_DEMANDA` |
+| 403 | not a gestor; route from another organization |
+| 404 | route not found; schedule not in that route or inactive |
+| 409 | `PUT`/`DELETE`: the schedule has an `AGENDADA` trip dated today or later, or an `EM_ANDAMENTO` trip of any date |
+| 409 | `POST`/`PUT`: another active schedule of the route has the same `sentido` and `horario_saida` on one of the weekdays |
+
+### Fixed trip generation
+
+`POST /v1/viagens/` body: `{"rota_id": "<uuid>", "data": "YYYY-MM-DD", "horario_rota_id": "<uuid>"?}`.
+
+- Without `horario_rota_id`: uses the route's only active schedule on that weekday. If
+  there are several, returns 400 with them in `error.details.horarios`
+  (`[{id, sentido, horario_saida}]`); send one as `horario_rota_id`.
+- With `horario_rota_id`: it must belong to the route (404), be active (404, also right
+  after a `PUT` versioned it: use the new `id`) and run on that weekday (400).
+- 409 when the route already has a non-`CANCELADA` trip on that date with the same
+  `sentido` and `horario_saida`, whatever schedule version it came from. A cancelled slot
+  can be generated again.
+- 404 when the route was deactivated by `DELETE /v1/rotas/<id>`.
+
+### Route removal
+
+`DELETE /v1/rotas/<id>` (gestor): a route with no trips is deleted. A route with trips
+(any status) is only deactivated, together with its schedules, so past trips keep their
+route, time and direction. A deactivated route disappears from `GET /v1/rotas/` and
+`GET /v1/rotas/me`; `GET`/`PUT`/`DELETE` on it, its stops and schedules, trip generation
+and ride requests return 404.
+
+| Status | When |
+|---|---|
+| 409 | the route has an `AGENDADA` trip dated today or later, or a `SOLICITADA`, `BUFFER_ABERTO` or `EM_ANDAMENTO` trip of any date |
+
 ### Ride request (RF-10)
 
 `POST /v1/rotas/<id>/solicitacoes`: student with current LGPD consent. No body.
@@ -165,6 +235,8 @@ Only run in the scheduler process (`RUN_SCHEDULER`).
 ### Changes to existing endpoints
 
 - `POST /v1/viagens/` on an on-demand route returns 400 (trips come from requests).
+- `POST /v1/rotas/<id>/pontos` and `DELETE /v1/rotas/<id>/pontos/<ponto_id>` return 400
+  when `<id>` is not a UUID (it was not validated before), like the other route endpoints.
   On success it now returns 201 with the serialized trip (before, it returned the raw ORM object).
 - `PUT /v1/viagens/<id>/confirmacao` on an on-demand trip returns 400.
 - `PUT /v1/viagens/<id>/cancelar` returns 403 for a trip of another organization, and
