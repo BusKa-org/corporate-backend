@@ -6127,15 +6127,15 @@
       "properties": {
         "minimo_alunos": {
           "type": "integer",
-          "description": "Mínimo de alunos solicitantes para iniciar o percurso"
+          "description": "Mínimo de alunos para iniciar o percurso e no fechamento do buffer (só viagens sob demanda)"
         },
         "pausa_entre_viagens_minutos": {
           "type": "integer",
-          "description": "Pausa mínima do motorista entre duas viagens, em minutos"
+          "description": "Pausa mínima do motorista após uma viagem sob demanda, em minutos (só bloqueia novas viagens sob demanda)"
         },
         "antecedencia_motorista_minutos": {
           "type": "integer",
-          "description": "Antecedência mínima com que o motorista precisa ser avisado, em minutos"
+          "description": "Antecedência mínima com que o motorista precisa ser avisado, em minutos (ainda não aplicado; aguardando definição do gestor)"
         }
       },
       "type": "object"
@@ -6152,15 +6152,15 @@
         },
         "minimo_alunos": {
           "type": "integer",
-          "description": "Mínimo de alunos solicitantes para iniciar o percurso"
+          "description": "Mínimo de alunos para iniciar o percurso e no fechamento do buffer (só viagens sob demanda)"
         },
         "pausa_entre_viagens_minutos": {
           "type": "integer",
-          "description": "Pausa mínima do motorista entre duas viagens, em minutos"
+          "description": "Pausa mínima do motorista após uma viagem sob demanda, em minutos (só bloqueia novas viagens sob demanda)"
         },
         "antecedencia_motorista_minutos": {
           "type": "integer",
-          "description": "Antecedência mínima com que o motorista precisa ser avisado, em minutos"
+          "description": "Antecedência mínima com que o motorista precisa ser avisado, em minutos (ainda não aplicado; aguardando definição do gestor)"
         },
         "updated_at": {
           "type": "string",
