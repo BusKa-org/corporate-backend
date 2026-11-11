@@ -42,6 +42,24 @@ Response: `{id, onibus_id, motorista_id, motorista_nome, dia, hora_inicio, hora_
 | 404 | vehicle, driver or window (for that vehicle) not found |
 | 409 | overlaps another window of the same vehicle that day, or of the same driver on any vehicle that day |
 
+### Fixed route schedules (RF-05)
+
+| Method | Path | Who |
+|---|---|---|
+| `PUT` | `/v1/rotas/<id>/horarios/<horario_id>` | gestor |
+| `DELETE` | `/v1/rotas/<id>/horarios/<horario_id>` | gestor |
+
+`PUT` body is the same as `POST /v1/rotas/<id>/horarios` and replaces the whole schedule:
+`{"horario_saida": "HH:MM", "sentido": "IDA"|"VOLTA"|"CIRCULAR", "dias": ["SEG", ...]}`.
+`DELETE` keeps past trips: they lose `horario_rota_id` but keep `rota_id`.
+
+| Status | When |
+|---|---|
+| 400 | invalid body, same rules as creation |
+| 403 | not a gestor; route from another organization |
+| 404 | route not found, or schedule not in that route |
+| 409 | the schedule has a trip that is not `FINALIZADA` / `CANCELADA` |
+
 ### Ride request (RF-10)
 
 `POST /v1/rotas/<id>/solicitacoes`: student with current LGPD consent. No body.

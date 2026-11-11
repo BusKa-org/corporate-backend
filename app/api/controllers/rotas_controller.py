@@ -173,6 +173,29 @@ class RotaHorariosResource(Resource):
         return horario_response_schema.dump(horario), 201
 
 
+@api.route("/<string:id>/horarios/<string:horario_id>")
+class RotaHorarioResource(Resource):
+    @api.doc("update_rota_horario")
+    @api.expect(models["rota_horario_create_request"])
+    @api.response(200, "Success", models["rota_horario_response"])
+    @jwt_required()
+    def put(self, id: str, horario_id: str) -> tuple[dict[str, Any], int]:
+        current_user = get_jwt_identity()
+        data = request.get_json(silent=True) or {}
+        payload = horario_create_request_schema.load(data)
+
+        horario = rotas_service.update_horario(current_user, id, horario_id, payload)
+        return horario_response_schema.dump(horario), 200
+
+    @api.doc("delete_rota_horario")
+    @api.response(200, "Success")
+    @jwt_required()
+    def delete(self, id: str, horario_id: str) -> tuple[dict[str, Any], int]:
+        current_user = get_jwt_identity()
+        rotas_service.delete_horario(current_user, id, horario_id)
+        return {"message": "Horário removido com sucesso"}, 200
+
+
 @api.route("/<string:id>")
 class RotaResource(Resource):
     @api.doc("get_rota")

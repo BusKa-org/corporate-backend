@@ -372,6 +372,115 @@ def add_horario(gestor_id: str, rota_id: str, data: dict[str, Any]) -> HorarioRo
         raise AppError(f"Erro ao adicionar horário: {str(e)}", 500)
 
 
+def _get_horario_do_gestor(gestor_id: str, rota_id: str, horario_id: str) -> HorarioRota:
+    """Raises: ForbiddenError, NotFoundError"""
+    validate_uuid(rota_id, "Rota ID")
+    validate_uuid(horario_id, "Horário ID")
+
+    user = db.session.get(User, gestor_id)
+    if not user or user.role != UserRole.GESTOR:
+        raise ForbiddenError("Apenas gestores gerenciam horários")
+
+    rota = db.session.get(Rota, rota_id)
+    if not rota:
+        raise NotFoundError("Rota não encontrada")
+
+    if rota.organizacao_id != user.organizacao_id:
+        raise ForbiddenError("Acesso negado")
+
+    horario = db.session.get(HorarioRota, horario_id)
+    if not horario or horario.rota_id != rota.id:
+        raise NotFoundError("Horário não encontrado nesta rota")
+    return horario
+
+
+def _garantir_horario_sem_viagem_pendente(horario: HorarioRota, acao: str) -> None:
+    """Scheduled trips copy nothing from the schedule: their time, direction and
+    reminders read it live, so changing or removing it would silently move them.
+    """
+    pendente = (
+        db.session.query(Viagem.id)
+        .filter(
+            Viagem.horario_rota_id == horario.id,
+            Viagem.status.notin_((StatusViagem.FINALIZADA, StatusViagem.CANCELADA)),
+        )
+        .first()
+    )
+    if pendente:
+        raise ConflictError(
+            f"Há viagens agendadas ou em andamento neste horário; "
+            f"cancele-as ou aguarde a finalização para {acao}"
+        )
+
+
+def update_horario(
+    gestor_id: str, rota_id: str, horario_id: str, data: dict[str, Any]
+) -> HorarioRota:
+    """RF-05: replaces time, direction and weekdays of a fixed route's schedule.
+
+    Raises: ForbiddenError, NotFoundError, ValidationError, ConflictError, AppError
+    """
+    horario = _get_horario_do_gestor(gestor_id, rota_id, horario_id)
+
+    dias_list = data.get("dias", [])
+    if not dias_list:
+        raise ValidationError("Selecione pelo menos um dia da semana")
+
+    _garantir_horario_sem_viagem_pendente(horario, "alterá-lo")
+
+    try:
+        horario.horario_saida = data.get("horario_saida")
+        horario.sentido = SentidoViagem(data.get("sentido"))
+        horario.dias.clear()
+        db.session.flush()
+        for dia_str in dias_list:
+            horario.dias.append(DiasOperacao(dia=DiaDaSemana(dia_str)))
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error updating schedule {horario_id}: {e}")
+        raise AppError(f"Erro ao atualizar horário: {str(e)}", 500)
+
+    audit_logger.log_user_action(
+        action="update_horario",
+        user_id=gestor_id,
+        resource_type="rota",
+        resource_id=str(rota_id),
+        details={"horario_id": str(horario_id)},
+    )
+    return horario
+
+
+def delete_horario(gestor_id: str, rota_id: str, horario_id: str) -> None:
+    """RF-05: removes a schedule from a fixed route.
+
+    Raises: ForbiddenError, NotFoundError, ConflictError, AppError
+    """
+    horario = _get_horario_do_gestor(gestor_id, rota_id, horario_id)
+    _garantir_horario_sem_viagem_pendente(horario, "removê-lo")
+
+    try:
+        # The FK sets horario_rota_id to NULL; keep rota_id so past trips stay in
+        # the route's history and dashboard.
+        db.session.query(Viagem).filter(
+            Viagem.horario_rota_id == horario.id, Viagem.rota_id.is_(None)
+        ).update({Viagem.rota_id: horario.rota_id}, synchronize_session=False)
+        db.session.delete(horario)
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error deleting schedule {horario_id}: {e}")
+        raise AppError(f"Erro ao remover horário: {str(e)}", 500)
+
+    audit_logger.log_user_action(
+        action="delete_horario",
+        user_id=gestor_id,
+        resource_type="rota",
+        resource_id=str(rota_id),
+        details={"horario_id": str(horario_id)},
+    )
+
+
 def get_horarios(user_id: str, rota_id: str) -> list:
     """
     Get schedules for a route.

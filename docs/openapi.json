@@ -243,6 +243,25 @@
           "consentimento"
         ]
       },
+      "delete": {
+        "responses": {
+          "200": {
+            "description": "Consentimento revogado",
+            "schema": {
+              "$ref": "#/definitions/ConsentimentoEstadoResponse"
+            }
+          },
+          "409": {
+            "description": "Não há consentimento vigente"
+          }
+        },
+        "summary": "Revokes consent",
+        "description": "The user goes back to the pending state.",
+        "operationId": "revogar_consentimento",
+        "tags": [
+          "consentimento"
+        ]
+      },
       "post": {
         "responses": {
           "200": {
@@ -268,25 +287,6 @@
             }
           }
         ],
-        "tags": [
-          "consentimento"
-        ]
-      },
-      "delete": {
-        "responses": {
-          "200": {
-            "description": "Consentimento revogado",
-            "schema": {
-              "$ref": "#/definitions/ConsentimentoEstadoResponse"
-            }
-          },
-          "409": {
-            "description": "Não há consentimento vigente"
-          }
-        },
-        "summary": "Revokes consent",
-        "description": "The user goes back to the pending state.",
-        "operationId": "revogar_consentimento",
         "tags": [
           "consentimento"
         ]
@@ -1307,18 +1307,6 @@
           "onibus"
         ]
       },
-      "delete": {
-        "responses": {
-          "200": {
-            "description": "Success"
-          }
-        },
-        "summary": "Removes a bus",
-        "operationId": "delete_onibus",
-        "tags": [
-          "onibus"
-        ]
-      },
       "patch": {
         "responses": {
           "200": {
@@ -1340,6 +1328,18 @@
             }
           }
         ],
+        "tags": [
+          "onibus"
+        ]
+      },
+      "delete": {
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "Removes a bus",
+        "operationId": "delete_onibus",
         "tags": [
           "onibus"
         ]
@@ -1670,6 +1670,57 @@
           }
         },
         "operationId": "add_rota_horario",
+        "parameters": [
+          {
+            "name": "payload",
+            "required": true,
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/RotaHorarioCreateRequest"
+            }
+          }
+        ],
+        "tags": [
+          "rotas"
+        ]
+      }
+    },
+    "/v1/rotas/{id}/horarios/{horario_id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "horario_id",
+          "in": "path",
+          "required": true,
+          "type": "string"
+        }
+      ],
+      "delete": {
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "operationId": "delete_rota_horario",
+        "tags": [
+          "rotas"
+        ]
+      },
+      "put": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/RotaHorarioResponse"
+            }
+          }
+        },
+        "operationId": "update_rota_horario",
         "parameters": [
           {
             "name": "payload",
@@ -2075,6 +2126,37 @@
           "users"
         ]
       },
+      "patch": {
+        "responses": {
+          "200": {
+            "description": "Updated",
+            "schema": {
+              "$ref": "#/definitions/UserResponse"
+            }
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "409": {
+            "description": "Conflict"
+          }
+        },
+        "summary": "Updates the logged-in user's profile (nome, telefone, receber_notificacoes, cnh)",
+        "operationId": "update_my_profile",
+        "parameters": [
+          {
+            "name": "payload",
+            "required": true,
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/UpdateProfileRequest"
+            }
+          }
+        ],
+        "tags": [
+          "users"
+        ]
+      },
       "delete": {
         "responses": {
           "200": {
@@ -2100,37 +2182,6 @@
             "in": "body",
             "schema": {
               "$ref": "#/definitions/ExcluirContaRequest"
-            }
-          }
-        ],
-        "tags": [
-          "users"
-        ]
-      },
-      "patch": {
-        "responses": {
-          "200": {
-            "description": "Updated",
-            "schema": {
-              "$ref": "#/definitions/UserResponse"
-            }
-          },
-          "400": {
-            "description": "Validation error"
-          },
-          "409": {
-            "description": "Conflict"
-          }
-        },
-        "summary": "Updates the logged-in user's profile (nome, telefone, receber_notificacoes, cnh)",
-        "operationId": "update_my_profile",
-        "parameters": [
-          {
-            "name": "payload",
-            "required": true,
-            "in": "body",
-            "schema": {
-              "$ref": "#/definitions/UpdateProfileRequest"
             }
           }
         ],
@@ -2211,27 +2262,6 @@
           "type": "string"
         }
       ],
-      "delete": {
-        "responses": {
-          "200": {
-            "description": "Deleted"
-          },
-          "403": {
-            "description": "Forbidden"
-          },
-          "404": {
-            "description": "Not found"
-          },
-          "400": {
-            "description": "Has linked trips"
-          }
-        },
-        "summary": "Manager removes a driver",
-        "operationId": "delete_motorista",
-        "tags": [
-          "users"
-        ]
-      },
       "patch": {
         "responses": {
           "200": {
@@ -2262,6 +2292,27 @@
             }
           }
         ],
+        "tags": [
+          "users"
+        ]
+      },
+      "delete": {
+        "responses": {
+          "200": {
+            "description": "Deleted"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "400": {
+            "description": "Has linked trips"
+          }
+        },
+        "summary": "Manager removes a driver",
+        "operationId": "delete_motorista",
         "tags": [
           "users"
         ]
@@ -3022,23 +3073,6 @@
       },
       "type": "object"
     },
-    "ExcluirContaRequest": {
-      "required": [
-        "email",
-        "senha"
-      ],
-      "properties": {
-        "email": {
-          "type": "string",
-          "description": "E-mail da conta"
-        },
-        "senha": {
-          "type": "string",
-          "description": "Senha atual"
-        }
-      },
-      "type": "object"
-    },
     "UpdateProfileRequest": {
       "properties": {
         "nome": {
@@ -3056,6 +3090,23 @@
         "cnh": {
           "type": "string",
           "description": "CNH (apenas motoristas)"
+        }
+      },
+      "type": "object"
+    },
+    "ExcluirContaRequest": {
+      "required": [
+        "email",
+        "senha"
+      ],
+      "properties": {
+        "email": {
+          "type": "string",
+          "description": "E-mail da conta"
+        },
+        "senha": {
+          "type": "string",
+          "description": "Senha atual"
         }
       },
       "type": "object"
