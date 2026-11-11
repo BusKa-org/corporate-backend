@@ -253,10 +253,11 @@ def listar_pontos_embarque(user_id: str, viagem_id: str) -> list[dict]:
     if not viagem:
         raise NotFoundError("Viagem não encontrada")
 
-    rota = _rota_da_viagem(viagem)
-    if rota is None:
+    rota_id = viagem.rota_id
+    if rota_id is None and viagem.horario_rota is not None:
+        rota_id = viagem.horario_rota.rota_id
+    if rota_id is None:
         raise NotFoundError("Rota da viagem não encontrada")
-    rota_id = rota.id
 
     inscricao = db.session.query(RotaAluno).filter_by(rota_id=rota_id, aluno_id=aluno.id).first()
 
@@ -719,10 +720,8 @@ def atualizar_localizacao(user_id: str, viagem_id: str, data: dict) -> dict:
     if not viagem:
         raise NotFoundError("Viagem não encontrada")
 
-    if viagem.motorista_id is None:
-        raise ConflictError("Viagem sem motorista atribuído")
-
-    # Authorize before the status check so other drivers cannot probe a trip's state.
+    # Authorize before the status check so other drivers cannot probe a trip's state;
+    # a trip without a driver also falls here, so its assignment does not leak.
     if viagem.motorista_id != user.id:
         raise ForbiddenError("Apenas o motorista desta viagem pode enviar a localização.")
 

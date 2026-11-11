@@ -248,7 +248,7 @@ def test_rf07_localizacao_aluno_com_corpo_invalido_da_400(
 
 
 @pytest.mark.integration
-def test_rf07_localizacao_de_viagem_sem_motorista_da_409(
+def test_rf07_localizacao_de_viagem_sem_motorista_da_403(
     _db, viagem_futura_iniciada_com_motorista, motorista
 ):
     viagem = viagem_futura_iniciada_com_motorista
@@ -258,8 +258,7 @@ def test_rf07_localizacao_de_viagem_sem_motorista_da_409(
     r = motorista.client.post(
         f"/v1/viagens/{viagem.id}/localizacao", json={"latitude": -7.2, "longitude": -35.9}
     )
-    assert r.status_code == 409, r.get_data(as_text=True)
-    assert r.get_json()["error"]["message"] == "Viagem sem motorista atribuído"
+    assert r.status_code == 403, r.get_data(as_text=True)
     _assert_localizacao_intacta(_db, viagem)
 
 
