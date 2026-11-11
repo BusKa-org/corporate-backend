@@ -88,3 +88,17 @@ def test_viagem_da_organizacao_sem_rota_usa_o_motorista(
     )
 
     assert response.status_code == 201
+
+
+def test_viagem_id_em_formato_urn_grava_o_id_da_viagem(
+    aluno, viagem_futura_agendada_com_motorista, _db
+):
+    viagem = viagem_futura_agendada_com_motorista
+
+    response = aluno.client.post(
+        "/v1/ocorrencias/", json={"tipo": "ATRASO", "viagem_id": f"urn:uuid:{viagem.id}"}
+    )
+
+    assert response.status_code == 201
+    ocorrencia = _db.session.get(Ocorrencia, response.get_json()["id"])
+    assert ocorrencia.viagem_id == viagem.id

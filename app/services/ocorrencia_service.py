@@ -47,6 +47,7 @@ class OcorrenciaService:
             # Another organization's trip gets the same answer as a missing one.
             if not viagem or _organizacao_da_viagem(viagem) != user.organizacao_id:
                 raise NotFoundError("Viagem não encontrada.")
+            viagem_id = viagem.id
 
         try:
             ocorrencia = Ocorrencia(
