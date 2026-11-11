@@ -119,6 +119,50 @@ class UserResource(Resource):
         return user_response_schema.dump(user), 200
 
 
+@api.route("/<string:id>/desativar")
+@api.param("id", "O UUID do usuário")
+class UserDesativar(Resource):
+    @api.doc(
+        "desativar_conta",
+        responses={
+            200: "Conta desativada",
+            400: "Própria conta",
+            403: "Forbidden",
+            404: "Not found",
+            409: "Conta não está ativa",
+        },
+    )
+    @api.response(200, "Success", models["user_response"])
+    @jwt_required()
+    def post(self, id: str) -> tuple[dict[str, Any], int]:
+        """Manager deactivates a passenger or driver account"""
+        current_user_id = get_jwt_identity()
+        user = user_service.desativar_conta(current_user_id, id)
+        return user_response_schema.dump(user), 200
+
+
+@api.route("/<string:id>/reativar")
+@api.param("id", "O UUID do usuário")
+class UserReativar(Resource):
+    @api.doc(
+        "reativar_conta",
+        responses={
+            200: "Conta reativada",
+            400: "Própria conta",
+            403: "Forbidden",
+            404: "Not found",
+            409: "Conta não está desativada",
+        },
+    )
+    @api.response(200, "Success", models["user_response"])
+    @jwt_required()
+    def post(self, id: str) -> tuple[dict[str, Any], int]:
+        """Manager reactivates a deactivated passenger or driver account"""
+        current_user_id = get_jwt_identity()
+        user = user_service.reativar_conta(current_user_id, id)
+        return user_response_schema.dump(user), 200
+
+
 @api.route("/motoristas/<string:motorista_id>")
 class MotoristaResource(Resource):
     @api.doc(

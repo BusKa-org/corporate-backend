@@ -367,6 +367,56 @@ def delete_motorista(gestor_id: str, motorista_id: str) -> None:
         )
 
 
+def _get_conta_gerenciavel(gestor: Gestor, user_id: str) -> User:
+    if str(user_id) == str(gestor.id):
+        raise ValidationError("Você não pode alterar a situação da sua própria conta")
+    user = _get_user_or_404(user_id)
+    if user.role not in (UserRole.ALUNO, UserRole.MOTORISTA) or user.status == UserStatus.DELETED:
+        raise NotFoundError("Usuário não encontrado")
+    if user.organizacao_id != gestor.organizacao_id:
+        raise ForbiddenError("Proibido alterar contas de outra organização")
+    return user
+
+
+def desativar_conta(gestor_id: str, user_id: str) -> User:
+    """Gestor deactivates a passenger or driver account; login and existing tokens stop working."""
+    gestor = _get_gestor_or_403(gestor_id, "Apenas gestores podem desativar contas")
+    user = _get_conta_gerenciavel(gestor, user_id)
+    # Only ACTIVE accounts, so reactivating back to ACTIVE never skips a pending signup/approval.
+    if user.status != UserStatus.ACTIVE:
+        raise ConflictError("Apenas contas ativas podem ser desativadas")
+
+    user.status = UserStatus.DISABLED
+    db.session.commit()
+    audit_logger.log_user_action(
+        action="desativar_conta",
+        user_id=gestor_id,
+        resource_type="user",
+        resource_id=user_id,
+    )
+    _preencher_status_motoristas([user])
+    return user
+
+
+def reativar_conta(gestor_id: str, user_id: str) -> User:
+    """Gestor reactivates a deactivated passenger or driver account."""
+    gestor = _get_gestor_or_403(gestor_id, "Apenas gestores podem reativar contas")
+    user = _get_conta_gerenciavel(gestor, user_id)
+    if user.status != UserStatus.DISABLED:
+        raise ConflictError("Apenas contas desativadas podem ser reativadas")
+
+    user.status = UserStatus.ACTIVE
+    db.session.commit()
+    audit_logger.log_user_action(
+        action="reativar_conta",
+        user_id=gestor_id,
+        resource_type="user",
+        resource_id=user_id,
+    )
+    _preencher_status_motoristas([user])
+    return user
+
+
 def update_fcm_token(user_id: str, data: dict[str, Any]) -> None:
     """Update the FCM token for a user."""
     user = _get_user_or_404(user_id)

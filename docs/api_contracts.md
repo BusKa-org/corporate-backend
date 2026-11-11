@@ -7,6 +7,24 @@ Any authenticated endpoint returns 401 `TOKEN_REVOKED` when the token's user no 
 or has a status that login refuses (`DELETED`, `DISABLED`, `PENDING_APPROVAL`). A deleted or
 deactivated account loses access at once, without waiting for the token to expire.
 
+## Account deactivation
+
+| Method | Path | Who |
+|---|---|---|
+| `POST` | `/v1/users/<id>/desativar` | gestor |
+| `POST` | `/v1/users/<id>/reativar` | gestor |
+
+Only passenger (`ALUNO`) and driver (`MOTORISTA`) accounts of the gestor's organization.
+`desativar` moves `ACTIVE` to `DISABLED`; `reativar` moves `DISABLED` back to `ACTIVE`.
+Both return the user (`UserResponse`).
+
+| Status | When |
+|---|---|
+| 400 | target is the gestor's own account |
+| 403 | caller is not a gestor; account from another organization |
+| 404 | user not found, not a passenger/driver, or deleted |
+| 409 | `desativar` on an account that is not `ACTIVE`; `reativar` on one that is not `DISABLED` |
+
 ## On-demand trip lifecycle (RF-05, RF-10 to RF-19)
 
 Trip states for `SOB_DEMANDA` routes:
