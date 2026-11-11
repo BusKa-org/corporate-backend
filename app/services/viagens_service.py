@@ -788,7 +788,8 @@ def atualizar_localizacao(user_id: str, viagem_id: str, data: dict) -> dict:
 def obter_localizacao_onibus(user_id: str, viagem_id: str) -> dict:
     """Return the bus's current location (driver GPS) for a trip in progress.
 
-    The student (confirmed on the trip) or the trip's driver may query it.
+    The student (confirmed on the trip), the trip's driver or a manager of the
+    trip's organization may query it.
     """
     user = db.session.get(User, user_id)
     if not user:
@@ -812,9 +813,14 @@ def obter_localizacao_onibus(user_id: str, viagem_id: str) -> dict:
             raise ForbiddenError(
                 "Você precisa estar confirmado nesta viagem para ver a localização do ônibus."
             )
+    elif user.role == UserRole.GESTOR:
+        rota = db.session.get(Rota, _rota_id_da_viagem(viagem))
+        if not rota or rota.organizacao_id != user.organizacao_id:
+            raise ForbiddenError("Acesso negado")
     else:
         raise ForbiddenError(
-            "Apenas alunos confirmados ou o motorista podem consultar a localização do ônibus."
+            "Apenas alunos confirmados, o motorista ou o gestor podem consultar a localização"
+            " do ônibus."
         )
 
     return {
