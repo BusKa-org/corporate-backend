@@ -147,6 +147,26 @@ class MotoristaResource(Resource):
         return {"message": "Motorista removido com sucesso"}, 200
 
 
+@api.route("/motoristas/<string:motorista_id>/ativar")
+class MotoristaAtivarResource(Resource):
+    @api.doc(
+        "ativar_motorista",
+        responses={
+            200: "Ativado",
+            403: "Forbidden",
+            404: "Not found",
+            409: "Cadastro não está pendente",
+        },
+    )
+    @api.response(200, "Success", models["user_response"])
+    @jwt_required()
+    def post(self, motorista_id: str) -> tuple[dict[str, Any], int]:
+        """Manager activates a newly created driver"""
+        current_user_id = get_jwt_identity()
+        motorista = user_service.ativar_motorista(current_user_id, motorista_id)
+        return user_response_schema.dump(motorista), 200
+
+
 @api.route("/motoristas")
 class MotoristaCreateResource(Resource):
     @api.doc("list_motoristas", responses={200: "Success", 403: "Forbidden - not a gestor"})

@@ -380,6 +380,18 @@ ao e-mail de um convite pendente; um PIN novo só sai 60 segundos depois do ante
 - As respostas nunca revelam o estado: o pedido sempre responde 200 com a mesma mensagem e a
   validação sempre falha com 400 `PIN inválido ou expirado`.
 
+## Ativação de motorista (RF-02, RF-06)
+
+`POST /v1/users/motoristas/<motorista_id>/ativar`: gestor da mesma organização. Sem body.
+O motorista criado pelo gestor nasce `PENDING_SIGNUP`; esta rota o passa para `ACTIVE`
+(exigido, por exemplo, para receber janela de disponibilidade). Retorna 200 com o usuário.
+
+| Status | When |
+|---|---|
+| 403 | não é gestor; motorista de outra organização |
+| 404 | motorista não encontrado |
+| 409 | cadastro não está pendente (já `ACTIVE`, ou `DISABLED`/`DELETED`) |
+
 ## Rate limit
 
 Every route is limited by Flask-Limiter. Over the limit, the API answers `429`
