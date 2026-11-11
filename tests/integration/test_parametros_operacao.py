@@ -1,10 +1,10 @@
 """On-demand operation parameters per organization and their checks on iniciar-percurso."""
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 import pytest
 
-from app.models.enum import StatusMotorista, StatusViagem
+from app.models.enum import StatusMotorista, StatusViagem, TipoViagem
 from app.models.parametros_operacao import ParametrosOperacao
 from app.models.user import Motorista
 from app.services.viagens_service import disponibilidade_motorista, status_motorista
@@ -80,6 +80,8 @@ def test_motorista_nao_altera(motorista):
         {"antecedencia_motorista_minutos": 1441},
         {"minimo_alunos": "muitos"},
         {"pausa_entre_viagens_minutos": None},
+        {"minimo_alunos": True},
+        {"pausa_entre_viagens_minutos": 3.0},
     ],
 )
 def test_valores_invalidos_400(gestor, alteracao):
@@ -136,11 +138,14 @@ def test_pausa_entre_viagens_vira_descanso_do_motorista(
     assert _iniciar(motorista, viagem_solicitada).status_code == 200
 
 
-def test_motorista_em_outra_viagem_nao_inicia_percurso(_db, motorista, viagem_solicitada, relogio):
+@pytest.mark.parametrize("status", [StatusViagem.EM_ANDAMENTO, StatusViagem.BUFFER_ABERTO])
+def test_motorista_em_outra_viagem_nao_inicia_percurso(
+    _db, motorista, viagem_solicitada, relogio, status
+):
     _db.session.add(
         ViagemFactory(
             data=relogio.agora.date(),
-            status=StatusViagem.EM_ANDAMENTO,
+            status=status,
             motorista_id=motorista.user.id,
             inicio_real=relogio.agora - timedelta(minutes=5),
         )
@@ -156,5 +161,64 @@ def test_motorista_em_outra_viagem_nao_inicia_percurso(_db, motorista, viagem_so
 
 def test_put_atualiza_updated_at_mesmo_com_valores_iguais(gestor, relogio):
     primeiro = gestor.client.put(URL, json=VALORES).get_json()["updated_at"]
+    assert datetime.fromisoformat(primeiro) == relogio.agora
+
+    relogio.avancar(minutes=1)
     segundo = gestor.client.put(URL, json=VALORES).get_json()["updated_at"]
-    assert segundo > primeiro
+    assert datetime.fromisoformat(segundo) == relogio.agora
+
+
+def _finalizar(_db, motorista, rota, inicio):
+    anterior = ViagemFactory(
+        rota_id=rota.id,
+        data=inicio.date(),
+        status=StatusViagem.EM_ANDAMENTO,
+        motorista_id=motorista.user.id,
+        inicio_real=inicio,
+    )
+    _db.session.add(anterior)
+    _db.session.commit()
+    resp = motorista.client.put(f"/v1/viagens/{anterior.id}/acao", json={"acao": "FINALIZAR"})
+    assert resp.status_code == 200, resp.get_json()
+
+
+def test_pausa_nao_vale_apos_viagem_de_horario_fixo(_db, organizacao, motorista, rota, relogio):
+    _salvar(_db, organizacao.id, pausa=30)
+    rota_fixa = rota
+    assert rota_fixa.tipo == TipoViagem.FIXA
+    _finalizar(_db, motorista, rota_fixa, relogio.agora - timedelta(minutes=30))
+
+    m = _db.session.get(Motorista, motorista.user.id, populate_existing=True)
+    assert m.descanso_ate is None
+    proxima = ViagemFactory(
+        rota_id=rota_fixa.id, data=relogio.agora.date(), motorista_id=motorista.user.id
+    )
+    _db.session.add(proxima)
+    _db.session.commit()
+    resp = motorista.client.put(f"/v1/viagens/{proxima.id}/acao", json={"acao": "INICIAR"})
+    assert resp.status_code == 200, resp.get_json()
+
+
+def test_mensagem_de_pausa_quando_ela_termina_depois_do_descanso_da_jornada(
+    _db, app, organizacao, motorista, rota_sob_demanda, viagem_solicitada, relogio
+):
+    horas_max = app.config["MOTORISTA_HORAS_MAX_DIRECAO"]
+    descanso = app.config["MOTORISTA_DESCANSO_MINUTOS"]
+    _salvar(_db, organizacao.id, pausa=descanso + 20)
+    _finalizar(_db, motorista, rota_sob_demanda, relogio.agora - timedelta(hours=horas_max))
+
+    resp = _iniciar(motorista, viagem_solicitada)
+    assert resp.status_code == 403
+    assert "pausa mínima entre viagens" in resp.get_json()["error"]["message"]
+
+
+def test_mensagem_de_jornada_quando_o_descanso_termina_depois_da_pausa(
+    _db, app, organizacao, motorista, rota_sob_demanda, viagem_solicitada, relogio
+):
+    horas_max = app.config["MOTORISTA_HORAS_MAX_DIRECAO"]
+    _salvar(_db, organizacao.id, pausa=5)
+    _finalizar(_db, motorista, rota_sob_demanda, relogio.agora - timedelta(hours=horas_max))
+
+    resp = _iniciar(motorista, viagem_solicitada)
+    assert resp.status_code == 403
+    assert "direção contínua" in resp.get_json()["error"]["message"]

@@ -411,15 +411,19 @@ def _fim_descanso_motorista(motorista: Motorista, agora: datetime) -> datetime |
     )
 
 
+# An open buffer already commits the driver: they are about to leave on that trip.
+ESTADOS_EM_ROTA = (StatusViagem.BUFFER_ABERTO, StatusViagem.EM_ANDAMENTO)
+
+
 def motoristas_em_viagem(motorista_ids: list[Any]) -> set[Any]:
-    """Ids, among `motorista_ids`, of drivers with a trip EM_ANDAMENTO (one query)."""
+    """Ids, among `motorista_ids`, of drivers with a trip in ESTADOS_EM_ROTA (one query)."""
     if not motorista_ids:
         return set()
     linhas = (
         db.session.query(Viagem.motorista_id)
         .filter(
             Viagem.motorista_id.in_(motorista_ids),
-            Viagem.status == StatusViagem.EM_ANDAMENTO,
+            Viagem.status.in_(ESTADOS_EM_ROTA),
         )
         .distinct()
         .all()
@@ -441,7 +445,7 @@ def status_motorista(
         em_viagem = db.session.query(
             exists().where(
                 Viagem.motorista_id == motorista.id,
-                Viagem.status == StatusViagem.EM_ANDAMENTO,
+                Viagem.status.in_(ESTADOS_EM_ROTA),
             )
         ).scalar()
     if em_viagem:
@@ -476,8 +480,8 @@ def disponibilidade_motorista(
         horario = liberado_local.strftime("%H:%M")
         if liberado_local.date() != agora_local.date():
             horario += liberado_local.strftime(" do dia %d/%m")
-        if fim_descanso_jornada is None:
-            # descanso_ate without a driving-hours rest: it is the organization's pause.
+        if fim_descanso_jornada is None or liberado_em > fim_descanso_jornada:
+            # descanso_ate outlasts the driving-hours rest: the organization's pause set it.
             motivo = (
                 "Motorista em pausa mínima entre viagens. "
                 f"Poderá dirigir novamente às {horario}."
@@ -516,7 +520,7 @@ def disponibilidade_motorista(
     return True, None, None
 
 
-def _validar_jornada_motorista(motorista: Motorista, agora: datetime) -> None:
+def validar_jornada_motorista(motorista: Motorista, agora: datetime) -> None:
     """Block starting a trip while on another trip, during rest or outside working hours."""
     pode, motivo, _ = disponibilidade_motorista(motorista, agora)
     if pode:
@@ -529,14 +533,15 @@ def _validar_jornada_motorista(motorista: Motorista, agora: datetime) -> None:
 def _gravar_descanso_apos_viagem(viagem: Viagem) -> None:
     """After a started trip ends (finished or cancelled): store the rest end, if owed.
 
-    The later of the driving-hours rest and the organization's pause between trips.
+    The later of the driving-hours rest and the organization's pause, which only follows
+    on-demand trips: a fixed schedule must not be blocked by an on-demand setting.
     """
     motorista = viagem.motorista
     fim = viagem.fim_real
     descanso_ate = _fim_descanso_motorista(motorista, fim)
-    rota_id = _rota_id_da_viagem(viagem)
-    rota = db.session.get(Rota, rota_id) if rota_id else None
-    if rota is not None:
+    # On-demand trips always have rota_id; fixed ones may only have horario_rota.
+    rota = viagem.rota
+    if rota is not None and rota.tipo == TipoViagem.SOB_DEMANDA:
         parametros = parametros_operacao_service.parametros_da_organizacao(rota.organizacao_id)
         if parametros.pausa_entre_viagens_minutos > 0:
             fim_pausa = fim + timedelta(minutes=parametros.pausa_entre_viagens_minutos)
@@ -592,7 +597,7 @@ def controlar_viagem(user_id: str, viagem_id: str, data: dict[str, Any]) -> Viag
                     .populate_existing()
                     .one()
                 )
-                _validar_jornada_motorista(motorista, agora)
+                validar_jornada_motorista(motorista, agora)
                 motorista.descanso_ate = None
             viagem.status = StatusViagem.EM_ANDAMENTO
             viagem.inicio_real = agora

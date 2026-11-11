@@ -56,8 +56,8 @@ def iniciar_percurso(user_id: str, viagem_id: str) -> Viagem:
         .one()
     )
     try:
-        # 409 while on another trip, 403 during rest/pause or outside working hours.
-        viagens_service._validar_jornada_motorista(motorista, tempo.agora_utc())
+        # 409 while on another trip (open buffer included), 403 during rest/pause or off hours.
+        viagens_service.validar_jornada_motorista(motorista, tempo.agora_utc())
     except Exception:
         db.session.rollback()
         raise
@@ -71,8 +71,8 @@ def iniciar_percurso(user_id: str, viagem_id: str) -> Viagem:
 
 
 def _exigir_minimo_alunos(viagem: Viagem, minimo: int) -> None:
-    # Lock the counted rows (after the trip, like cancellation): a concurrent cancel
-    # waits for the start instead of dropping the count below the minimum.
+    # Lock the counted rows: the gestor's cancelar_viagem cancels them without travar_viagem,
+    # so the trip lock alone does not stop the count dropping below the minimum.
     solicitantes = len(
         db.session.query(SolicitacaoViagem.id)
         .filter_by(viagem_id=viagem.id, status=StatusSolicitacao.ATIVA)

@@ -3,7 +3,6 @@
 from typing import Any
 
 from flask import current_app
-from sqlalchemy import func
 from sqlalchemy.dialects.postgresql import insert
 
 from app.core.exceptions import ForbiddenError
@@ -12,6 +11,7 @@ from app.models.base import db
 from app.models.enum import UserRole
 from app.models.parametros_operacao import ParametrosOperacao
 from app.models.user import User
+from app.utils import tempo
 
 
 def parametros_da_organizacao(organizacao_id) -> ParametrosOperacao:
@@ -47,10 +47,10 @@ def atualizar(user_id: str, data: dict[str, Any]) -> ParametrosOperacao:
     }
     # Upsert: two concurrent first saves must not collide on the PK. updated_at is set
     # explicitly because onupdate is skipped here and a same-values save still counts.
+    valores["updated_at"] = tempo.agora_utc()
     comando = insert(ParametrosOperacao).values(organizacao_id=user.organizacao_id, **valores)
     comando = comando.on_conflict_do_update(
-        index_elements=[ParametrosOperacao.organizacao_id],
-        set_={**valores, "updated_at": func.now()},
+        index_elements=[ParametrosOperacao.organizacao_id], set_=valores
     )
     with transactional():
         db.session.execute(comando)

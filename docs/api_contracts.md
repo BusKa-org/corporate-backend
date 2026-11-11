@@ -57,7 +57,7 @@ Returns 201 with `{id, viagem_id, status, created_at, viagem: {id, status, rota_
 | 400 | fixed route; route without a default vehicle; outside the window (the message lists today's hours, or says there is no operation today) |
 | 403 | no consent; not a student; route from another organization |
 | 404 | route not found |
-| 409 | student already has an active request (also the same trip twice) or is in a trip en route; vehicle en route; vehicle serving another route |
+| 409 | student already has an active request (also the same trip twice) or is in a trip en route; vehicle en route; vehicle serving another route; the window's driver is unavailable for a new trip (on another trip, resting/pausing, or off hours; the message says until when when known) |
 
 ### Active round of a route (RF-12, secondary flow)
 
@@ -127,7 +127,7 @@ consent and notifications on, with the minutes left in the buffer.
 |---|---|
 | 403 | not the trip's driver; driver in mandatory rest or pause (`descanso_ate`; the message says when they can start, with the date when it is not today) or outside their working days/hours |
 | 404 | trip not found |
-| 409 | trip is not `SOLICITADA`; fewer active requests than `minimo_alunos`; driver already has a trip `EM_ANDAMENTO` |
+| 409 | trip is not `SOLICITADA`; fewer active requests than `minimo_alunos`; driver already has another trip `BUFFER_ABERTO` or `EM_ANDAMENTO` (both show the driver as `EM_ROTA`) |
 
 ### Operation parameters (RF-10, RF-11)
 
@@ -141,14 +141,16 @@ Body and response: `{minimo_alunos, pausa_entre_viagens_minutos, antecedencia_mo
 `minimo_alunos` is 1..1000; the minutes are 0..1440. Until the gestor saves them, `GET`
 returns the `OPERACAO_*_PADRAO` defaults with `updated_at: null`.
 `minimo_alunos` is checked on `iniciar-percurso`. `pausa_entre_viagens_minutos` is folded into
-the driver's rest: when a started trip ends, `descanso_ate` becomes the later of the
-driving-hours rest and `fim_real + pausa`, so the driver shows `EM_DESCANSO_OBRIGATORIO`
-and the usual 403 applies. `antecedencia_motorista_minutos` is stored only, not enforced yet.
+the driver's rest, only after on-demand trips: when a started on-demand trip ends,
+`descanso_ate` becomes the later of the driving-hours rest and `fim_real + pausa`, so the
+driver shows `EM_DESCANSO_OBRIGATORIO` and the usual 403 applies (to any next trip, fixed
+too). A finished fixed-route trip never adds the pause. The 403 message names the pause when
+it ends after the driving-hours rest, and the driving-hours rest otherwise. `antecedencia_motorista_minutos` is stored only, not enforced yet.
 A concurrent first `PUT` is an upsert (no 409), and every `PUT` refreshes `updated_at`.
 
 | Status | When |
 |---|---|
-| 400 | missing field, not an integer, or out of range |
+| 400 | missing field, not a JSON integer (`true`, `3.0` and `"3"` are rejected), or out of range |
 | 403 | `GET`: student; `PUT`: not a gestor |
 
 ### Request cancellation (RF-19)

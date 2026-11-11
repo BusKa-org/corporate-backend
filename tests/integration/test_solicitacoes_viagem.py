@@ -1,6 +1,6 @@
 """On-demand trip request (RF-10) and cancellation (RF-19), via the HTTP API."""
 
-from datetime import UTC, datetime, time
+from datetime import UTC, datetime, time, timedelta
 
 import pytest
 from flask_jwt_extended import create_access_token
@@ -185,6 +185,21 @@ def test_primeira_solicitacao_cria_viagem_e_notifica_motorista(
     assert viagem.veiculo_id == rota_sob_demanda.veiculo_padrao_id
     assert viagem.data == _local(10).date()
     assert _notificacoes(motorista.user.id) == 1
+
+
+def test_motorista_em_descanso_rejeita_nova_viagem(
+    _db, aluno, motorista, rota_sob_demanda, janela, relogio
+):
+    motorista.user.descanso_ate = relogio.agora + timedelta(minutes=10)
+    _db.session.commit()
+
+    r = _solicitar(aluno, rota_sob_demanda)
+
+    assert r.status_code == 409
+    mensagem = r.get_json()["error"]["message"]
+    assert "motorista desta rota está indisponível" in mensagem
+    assert "Poderá dirigir novamente" in mensagem
+    assert Viagem.query.count() == 0
 
 
 def test_segundo_aluno_entra_na_mesma_viagem_sem_nova_notificacao(

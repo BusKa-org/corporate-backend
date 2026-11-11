@@ -11,13 +11,14 @@ from app.schemas.common import BaseSchema
 class ParametrosOperacaoRequestSchema(BaseSchema):
     minimo_alunos = fields.Integer(
         required=True,
+        strict=True,
         validate=validate.Range(min=OPERACAO_MINIMO_ALUNOS_MIN, max=OPERACAO_MINIMO_ALUNOS_MAX),
     )
     pausa_entre_viagens_minutos = fields.Integer(
-        required=True, validate=validate.Range(min=0, max=OPERACAO_MINUTOS_MAX)
+        required=True, strict=True, validate=validate.Range(min=0, max=OPERACAO_MINUTOS_MAX)
     )
     antecedencia_motorista_minutos = fields.Integer(
-        required=True, validate=validate.Range(min=0, max=OPERACAO_MINUTOS_MAX)
+        required=True, strict=True, validate=validate.Range(min=0, max=OPERACAO_MINUTOS_MAX)
     )
 
 
