@@ -126,9 +126,16 @@ def test_excluir_conta_com_senha_errada_ou_email_diferente(aluno):
     assert aluno.user.status != UserStatus.DELETED
 
 
-def test_excluir_conta_so_para_passageiro(motorista):
-    response = _excluir(motorista, motorista.user.email, SENHA)
+@pytest.mark.parametrize("ator", ["gestor", "motorista"])
+def test_excluir_conta_so_para_passageiro(ator, request, _db):
+    actor = request.getfixturevalue(ator)
+    status_antes = actor.user.status
+
+    response = _excluir(actor, actor.user.email, SENHA)
     assert response.status_code == 403
+
+    _db.session.refresh(actor.user)
+    assert actor.user.status == status_antes
 
 
 def test_excluir_conta_bloqueia_com_viagem_em_andamento(
