@@ -1,4 +1,5 @@
 from typing import Any
+from uuid import UUID
 
 from flask import request
 from flask_jwt_extended import get_jwt_identity, jwt_required
@@ -75,13 +76,14 @@ class OcorrenciaListResource(Resource):
         return [_serialize(o) for o in ocorrencias], 200
 
 
-@api.route("/<string:ocorrencia_id>/resolver")
+@api.route("/<uuid:ocorrencia_id>/resolver")
 class OcorrenciaResolverResource(Resource):
     @api.doc("resolver_ocorrencia")
     @api.response(200, "Ocorrência resolvida", _ocorrencia_output)
+    @api.response(404, "Ocorrência não encontrada")
     @jwt_required()
-    def patch(self, ocorrencia_id: str) -> tuple[dict[str, Any], int]:
+    def patch(self, ocorrencia_id: UUID) -> tuple[dict[str, Any], int]:
         """(Manager) Marks an incident as resolved"""
         gestor_id = get_jwt_identity()
-        ocorrencia = OcorrenciaService.resolver(gestor_id, ocorrencia_id)
+        ocorrencia = OcorrenciaService.resolver(gestor_id, str(ocorrencia_id))
         return _serialize(ocorrencia), 200

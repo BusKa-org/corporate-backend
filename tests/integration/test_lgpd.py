@@ -6,7 +6,7 @@ from datetime import UTC, date, datetime, timedelta
 import pytest
 from flask_jwt_extended import create_access_token
 
-from app.core.exceptions import ForbiddenError
+from app.core.exceptions import ForbiddenError, NotFoundError
 from app.models.consentimento import REVOGACAO, Consentimento
 from app.models.credencial_embarque import CredencialEmbarque
 from app.models.enum import StatusSolicitacao, StatusViagem, UserStatus
@@ -364,6 +364,21 @@ def test_conta_excluida_nao_faz_login_com_o_email_antigo(client, organizacao, _d
 
     login = client.post("/v1/auth/login", json={"email": email_original, "password": SENHA})
     assert login.status_code == 401
+
+
+def test_excluir_conta_duas_vezes_da_404_e_nao_reprocessa(aluno, _db):
+    """The token check stops the second HTTP call, so the service is called directly."""
+    email = aluno.user.email
+    conta_service.excluir_conta(str(aluno.user.id), email, SENHA)
+
+    with pytest.raises(NotFoundError):
+        conta_service.excluir_conta(str(aluno.user.id), email, SENHA)
+
+    _db.session.expire_all()
+    assert _db.session.get(Aluno, aluno.user.id).status == UserStatus.DELETED
+    assert _db.session.get(RetencaoLegal, aluno.user.id).email == email
+    revogacoes = Consentimento.query.filter_by(usuario_id=aluno.user.id, acao=REVOGACAO).count()
+    assert revogacoes == 1
 
 
 # ---------- anonymization after the retention period ----------
