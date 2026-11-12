@@ -2472,6 +2472,120 @@
         ]
       }
     },
+    "/v1/users/{id}/ativar": {
+      "parameters": [
+        {
+          "in": "path",
+          "description": "O UUID do motorista",
+          "name": "id",
+          "required": true,
+          "type": "string"
+        }
+      ],
+      "post": {
+        "responses": {
+          "200": {
+            "description": "Motorista ativado",
+            "schema": {
+              "$ref": "#/definitions/UserResponse"
+            }
+          },
+          "400": {
+            "description": "Própria conta ou ID inválido"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "409": {
+            "description": "Cadastro não está pendente"
+          }
+        },
+        "summary": "Manager activates a newly created driver",
+        "operationId": "ativar_motorista",
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/v1/users/{id}/desativar": {
+      "parameters": [
+        {
+          "in": "path",
+          "description": "O UUID do usuário",
+          "name": "id",
+          "required": true,
+          "type": "string"
+        }
+      ],
+      "post": {
+        "responses": {
+          "200": {
+            "description": "Conta desativada",
+            "schema": {
+              "$ref": "#/definitions/UserResponse"
+            }
+          },
+          "400": {
+            "description": "Própria conta ou ID inválido"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "409": {
+            "description": "Conta não está ativa, em viagem ou com compromissos futuros"
+          }
+        },
+        "summary": "Manager deactivates a passenger or driver account",
+        "operationId": "desativar_conta",
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/v1/users/{id}/reativar": {
+      "parameters": [
+        {
+          "in": "path",
+          "description": "O UUID do usuário",
+          "name": "id",
+          "required": true,
+          "type": "string"
+        }
+      ],
+      "post": {
+        "responses": {
+          "200": {
+            "description": "Conta reativada",
+            "schema": {
+              "$ref": "#/definitions/UserResponse"
+            }
+          },
+          "400": {
+            "description": "Própria conta ou ID inválido"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "409": {
+            "description": "Conta não está desativada"
+          }
+        },
+        "summary": "Manager reactivates a deactivated passenger or driver account",
+        "operationId": "reativar_conta",
+        "tags": [
+          "users"
+        ]
+      }
+    },
     "/v1/viagens/": {
       "get": {
         "responses": {
