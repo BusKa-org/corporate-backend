@@ -17,6 +17,7 @@ from app.schemas.user_schema import (
     UpdateProfileRequestSchema,
     UserListResponseSchema,
     UserResponseSchema,
+    UserStatusQuerySchema,
 )
 from app.services import consentimento_service, conta_service, user_service
 
@@ -27,6 +28,7 @@ models = user_contract.register_models(api)
 
 # Validation schemas (Marshmallow)
 user_list_response_schema = UserListResponseSchema()
+user_status_query_schema = UserStatusQuerySchema()
 motorista_create_schema = MotoristaCreateRequestSchema()
 motorista_update_schema = MotoristaUpdateRequestSchema()
 change_password_schema = ChangePasswordRequestSchema()
@@ -213,13 +215,20 @@ class MotoristaResource(Resource):
 
 @api.route("/motoristas")
 class MotoristaCreateResource(Resource):
-    @api.doc("list_motoristas", responses={200: "Success", 403: "Forbidden - not a gestor"})
+    @api.doc(
+        "list_motoristas",
+        responses={200: "Success", 400: "Status inválido", 403: "Forbidden - not a gestor"},
+    )
+    @api.param("status", "Filtra por status (PENDING_SIGNUP, ACTIVE, ...)", _in="query")
     @api.marshal_with(models["user_list_response"], code=200)
     @jwt_required()
     def get(self) -> tuple[dict[str, Any], int]:
         """Lists drivers in the Manager's organization"""
         current_user_id = get_jwt_identity()
-        motoristas = user_service.get_motoristas_by_municipio(current_user_id)
+        filtros = user_status_query_schema.load(request.args.to_dict())
+        motoristas = user_service.get_motoristas_by_municipio(
+            current_user_id, status=filtros["status"]
+        )
         return (
             user_list_response_schema.dump(
                 {

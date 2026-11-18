@@ -2321,6 +2321,9 @@
               "$ref": "#/definitions/UserListResponse"
             }
           },
+          "400": {
+            "description": "Status inválido"
+          },
           "403": {
             "description": "Forbidden - not a gestor"
           }
@@ -2328,6 +2331,12 @@
         "summary": "Lists drivers in the Manager's organization",
         "operationId": "list_motoristas",
         "parameters": [
+          {
+            "in": "query",
+            "description": "Filtra por status (PENDING_SIGNUP, ACTIVE, ...)",
+            "name": "status",
+            "type": "string"
+          },
           {
             "name": "X-Fields",
             "in": "header",

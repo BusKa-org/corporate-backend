@@ -12,6 +12,7 @@ from app.schemas.aluno_schema import (
     AlunoMeUpdateRequestSchema,
     AlunoResponseSchema,
 )
+from app.schemas.user_schema import UserStatusQuerySchema
 from app.services import aluno_service
 
 api = Namespace("alunos", description="Área do Aluno (App)")
@@ -23,6 +24,7 @@ models = aluno_contract.register_models(api)
 me_update_schema = AlunoMeUpdateRequestSchema()
 aluno_response_schema = AlunoResponseSchema()
 aluno_list_response_schema = AlunoListResponseSchema()
+user_status_query_schema = UserStatusQuerySchema()
 
 foto_upload_parser = reqparse.RequestParser()
 foto_upload_parser.add_argument(
@@ -83,11 +85,9 @@ class AlunoListResource(Resource):
     @jwt_required()
     def get(self) -> tuple[dict[str, Any], int]:
         """Manager lists registered students"""
-        from flask import request as flask_request
-
         user_id = get_jwt_identity()
-        status_filter = flask_request.args.get("status")
-        alunos = aluno_service.list_alunos_gestor(user_id, status=status_filter)
+        filtros = user_status_query_schema.load(request.args.to_dict())
+        alunos = aluno_service.list_alunos_gestor(user_id, status=filtros["status"])
         return (
             aluno_list_response_schema.dump(
                 {
