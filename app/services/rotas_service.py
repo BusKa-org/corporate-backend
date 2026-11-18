@@ -339,11 +339,27 @@ def _get_rota_fixa_do_gestor(gestor_id: str, rota_id: str) -> Rota:
     return rota
 
 
-def travar_rota(rota_id: Any) -> None:
+def travar_rota(rota_id: Any) -> bool:
     """Lock order for schedule edits and trip generation: this Rota row first, held
     until commit. NO KEY UPDATE, so inserts referencing the route are not blocked.
+    Returns False when the row no longer exists.
     """
-    db.session.execute(select(Rota.id).where(Rota.id == rota_id).with_for_update(key_share=True))
+    linha = db.session.execute(
+        select(Rota.id).where(Rota.id == rota_id).with_for_update(key_share=True)
+    ).first()
+    return linha is not None
+
+
+def travar_e_reler_rota(rota: Rota) -> None:
+    """travar_rota, then re-read the route: it may have been switched or removed while we waited.
+
+    Raises: NotFoundError
+    """
+    if not travar_rota(rota.id):
+        raise NotFoundError("Rota não encontrada")
+    db.session.refresh(rota)
+    if not rota.ativa:
+        raise NotFoundError("Rota não encontrada")
 
 
 def _garantir_horario_nao_duplicado(
@@ -628,11 +644,12 @@ def update_rota(user_id: str, rota_id: str, data: dict[str, Any]) -> Rota:
     if rota.tipo != TipoViagem.SOB_DEMANDA and any(k in data for k in PARAMETROS_SOB_DEMANDA):
         raise ValidationError("Parâmetros de buffer só se aplicam a rotas sob demanda")
 
-    if data.get("ligada") is False:
+    if "ligada" in data:
         # Same lock as trip generation, so no trip is created between this check and the commit.
-        travar_rota(rota.id)
-        # Re-read under the lock: another gestor may have switched it on and a trip opened.
-        db.session.refresh(rota)
+        # The re-read also keeps a stale value from turning the switch into a no-op.
+        travar_e_reler_rota(rota)
+
+    if data.get("ligada") is False:
         pendente = (
             db.session.query(Viagem.id)
             .outerjoin(HorarioRota, Viagem.horario_rota_id == HorarioRota.id)

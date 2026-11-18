@@ -41,7 +41,7 @@ from app.models.viagem import (
 )
 from app.services import capacidade_service, parametros_operacao_service
 from app.services.notificacao_service import NotificacaoService
-from app.services.rotas_service import travar_rota
+from app.services.rotas_service import travar_e_reler_rota
 from app.tasks.viagem_tasks import realizar_auto_checkin
 from app.utils import audit_logger, tempo, validate_uuid
 from app.utils.geo_utils import calcular_distancia_metros
@@ -450,11 +450,7 @@ def gerar_viagem(user_id: str, data_input: dict) -> Viagem:
 
     # Same lock as the schedule edits in rotas_service: two generators, or a generator
     # and an edit, run one after the other, and every read below sees the committed state.
-    travar_rota(rota.id)
-    # Re-read under the lock: the route may have been switched off while we waited.
-    db.session.refresh(rota)
-    if not rota.ativa:
-        raise NotFoundError("Rota não encontrada")
+    travar_e_reler_rota(rota)
     if not rota.ligada:
         raise ValidationError("Rota desligada, não é possível gerar viagens")
     horario_selecionado = _resolver_horario(rota, dia_semana, data_input.get("horario_rota_id"))

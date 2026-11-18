@@ -14,7 +14,7 @@ from app.models.user import Aluno, Motorista, User
 from app.models.viagem import AlunosConfirmados, SolicitacaoViagem, Viagem
 from app.services import capacidade_service, janelas_service, viagens_service
 from app.services.notificacao_service import NotificacaoService
-from app.services.rotas_service import travar_rota
+from app.services.rotas_service import travar_e_reler_rota
 from app.utils import tempo
 
 EM_VIAGEM = "A conta está em uma viagem em andamento. Aguarde o fim da viagem."
@@ -78,10 +78,7 @@ def solicitar_viagem(user_id: str, rota_id: str) -> SolicitacaoViagem:
 
     with transactional():
         # Route first, as in rotas_service: a switch-off either sees this round or runs before it.
-        travar_rota(rota.id)
-        db.session.refresh(rota)
-        if not rota.ativa:
-            raise NotFoundError("Rota não encontrada")
+        travar_e_reler_rota(rota)
         if not rota.ligada:
             raise ValidationError("Rota desligada, não aceita novas solicitações")
 
