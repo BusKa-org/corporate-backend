@@ -18,6 +18,22 @@ from app.services import onibus_service, rotas_service, user_service
 pytestmark = [pytest.mark.integration, pytest.mark.concurrency]
 
 
+def _esperar_alguem_bloqueado() -> None:
+    """Wait until the removal is blocked on a row lock (the route, with or without the fix)."""
+    with db.engine.connect() as conexao:
+        for _ in range(100):
+            bloqueados = conexao.execute(
+                text(
+                    "SELECT count(*) FROM pg_stat_activity "
+                    "WHERE datname = current_database() AND wait_event_type = 'Lock'"
+                )
+            ).scalar()
+            if bloqueados:
+                return
+            time.sleep(0.05)
+    raise AssertionError("a remoção nunca esperou pelo lock da rota")
+
+
 def _corrida(app, rota_id, travar_referenciado, remover) -> list:
     """Thread 0 locks the route, then (after the removal started) the referenced row."""
     rota_travada = threading.Event()
@@ -30,12 +46,11 @@ def _corrida(app, rota_id, travar_referenciado, remover) -> list:
                 rotas_service.travar_rota(rota_id)
                 rota_travada.set()
                 remocao_comecou.wait(timeout=10)
-                # Gives the removal time to reach its first lock.
-                time.sleep(0.5)
+                _esperar_alguem_bloqueado()
                 travar_referenciado()
                 db.session.commit()
                 resultados[0] = "ok"
-            except Exception as e:  # noqa: BLE001 — o teste inspeciona o erro
+            except Exception as e:  # noqa: BLE001 — the test inspects the error
                 db.session.rollback()
                 resultados[0] = e
 
@@ -46,7 +61,7 @@ def _corrida(app, rota_id, travar_referenciado, remover) -> list:
                 remocao_comecou.set()
                 remover()
                 resultados[1] = "ok"
-            except Exception as e:  # noqa: BLE001 — o teste inspeciona o erro
+            except Exception as e:  # noqa: BLE001 — the test inspects the error
                 resultados[1] = e
 
     threads = [threading.Thread(target=requisicao), threading.Thread(target=remocao)]
