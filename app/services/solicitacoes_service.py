@@ -80,6 +80,8 @@ def solicitar_viagem(user_id: str, rota_id: str) -> SolicitacaoViagem:
         # Route first, as in rotas_service: a switch-off either sees this round or runs before it.
         travar_rota(rota.id)
         db.session.refresh(rota)
+        if not rota.ativa:
+            raise NotFoundError("Rota não encontrada")
         if not rota.ligada:
             raise ValidationError("Rota desligada, não aceita novas solicitações")
 

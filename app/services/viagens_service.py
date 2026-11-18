@@ -453,6 +453,8 @@ def gerar_viagem(user_id: str, data_input: dict) -> Viagem:
     travar_rota(rota.id)
     # Re-read under the lock: the route may have been switched off while we waited.
     db.session.refresh(rota)
+    if not rota.ativa:
+        raise NotFoundError("Rota não encontrada")
     if not rota.ligada:
         raise ValidationError("Rota desligada, não é possível gerar viagens")
     horario_selecionado = _resolver_horario(rota, dia_semana, data_input.get("horario_rota_id"))
