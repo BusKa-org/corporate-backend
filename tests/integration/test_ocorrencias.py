@@ -1,6 +1,7 @@
 """Incident resolution stays inside the manager's organization."""
 
 from app.models.enum import StatusOcorrencia
+from app.models.notificacao import Notificacao
 from app.models.ocorrencia import Ocorrencia
 
 
@@ -28,6 +29,60 @@ def test_gestor_da_organizacao_resolve_ocorrencia(aluno, gestor, _db):
 
     assert response.status_code == 200
     assert response.get_json()["status"] == StatusOcorrencia.RESOLVIDA.value
+
+
+def test_gestor_da_organizacao_responde_ocorrencia_e_notifica_o_autor(aluno, gestor, _db):
+    ocorrencia_id = _criar_ocorrencia(aluno)
+
+    response = gestor.client.put(
+        f"/v1/ocorrencias/{ocorrencia_id}/resposta", json={"resposta": "  Vamos verificar.  "}
+    )
+
+    assert response.status_code == 200
+    body = response.get_json()
+    assert body["resposta"] == "Vamos verificar."
+    assert body["respondida_em"] is not None
+    ocorrencia = _db.session.get(Ocorrencia, ocorrencia_id)
+    assert ocorrencia.respondida_por_id == gestor.user.id
+    notificacoes = Notificacao.query.filter_by(usuario_id=aluno.user.id).all()
+    assert len(notificacoes) == 1
+    assert notificacoes[0].mensagem == "Vamos verificar."
+
+
+def test_gestor_de_outra_organizacao_nao_responde_ocorrencia(aluno, other_gestor, _db):
+    ocorrencia_id = _criar_ocorrencia(aluno)
+
+    response = other_gestor.client.put(
+        f"/v1/ocorrencias/{ocorrencia_id}/resposta", json={"resposta": "Intrusa"}
+    )
+
+    assert response.status_code == 404
+    _db.session.expire_all()
+    assert _db.session.get(Ocorrencia, ocorrencia_id).resposta is None
+
+
+def test_resposta_vazia_ou_acima_do_limite_devolve_400(aluno, gestor, app):
+    ocorrencia_id = _criar_ocorrencia(aluno)
+    limite = app.config["OCORRENCIA_RESPOSTA_MAX_CARACTERES"]
+    url = f"/v1/ocorrencias/{ocorrencia_id}/resposta"
+
+    assert gestor.client.put(url, json={"resposta": "   "}).status_code == 400
+    assert gestor.client.put(url, json={"resposta": "x" * (limite + 1)}).status_code == 400
+
+
+def test_autor_ve_a_resposta_nas_suas_ocorrencias(aluno, other_aluno, gestor):
+    ocorrencia_id = _criar_ocorrencia(aluno)
+    gestor.client.put(f"/v1/ocorrencias/{ocorrencia_id}/resposta", json={"resposta": "Resolvido."})
+
+    response = aluno.client.get("/v1/ocorrencias/minhas")
+
+    assert response.status_code == 200
+    body = response.get_json()
+    assert len(body) == 1
+    assert body[0]["id"] == ocorrencia_id
+    assert body[0]["resposta"] == "Resolvido."
+    # Another author never sees this incident.
+    assert other_aluno.client.get("/v1/ocorrencias/minhas").get_json() == []
 
 
 def test_resolver_com_id_que_nao_e_uuid_devolve_404(gestor):
