@@ -628,10 +628,11 @@ def update_rota(user_id: str, rota_id: str, data: dict[str, Any]) -> Rota:
     if rota.tipo != TipoViagem.SOB_DEMANDA and any(k in data for k in PARAMETROS_SOB_DEMANDA):
         raise ValidationError("Parâmetros de buffer só se aplicam a rotas sob demanda")
 
-    desligando = data.get("ligada") is False and rota.ligada
-    if desligando:
+    if data.get("ligada") is False:
         # Same lock as trip generation, so no trip is created between this check and the commit.
         travar_rota(rota.id)
+        # Re-read under the lock: another gestor may have switched it on and a trip opened.
+        db.session.refresh(rota)
         pendente = (
             db.session.query(Viagem.id)
             .outerjoin(HorarioRota, Viagem.horario_rota_id == HorarioRota.id)

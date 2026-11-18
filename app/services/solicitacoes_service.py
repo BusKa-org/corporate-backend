@@ -76,17 +76,19 @@ def solicitar_viagem(user_id: str, rota_id: str) -> SolicitacaoViagem:
     if rota.tipo == TipoViagem.FIXA:
         raise ValidationError("Rota de horário fixo, use a confirmação de presença")
 
-    if rota.veiculo_padrao_id is None:
-        raise ValidationError("Rota sem veículo padrão definido, não é possível solicitar viagem")
-
-    veiculo_id = rota.veiculo_padrao_id
-
     with transactional():
         # Route first, as in rotas_service: a switch-off either sees this round or runs before it.
         travar_rota(rota.id)
         db.session.refresh(rota)
         if not rota.ligada:
             raise ValidationError("Rota desligada, não aceita novas solicitações")
+
+        # Read after the lock: the gestor may have changed the vehicle while we waited.
+        if rota.veiculo_padrao_id is None:
+            raise ValidationError(
+                "Rota sem veículo padrão definido, não é possível solicitar viagem"
+            )
+        veiculo_id = rota.veiculo_padrao_id
 
         # Serializes the first concurrent requests: only one creates the trip.
         db.session.execute(
