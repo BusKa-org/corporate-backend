@@ -3,7 +3,7 @@
 from datetime import date
 
 import pytest
-from sqlalchemy import update
+from sqlalchemy import delete, update
 from sqlalchemy.orm.attributes import set_committed_value
 
 from app.core.exceptions import ConflictError, NotFoundError, ValidationError
@@ -129,3 +129,36 @@ def test_solicitacao_em_rota_removida_sob_o_lock(_db, aluno, rota_sob_demanda, j
 
     with pytest.raises(NotFoundError):
         solicitacoes_service.solicitar_viagem(str(aluno.user.id), str(rota_sob_demanda.id))
+
+
+def test_ligar_com_sessao_desatualizada_grava_no_banco(_db, gestor, rota):
+    # Another gestor switched it off after this session loaded ligada=True.
+    _db.session.execute(
+        update(Rota).where(Rota.id == rota.id).values(ligada=False),
+        execution_options={"synchronize_session": False},
+    )
+
+    rotas_service.update_rota(str(gestor.user.id), str(rota.id), {"ligada": True})
+    _db.session.expire_all()
+    assert _db.session.get(Rota, rota.id).ligada is True
+
+
+def test_desligar_rota_removida_sob_o_lock(_db, gestor, rota):
+    _db.session.execute(
+        update(Rota).where(Rota.id == rota.id).values(ativa=False),
+        execution_options={"synchronize_session": False},
+    )
+
+    with pytest.raises(NotFoundError):
+        rotas_service.update_rota(str(gestor.user.id), str(rota.id), {"ligada": False})
+
+
+def test_rota_apagada_sob_o_lock_da_404(_db, rota):
+    # A route without trips is hard-deleted while we wait: 404, not a refresh error (500).
+    _db.session.execute(
+        delete(Rota).where(Rota.id == rota.id),
+        execution_options={"synchronize_session": False},
+    )
+
+    with pytest.raises(NotFoundError):
+        rotas_service.travar_e_reler_rota(rota)
