@@ -651,7 +651,7 @@ o projeto em que a pessoa trabalha no parque).
 |---|---|
 | 400 | id que não é UUID; `nome` inválido; `PATCH` sem campos; projeto desativado |
 | 403 | não é gestor; escrita por gestor que não está `ACTIVE` |
-| 404 | projeto ou aluno de outra organização, ou inexistente |
+| 404 | projeto ou aluno de outra organização, inexistente, ou aluno com conta excluída |
 | 409 | nome já usado na organização |
 
 ## Rate limit

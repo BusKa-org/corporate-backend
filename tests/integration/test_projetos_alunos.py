@@ -158,3 +158,12 @@ def test_projeto_desativado_nao_recebe_aluno_mas_mantem_os_que_tem(gestor, aluno
 
     assert _definir(gestor, aluno_pending.user.id, projeto["id"]).status_code == 400
     assert _ids_listados(gestor, projeto["id"]) == [str(aluno.user.id)]
+
+
+@pytest.mark.integration
+def test_aluno_excluido_nao_recebe_projeto(gestor, aluno, _db):
+    projeto = _criar(gestor)
+    aluno.user.status = UserStatus.DELETED
+    _db.session.commit()
+
+    assert _definir(gestor, aluno.user.id, projeto["id"]).status_code == 404

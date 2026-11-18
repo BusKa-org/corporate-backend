@@ -2,35 +2,27 @@
 
 from typing import Any
 
-from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 
 from app.core.exceptions import ConflictError, NotFoundError, ValidationError
 from app.models.base import db
+from app.models.enum import UserStatus
 from app.models.projeto import Projeto
 from app.models.user import Aluno
 from app.services.user_service import _get_gestor_or_403
 from app.utils.validators import validate_uuid
 
-NOME_DUPLICADO = "Já existe um projeto com este nome na organização"
 
-
-def projeto_da_organizacao(organizacao_id, projeto_id: str) -> Projeto:
+def projeto_da_organizacao(organizacao_id, projeto_id: str, travar: bool = False) -> Projeto:
     """Another organization's project is reported as missing, not forbidden."""
-    projeto = db.session.get(Projeto, validate_uuid(projeto_id, "projeto_id"))
+    query = db.session.query(Projeto).filter(Projeto.id == validate_uuid(projeto_id, "projeto_id"))
+    if travar:
+        # FOR SHARE: a concurrent deactivation waits until this assignment commits.
+        query = query.with_for_update(read=True).populate_existing()
+    projeto = query.one_or_none()
     if projeto is None or projeto.organizacao_id != organizacao_id:
         raise NotFoundError("Projeto não encontrado")
     return projeto
-
-
-def _nome_em_uso(organizacao_id, nome: str, ignorar_id=None) -> bool:
-    query = db.session.query(Projeto).filter(
-        Projeto.organizacao_id == organizacao_id,
-        func.lower(Projeto.nome) == nome.lower(),
-    )
-    if ignorar_id is not None:
-        query = query.filter(Projeto.id != ignorar_id)
-    return db.session.query(query.exists()).scalar()
 
 
 def _salvar(projeto: Projeto) -> Projeto:
@@ -38,9 +30,14 @@ def _salvar(projeto: Projeto) -> Projeto:
     try:
         db.session.commit()
     except IntegrityError as e:
-        # Two concurrent saves with the same name both pass _nome_em_uso; the unique index wins.
         db.session.rollback()
-        raise ConflictError(NOME_DUPLICADO, field="nome") from e
+        # The case-insensitive unique index is the only duplicate-name check.
+        constraint = getattr(getattr(e.orig, "diag", None), "constraint_name", None)
+        if constraint == "uq_projeto_organizacao_nome":
+            raise ConflictError(
+                "Já existe um projeto com este nome na organização", field="nome"
+            ) from e
+        raise
     return projeto
 
 
@@ -54,11 +51,7 @@ def criar(gestor_id: str, data: dict[str, Any]) -> Projeto:
     gestor = _get_gestor_or_403(
         gestor_id, "Apenas gestores podem criar projetos", require_active=True
     )
-    nome = data["nome"]
-    if _nome_em_uso(gestor.organizacao_id, nome):
-        raise ConflictError(NOME_DUPLICADO, field="nome")
-
-    projeto = Projeto(organizacao_id=gestor.organizacao_id, nome=nome, ativo=True)
+    projeto = Projeto(organizacao_id=gestor.organizacao_id, nome=data["nome"], ativo=True)
     return _salvar(projeto)
 
 
@@ -70,10 +63,7 @@ def atualizar(gestor_id: str, projeto_id: str, data: dict[str, Any]) -> Projeto:
     projeto = projeto_da_organizacao(gestor.organizacao_id, projeto_id)
 
     if "nome" in data:
-        nome = data["nome"]
-        if _nome_em_uso(gestor.organizacao_id, nome, ignorar_id=projeto.id):
-            raise ConflictError(NOME_DUPLICADO, field="nome")
-        projeto.nome = nome
+        projeto.nome = data["nome"]
     if "ativo" in data:
         projeto.ativo = data["ativo"]
 
@@ -88,12 +78,15 @@ def definir_projeto_do_aluno(gestor_id: str, aluno_id: str, projeto_id: str | No
     aluno = db.session.get(Aluno, validate_uuid(aluno_id, "aluno_id"))
     if aluno is None or aluno.organizacao_id != gestor.organizacao_id:
         raise NotFoundError("Aluno não encontrado")
+    if aluno.status == UserStatus.DELETED:
+        raise NotFoundError("Aluno não encontrado")
 
     if projeto_id is None:
         aluno.projeto_id = None
     else:
-        projeto = projeto_da_organizacao(gestor.organizacao_id, projeto_id)
+        projeto = projeto_da_organizacao(gestor.organizacao_id, projeto_id, travar=True)
         if not projeto.ativo:
+            db.session.rollback()
             raise ValidationError("Projeto desativado não recebe alunos")
         aluno.projeto_id = projeto.id
 
