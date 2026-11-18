@@ -93,10 +93,11 @@ def _exigir_viagem_da_organizacao(viagem: Viagem, user: User) -> None:
 
 def _travar_viagem(viagem_id) -> Viagem:
     """Reload the trip with a row lock held until commit."""
+    # key_share: FOR NO KEY UPDATE, so inserts of rows that reference the trip are not blocked.
     return (
         db.session.query(Viagem)
         .filter(Viagem.id == viagem_id)
-        .with_for_update(of=Viagem)
+        .with_for_update(of=Viagem, key_share=True)
         .populate_existing()
         .one()
     )
@@ -757,6 +758,13 @@ def controlar_viagem(user_id: str, viagem_id: str, data: dict[str, Any]) -> Viag
             if viagem.motorista_id is None:
                 raise ConflictError("Viagem sem motorista atribuído")
             agora = _agora()
+            # Lock the usuario row too, as exigir_motorista_ativo does, so a concurrent
+            # deactivation either sees this trip or wins.
+            db.session.execute(
+                select(User.id)
+                .where(User.id == viagem.motorista_id)
+                .with_for_update(key_share=True)
+            )
             motorista = (
                 db.session.query(Motorista)
                 .filter(Motorista.id == viagem.motorista_id)
@@ -764,6 +772,9 @@ def controlar_viagem(user_id: str, viagem_id: str, data: dict[str, Any]) -> Viag
                 .populate_existing()
                 .one()
             )
+            # A gestor may start it for the driver, so check the account is still active.
+            if motorista.status != UserStatus.ACTIVE:
+                raise ConflictError("Motorista sem cadastro ativo")
             validar_jornada_motorista(motorista, agora)
             motorista.descanso_ate = None
             viagem.status = StatusViagem.EM_ANDAMENTO
@@ -804,14 +815,14 @@ def controlar_viagem(user_id: str, viagem_id: str, data: dict[str, Any]) -> Viag
         else:
             raise ValidationError("Ação inválida. Use INICIAR ou FINALIZAR")
 
-        # A gestor may act for the driver, so record who changed the trip.
-        audit_logger.log_user_action(
-            action=f"controlar_viagem_{acao.lower()}",
-            user_id=user_id,
-            resource_type="viagem",
-            resource_id=viagem_id,
-        )
-        return viagem
+    # After commit, so a rolled back change is not logged. A gestor may act for the driver.
+    audit_logger.log_user_action(
+        action=f"controlar_viagem_{acao.lower()}",
+        user_id=user_id,
+        resource_type="viagem",
+        resource_id=viagem_id,
+    )
+    return viagem
 
 
 def list_viagens_gestor(user_id: str, filters: dict[str, Any]) -> list[Viagem]:
@@ -870,6 +881,7 @@ def cancelar_viagem(user_id: str, viagem_id: str) -> dict[str, Any]:
     # Locked so a FINALIZAR running at the same time cannot overwrite the cancel.
     viagem = _travar_viagem(viagem.id)
     if viagem.status in (StatusViagem.FINALIZADA, StatusViagem.CANCELADA):
+        db.session.rollback()
         raise ValidationError(f"Não é possível cancelar uma viagem com status {viagem.status.name}")
 
     try:

@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from app.models.enum import StatusViagem, UserRole
+from app.models.enum import StatusViagem, UserRole, UserStatus
 from app.models.notificacao import Notificacao
 from app.models.user import Motorista
 from app.models.viagem import AlunosConfirmados, Viagem
@@ -17,6 +17,7 @@ def test_iniciar_viagem_notifica_apenas_confirmados(app, _db, organizacao, aluno
             cpf="11122233344",
             cnh="99988877766",
             role=UserRole.MOTORISTA,
+            status=UserStatus.ACTIVE,
         )
         _db.session.add(motorista)
         _db.session.flush()

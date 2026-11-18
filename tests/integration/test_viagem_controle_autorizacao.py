@@ -4,7 +4,7 @@ import uuid
 
 import pytest
 
-from app.models.enum import StatusViagem
+from app.models.enum import StatusViagem, UserStatus
 from tests.factories.user_factory import MotoristaFactory
 
 INICIAR = {"acao": "INICIAR"}
@@ -85,3 +85,28 @@ def test_gestor_nao_inicia_viagem_sem_motorista(gestor, viagem_futura_agendada_c
     assert r.status_code == 409, r.get_data(as_text=True)
     _db.session.refresh(viagem_futura_agendada_com_motorista)
     assert viagem_futura_agendada_com_motorista.status == StatusViagem.AGENDADA
+
+
+@pytest.mark.integration
+def test_gestor_nao_inicia_viagem_de_motorista_desativado(
+    gestor, motorista, viagem_futura_agendada_com_motorista, _db
+):
+    motorista.user.status = UserStatus.DISABLED
+    _db.session.commit()
+
+    r = gestor.client.put(
+        f"/v1/viagens/{viagem_futura_agendada_com_motorista.id}/acao", json=INICIAR
+    )
+    assert r.status_code == 409, r.get_data(as_text=True)
+
+
+@pytest.mark.integration
+def test_outra_organizacao_recebe_404_ao_finalizar(
+    other_gestor, viagem_futura_iniciada_com_motorista, _db
+):
+    r = other_gestor.client.put(
+        f"/v1/viagens/{viagem_futura_iniciada_com_motorista.id}/acao", json=FINALIZAR
+    )
+    assert r.status_code == 404, r.get_data(as_text=True)
+    _db.session.refresh(viagem_futura_iniciada_com_motorista)
+    assert viagem_futura_iniciada_com_motorista.status == StatusViagem.EM_ANDAMENTO
