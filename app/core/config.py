@@ -151,6 +151,11 @@ class Settings:
             "SYNC_TOLERANCIA_SEGUNDOS", default=120, min_val=0, max_val=3600
         )
 
+        # Manager's reply to an incident (ocorrencia).
+        self.OCORRENCIA_RESPOSTA_MAX_CARACTERES = self._get_int(
+            "OCORRENCIA_RESPOSTA_MAX_CARACTERES", default=2000, min_val=1, max_val=100_000
+        )
+
         # Invite PIN: errors summed across all PINs before the PIN is locked.
         self.CONVITE_PIN_MAX_ERROS_TOTAL = self._get_int(
             "CONVITE_PIN_MAX_ERROS_TOTAL", default=20, min_val=5, max_val=1000

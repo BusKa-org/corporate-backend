@@ -35,6 +35,14 @@ class Ocorrencia(db.Model):
         default=StatusOcorrencia.ABERTA,
     )
 
+    resposta = db.Column(db.Text, nullable=True)
+    respondida_em = db.Column(db.DateTime(timezone=True), nullable=True)
+    respondida_por_id = db.Column(
+        UUID(as_uuid=True),
+        db.ForeignKey("usuario.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
     created_at = db.Column(db.DateTime(timezone=True), server_default=db.func.now())
     updated_at = db.Column(
         db.DateTime(timezone=True),

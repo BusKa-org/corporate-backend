@@ -548,6 +548,19 @@ período (datas inclusivas, pela data da viagem). Outro papel: 403.
   `page` >= 1, `per_page` de 1 a 100; fora disso, ou `inicio` > `fim`, ou sem as datas: 400.
   Página além da última: `items` vazio e `total` real.
 
+## Resposta do gestor a uma ocorrência (RF-08)
+
+`PUT /v1/ocorrencias/<id>/resposta` `{resposta}`: gestor ativo responde a uma ocorrência da
+sua organização. Grava `resposta`, `respondida_em` e quem respondeu, e notifica o autor
+(notificação interna e push). Responder de novo substitui a resposta e notifica outra vez. Não
+muda o `status`: resolver continua em `PATCH /v1/ocorrencias/<id>/resolver`.
+
+- Texto vazio, ou acima de `OCORRENCIA_RESPOSTA_MAX_CARACTERES` (padrão 2000) depois de tirar
+  os espaços das pontas: 400. Outro papel: 403. Ocorrência de outra organização: 404.
+- `GET /v1/ocorrencias/minhas`: o autor (aluno ou motorista) lista as próprias ocorrências.
+- As respostas de ocorrência (criar, listar, resolver, minhas) ganham `resposta` e
+  `respondida_em` (ISO 8601), ambos `null` enquanto não houver resposta.
+
 ## Acessibilidade do aluno
 
 `necessidades_acessibilidade` (lista de `CADEIRA_DE_RODAS`, `MOBILIDADE_REDUZIDA`,
