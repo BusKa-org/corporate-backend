@@ -189,6 +189,18 @@ class ViagemListResource(Resource):
         return viagem_response_schema.dump(viagem), 201
 
 
+@api.route("/<uuid:id>")
+class ViagemResource(Resource):
+    @api.doc("get_viagem")
+    @api.response(200, "Success", models["viagem_response"])
+    @jwt_required()
+    def get(self, id: UUID) -> tuple[dict[str, Any], int]:
+        """Gets one trip of the manager's organization (Manager)"""
+        user_id = get_jwt_identity()
+        viagem = viagens_service.obter_viagem_gestor(user_id, str(id))
+        return viagem_response_schema.dump(viagem), 200
+
+
 @api.route("/minhas")
 class MinhasViagensResource(Resource):
     @api.doc("list_my_viagens")
