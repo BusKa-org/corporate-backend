@@ -3,6 +3,8 @@
 import logging
 from typing import Any
 
+from sqlalchemy import select
+
 from app.core.exceptions import (
     AppError,
     ConflictError,
@@ -13,6 +15,7 @@ from app.core.exceptions import (
 from app.models.base import db
 from app.models.enum import UserRole
 from app.models.onibus import Onibus
+from app.models.rota import Rota
 from app.models.user import User
 from app.utils.validators import validate_uuid
 
@@ -147,6 +150,13 @@ def delete_onibus(user_id: str, onibus_id: str) -> None:
         raise ForbiddenError("Proibido alterar dados de outra organização")
 
     try:
+        # Routes first, as everywhere else: ON DELETE SET NULL writes them after the onibus row.
+        db.session.execute(
+            select(Rota.id)
+            .where(Rota.veiculo_padrao_id == onibus.id)
+            .order_by(Rota.id)
+            .with_for_update(key_share=True)
+        ).all()
         db.session.delete(onibus)
         db.session.commit()
     except Exception as e:
