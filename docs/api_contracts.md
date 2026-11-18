@@ -135,6 +135,16 @@ change it came out as `"SentidoViagem.IDA"`; clients parsing that must switch.
   can be generated again.
 - 404 when the route was deactivated by `DELETE /v1/rotas/<id>`.
 
+### Trip by id
+
+`GET /v1/viagens/<id>`: gestor only. Returns the same body as one item of
+`GET /v1/viagens/`.
+
+| Status | When |
+|---|---|
+| 403 | not a gestor |
+| 404 | trip not found, or it belongs to another organization (ids do not leak) |
+
 ### Route removal
 
 `DELETE /v1/rotas/<id>` (gestor): a route with no trips is deleted. A route with trips
