@@ -39,7 +39,7 @@ class NotificacaoListResource(Resource):
     @api.expect(notificacao_input_model, validate=True)
     @jwt_required()
     def post(self):
-        """(Manager) Sends a notice to a Route or Trip"""
+        """(Manager) Sends a notice to a Route, Trip or single user"""
         user_id = get_jwt_identity()
         data = request.get_json()
         return NotificacaoService.notificar_por_gestor(user_id, data), 201

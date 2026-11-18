@@ -8,12 +8,13 @@ from firebase_admin import messaging
 
 from app.core.exceptions import AppError, ForbiddenError, NotFoundError, ValidationError
 from app.models.base import db
-from app.models.enum import StatusSolicitacao, UserRole
+from app.models.enum import StatusSolicitacao, UserRole, UserStatus
 from app.models.notificacao import Notificacao
-from app.models.rota import RotaAluno
+from app.models.rota import Rota, RotaAluno
 from app.models.user import User
 from app.models.viagem import AlunosConfirmados, SolicitacaoViagem, Viagem
 from app.utils import audit_logger
+from app.utils.validators import validate_uuid
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +64,7 @@ class NotificacaoService:
         if user.role == UserRole.MOTORISTA:
             if not viagem_id:
                 raise ForbiddenError("Motoristas devem informar viagem_id para enviar avisos.")
-            viagem = db.session.get(Viagem, viagem_id)
+            viagem = db.session.get(Viagem, validate_uuid(viagem_id, "viagem_id"))
             if not viagem or str(viagem.motorista_id) != str(user_id):
                 raise ForbiddenError(
                     "Você só pode enviar avisos para viagens que você está conduzindo."
@@ -75,6 +76,10 @@ class NotificacaoService:
         elif user.role != UserRole.GESTOR:
             raise ForbiddenError("Apenas gestores ou motoristas podem enviar comunicados.")
 
+        destinatario_id = dados.get("destinatario_id")
+        if destinatario_id and user.role != UserRole.GESTOR:
+            raise ForbiddenError("Apenas gestores podem enviar avisos individuais.")
+
         titulo = dados.get("titulo")
         mensagem = dados.get("mensagem")
         rota_id = dados.get("rota_id")
@@ -83,9 +88,27 @@ class NotificacaoService:
         if not titulo or not mensagem:
             raise ValidationError("Título e mensagem são obrigatórios.")
 
+        if destinatario_id and (rota_id or viagem_id):
+            raise ValidationError(
+                "Informe apenas um destino: rota_id, viagem_id ou destinatario_id."
+            )
+
         usuarios_notificados = set()
 
-        if rota_id:
+        if destinatario_id:
+            destinatario = db.session.get(User, validate_uuid(destinatario_id, "destinatario_id"))
+            # One 404 for missing, deleted or other-org users, so ids do not leak across tenants.
+            if (
+                not destinatario
+                or destinatario.organizacao_id != user.organizacao_id
+                or destinatario.status == UserStatus.DELETED
+            ):
+                raise NotFoundError("Usuário destinatário não encontrado.")
+            usuarios_notificados.add(destinatario.id)
+        elif rota_id:
+            rota = db.session.get(Rota, validate_uuid(rota_id, "rota_id"))
+            if not rota or rota.organizacao_id != user.organizacao_id:
+                raise NotFoundError("Rota não encontrada.")
             # Inherited scheduled flow: a *route*'s audience is its subscriber list. The
             # on-demand round has no permanent subscription; its audience is the round's,
             # addressed by viagem_id below.
@@ -93,6 +116,14 @@ class NotificacaoService:
             for insc in inscricoes:
                 usuarios_notificados.add(insc.aluno_id)
         elif viagem_id:
+            viagem = db.session.get(Viagem, validate_uuid(viagem_id, "viagem_id"))
+            rota_da_viagem = None
+            if viagem and viagem.rota is not None:
+                rota_da_viagem = viagem.rota
+            elif viagem and viagem.horario_rota is not None:
+                rota_da_viagem = viagem.horario_rota.rota
+            if not rota_da_viagem or rota_da_viagem.organizacao_id != user.organizacao_id:
+                raise NotFoundError("Viagem não encontrada.")
             confirmados = AlunosConfirmados.query.filter_by(
                 viagem_id=viagem_id, confirmacao=True
             ).all()
@@ -105,10 +136,12 @@ class NotificacaoService:
             for solicitacao in solicitacoes:
                 usuarios_notificados.add(solicitacao.aluno_id)
         else:
-            raise ValidationError("Informe o ID de uma rota (rota_id) ou viagem (viagem_id).")
+            raise ValidationError(
+                "Informe o ID de uma rota (rota_id), viagem (viagem_id) ou usuário (destinatario_id)."
+            )
 
         if not usuarios_notificados:
-            raise NotFoundError("Nenhum aluno encontrado para receber este aviso.")
+            raise NotFoundError("Nenhum usuário encontrado para receber este aviso.")
 
         try:
             for aluno_id in usuarios_notificados:
@@ -116,11 +149,14 @@ class NotificacaoService:
 
             db.session.commit()
             audit_logger.log_user_action(
-                action="enviar_notificacao_massa", user_id=user_id, resource_type="notificacao"
+                action="enviar_notificacao_massa",
+                user_id=user_id,
+                resource_type="notificacao",
+                details={"destinatario_id": destinatario_id},
             )
 
             return {
-                "message": f"Notificação enviada para {len(usuarios_notificados)} aluno(s) com sucesso."
+                "message": f"Notificação enviada para {len(usuarios_notificados)} usuário(s) com sucesso."
             }
 
         except Exception as e:

@@ -1169,7 +1169,7 @@
             "description": "Success"
           }
         },
-        "summary": "(Manager) Sends a notice to a Route or Trip",
+        "summary": "(Manager) Sends a notice to a Route, Trip or single user",
         "operationId": "gestor_enviar_notificacao",
         "parameters": [
           {
@@ -3975,6 +3975,11 @@
         "viagem_id": {
           "type": "string",
           "description": "ID da viagem (opcional)",
+          "example": ""
+        },
+        "destinatario_id": {
+          "type": "string",
+          "description": "ID de um único usuário da organização (apenas gestor, opcional)",
           "example": ""
         }
       },
