@@ -154,7 +154,7 @@ def test_aluno_de_outra_organizacao_da_404(gestor, other_aluno):
 def test_projeto_desativado_nao_recebe_aluno_mas_mantem_os_que_tem(gestor, aluno, aluno_pending):
     projeto = _criar(gestor)
     assert _definir(gestor, aluno.user.id, projeto["id"]).status_code == 200
-    gestor.client.patch(f"{URL}/{projeto['id']}", json={"ativo": False})
+    assert gestor.client.patch(f"{URL}/{projeto['id']}", json={"ativo": False}).status_code == 200
 
     assert _definir(gestor, aluno_pending.user.id, projeto["id"]).status_code == 400
     assert _ids_listados(gestor, projeto["id"]) == [str(aluno.user.id)]

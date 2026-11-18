@@ -2,13 +2,14 @@
 
 from typing import Any
 
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
 from app.core.exceptions import ConflictError, NotFoundError, ValidationError
 from app.models.base import db
 from app.models.enum import UserStatus
 from app.models.projeto import Projeto
-from app.models.user import Aluno
+from app.models.user import Aluno, User
 from app.services.user_service import _get_gestor_or_403
 from app.utils.validators import validate_uuid
 
@@ -44,7 +45,7 @@ def _salvar(projeto: Projeto) -> Projeto:
 def listar(gestor_id: str) -> list[Projeto]:
     gestor = _get_gestor_or_403(gestor_id, "Apenas gestores podem listar projetos")
     query = db.session.query(Projeto).filter(Projeto.organizacao_id == gestor.organizacao_id)
-    return query.order_by(Projeto.nome.asc()).all()
+    return query.order_by(func.lower(Projeto.nome).asc()).all()
 
 
 def criar(gestor_id: str, data: dict[str, Any]) -> Projeto:
@@ -75,10 +76,15 @@ def definir_projeto_do_aluno(gestor_id: str, aluno_id: str, projeto_id: str | No
     gestor = _get_gestor_or_403(
         gestor_id, "Apenas gestores podem definir o projeto do aluno", require_active=True
     )
-    aluno = db.session.get(Aluno, validate_uuid(aluno_id, "aluno_id"))
-    if aluno is None or aluno.organizacao_id != gestor.organizacao_id:
-        raise NotFoundError("Aluno não encontrado")
-    if aluno.status == UserStatus.DELETED:
+    aluno_uuid = validate_uuid(aluno_id, "aluno_id")
+    # Same lock as excluir_conta, so an account being deleted cannot get a project.
+    db.session.execute(select(User.id).where(User.id == aluno_uuid).with_for_update(key_share=True))
+    aluno = db.session.get(Aluno, aluno_uuid, populate_existing=True)
+    if (
+        aluno is None
+        or aluno.organizacao_id != gestor.organizacao_id
+        or aluno.status == UserStatus.DELETED
+    ):
         raise NotFoundError("Aluno não encontrado")
 
     if projeto_id is None:
@@ -86,7 +92,6 @@ def definir_projeto_do_aluno(gestor_id: str, aluno_id: str, projeto_id: str | No
     else:
         projeto = projeto_da_organizacao(gestor.organizacao_id, projeto_id, travar=True)
         if not projeto.ativo:
-            db.session.rollback()
             raise ValidationError("Projeto desativado não recebe alunos")
         aluno.projeto_id = projeto.id
 

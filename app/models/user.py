@@ -127,7 +127,7 @@ class Aluno(User):
 
     instituicao = db.relationship("Instituicao")
     ponto_casa = db.relationship("Ponto")
-    projeto = db.relationship("Projeto", lazy="joined")
+    projeto = db.relationship("Projeto")
 
     __mapper_args__ = {
         "polymorphic_identity": UserRole.ALUNO,
