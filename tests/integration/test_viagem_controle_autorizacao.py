@@ -5,6 +5,7 @@ import uuid
 import pytest
 
 from app.models.enum import StatusViagem
+from tests.factories.user_factory import MotoristaFactory
 
 INICIAR = {"acao": "INICIAR"}
 FINALIZAR = {"acao": "FINALIZAR"}
@@ -56,3 +57,31 @@ def test_cancelar_viagem_inexistente_e_de_outra_organizacao_respondem_igual(
     assert inexistente.status_code == 404
     assert alheia.status_code == 404
     assert alheia.get_json()["error"]["message"] == inexistente.get_json()["error"]["message"]
+
+
+@pytest.mark.integration
+def test_motorista_da_mesma_organizacao_nao_controla_viagem_de_colega(
+    motorista, organizacao, viagem_futura_agendada_com_motorista, _db
+):
+    colega = MotoristaFactory(organizacao_id=organizacao.id)
+    _db.session.add(colega)
+    viagem_futura_agendada_com_motorista.motorista_id = colega.id
+    _db.session.commit()
+
+    r = motorista.client.put(
+        f"/v1/viagens/{viagem_futura_agendada_com_motorista.id}/acao", json=INICIAR
+    )
+    assert r.status_code == 404, r.get_data(as_text=True)
+
+
+@pytest.mark.integration
+def test_gestor_nao_inicia_viagem_sem_motorista(gestor, viagem_futura_agendada_com_motorista, _db):
+    viagem_futura_agendada_com_motorista.motorista_id = None
+    _db.session.commit()
+
+    r = gestor.client.put(
+        f"/v1/viagens/{viagem_futura_agendada_com_motorista.id}/acao", json=INICIAR
+    )
+    assert r.status_code == 409, r.get_data(as_text=True)
+    _db.session.refresh(viagem_futura_agendada_com_motorista)
+    assert viagem_futura_agendada_com_motorista.status == StatusViagem.AGENDADA
