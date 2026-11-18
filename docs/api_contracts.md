@@ -336,8 +336,13 @@ Only run in the scheduler process (`RUN_SCHEDULER`).
   already boarded. Everything else after
   `AGENDADA` (`confirmacao: true` on `EM_ANDAMENTO`, any change on `FINALIZADA`/`CANCELADA`)
   returns 409.
-- `PUT /v1/viagens/<id>/cancelar` returns 403 for a trip of another organization, and
-  also cancels and notifies the active requests of the trip.
+- `PUT /v1/viagens/<id>/cancelar` returns 404 for a trip of another organization (same
+  body as a missing trip, so ids do not leak), and also cancels and notifies the active
+  requests of the trip.
+- `PUT /v1/viagens/<id>/acao` (`INICIAR`/`FINALIZAR`): only the trip's driver or a gestor
+  of the trip's organization. Other roles get 403; another driver or a gestor of another
+  organization gets 404 (it was 200 for anyone but another driver, who got 403).
+- `GET /v1/viagens/<id>/localizacao`: a gestor of another organization gets 404 (it was 403).
 - Trip listings, the student agenda and the dashboard include on-demand trips.
 - Every `/v1/viagens/<id>/...` route (`declaracao`, `pontos-embarque`,
   `credencial-embarque`, `confirmacao`, `acao`, `cancelar`, `localizacao`,
