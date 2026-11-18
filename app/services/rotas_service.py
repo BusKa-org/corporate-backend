@@ -170,15 +170,16 @@ def create_rota(gestor_id: str, data: dict[str, Any]) -> Rota:
         raise ValidationError("Parâmetros de buffer só se aplicam a rotas sob demanda")
 
     try:
+        # Vehicle before driver, as in solicitar_viagem and janelas_service.
+        veiculo_id = data.get("veiculo_padrao_id") or None
+        if veiculo_id:
+            veiculo_id = _exigir_onibus_da_organizacao(veiculo_id, user.organizacao_id)
         # If a driver creates a route, automatically assign themselves as the default driver
         motorista_id = data.get("motorista_padrao_id")
         if not motorista_id and user.role == UserRole.MOTORISTA:
             motorista_id = user.id
         if motorista_id:
             motorista_id = viagens_service.exigir_motorista_ativo(motorista_id, user.organizacao_id)
-        veiculo_id = data.get("veiculo_padrao_id")
-        if veiculo_id:
-            veiculo_id = _exigir_onibus_da_organizacao(veiculo_id, user.organizacao_id)
 
         rota = Rota(
             nome=nome,
@@ -697,6 +698,14 @@ def update_rota(user_id: str, rota_id: str, data: dict[str, Any]) -> Rota:
             rota.nome = data.get("nome")
             updated_fields.append("nome")
 
+        # Vehicle before driver, as in solicitar_viagem and janelas_service.
+        if "veiculo_padrao_id" in data:
+            veiculo_id = data.get("veiculo_padrao_id") or None
+            if veiculo_id:
+                veiculo_id = _exigir_onibus_da_organizacao(veiculo_id, rota.organizacao_id)
+            rota.veiculo_padrao_id = veiculo_id
+            updated_fields.append("veiculo_padrao_id")
+
         if "motorista_padrao_id" in data:
             motorista_id = data.get("motorista_padrao_id")
             if motorista_id:
@@ -705,13 +714,6 @@ def update_rota(user_id: str, rota_id: str, data: dict[str, Any]) -> Rota:
                 )
             rota.motorista_padrao_id = motorista_id
             updated_fields.append("motorista_padrao_id")
-
-        if "veiculo_padrao_id" in data:
-            veiculo_id = data.get("veiculo_padrao_id")
-            if veiculo_id:
-                veiculo_id = _exigir_onibus_da_organizacao(veiculo_id, rota.organizacao_id)
-            rota.veiculo_padrao_id = veiculo_id
-            updated_fields.append("veiculo_padrao_id")
 
         for campo in PARAMETROS_SOB_DEMANDA:
             if campo in data:
