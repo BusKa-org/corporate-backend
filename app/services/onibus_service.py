@@ -151,6 +151,7 @@ def delete_onibus(user_id: str, onibus_id: str) -> None:
 
     try:
         # Routes first, as everywhere else: ON DELETE SET NULL writes them after the onibus row.
+        # shortcut: a route pointed here after this SELECT stays unlocked; re-check if it bites.
         db.session.execute(
             select(Rota.id)
             .where(Rota.veiculo_padrao_id == onibus.id)

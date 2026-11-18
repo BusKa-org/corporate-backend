@@ -416,7 +416,7 @@ def add_horario(gestor_id: str, rota_id: str, data: dict[str, Any]) -> HorarioRo
     """
     rota = _get_rota_fixa_do_gestor(gestor_id, rota_id)
 
-    travar_rota(rota.id)
+    travar_e_reler_rota(rota)
     _garantir_horario_nao_duplicado(rota.id, data["horario_saida"], data["sentido"], data["dias"])
 
     try:
@@ -438,7 +438,7 @@ def _get_horario_do_gestor(gestor_id: str, rota_id: str, horario_id: str) -> Hor
     """
     validate_uuid(horario_id, "Horário ID")
     rota = _get_rota_fixa_do_gestor(gestor_id, rota_id)
-    travar_rota(rota.id)
+    travar_e_reler_rota(rota)
 
     horario = (
         db.session.query(HorarioRota)
@@ -644,10 +644,9 @@ def update_rota(user_id: str, rota_id: str, data: dict[str, Any]) -> Rota:
     if rota.tipo != TipoViagem.SOB_DEMANDA and any(k in data for k in PARAMETROS_SOB_DEMANDA):
         raise ValidationError("Parâmetros de buffer só se aplicam a rotas sob demanda")
 
-    if "ligada" in data:
-        # Same lock as trip generation, so no trip is created between this check and the commit.
-        # The re-read also keeps a stale value from turning the switch into a no-op.
-        travar_e_reler_rota(rota)
+    # Same lock as trip generation, so no trip is created between the checks below and the
+    # commit. Taken before the driver lock, as in delete_motorista, so the two cannot deadlock.
+    travar_e_reler_rota(rota)
 
     if data.get("ligada") is False:
         pendente = (
@@ -749,7 +748,7 @@ def delete_rota(user_id: str, rota_id: str) -> None:
         )
         raise ForbiddenError("Acesso negado")
 
-    travar_rota(rota.id)
+    travar_e_reler_rota(rota)
     viagens_da_rota = (
         db.session.query(Viagem.id)
         .outerjoin(HorarioRota, Viagem.horario_rota_id == HorarioRota.id)
