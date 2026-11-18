@@ -1169,7 +1169,7 @@
             "description": "Success"
           }
         },
-        "summary": "(Manager) Sends a notice to a Route or Trip",
+        "summary": "(Manager) Sends a notice to a Route, Trip or single user",
         "operationId": "gestor_enviar_notificacao",
         "parameters": [
           {
@@ -2658,6 +2658,31 @@
         ]
       }
     },
+    "/v1/viagens/{id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "type": "string"
+        }
+      ],
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/ViagemResponse"
+            }
+          }
+        },
+        "summary": "Gets one trip of the manager's organization (Manager)",
+        "operationId": "get_viagem",
+        "tags": [
+          "viagens"
+        ]
+      }
+    },
     "/v1/viagens/aluno/agenda": {
       "get": {
         "responses": {
@@ -3012,6 +3037,64 @@
         ],
         "tags": [
           "viagens"
+        ]
+      }
+    },
+    "/v1/ocorrencias/minhas": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/OcorrenciaResponse"
+              }
+            }
+          }
+        },
+        "summary": "(Student / Driver) Lists own incidents with the manager's reply",
+        "operationId": "listar_minhas_ocorrencias",
+        "tags": [
+          "ocorrencias"
+        ]
+      }
+    },
+    "/v1/ocorrencias/{ocorrencia_id}/resposta": {
+      "parameters": [
+        {
+          "name": "ocorrencia_id",
+          "in": "path",
+          "required": true,
+          "type": "string"
+        }
+      ],
+      "put": {
+        "responses": {
+          "404": {
+            "description": "Ocorrência não encontrada"
+          },
+          "200": {
+            "description": "Ocorrência respondida",
+            "schema": {
+              "$ref": "#/definitions/OcorrenciaResponse"
+            }
+          }
+        },
+        "summary": "(Manager) Replies to an incident",
+        "operationId": "responder_ocorrencia",
+        "parameters": [
+          {
+            "name": "payload",
+            "required": true,
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/OcorrenciaRespostaInput"
+            }
+          }
+        ],
+        "tags": [
+          "ocorrencias"
         ]
       }
     }
@@ -3950,6 +4033,11 @@
         "viagem_id": {
           "type": "string",
           "description": "ID da viagem (opcional)",
+          "example": ""
+        },
+        "destinatario_id": {
+          "type": "string",
+          "description": "ID de um único usuário da organização (apenas gestor, opcional)",
           "example": ""
         }
       },
@@ -5656,6 +5744,14 @@
         "created_at": {
           "type": "string",
           "description": "ISO 8601 ou null"
+        },
+        "resposta": {
+          "type": "string",
+          "description": "Resposta do gestor ou null"
+        },
+        "respondida_em": {
+          "type": "string",
+          "description": "ISO 8601 ou null"
         }
       },
       "type": "object"
@@ -6477,6 +6573,18 @@
           "type": "string",
           "format": "date-time",
           "description": "Última alteração; null enquanto valem os padrões"
+        }
+      },
+      "type": "object"
+    },
+    "OcorrenciaRespostaInput": {
+      "required": [
+        "resposta"
+      ],
+      "properties": {
+        "resposta": {
+          "type": "string",
+          "description": "Resposta do gestor ao autor"
         }
       },
       "type": "object"

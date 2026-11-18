@@ -822,6 +822,22 @@ def list_viagens_gestor(user_id: str, filters: dict[str, Any]) -> list[Viagem]:
     return query.order_by(Viagem.data.desc(), Viagem.horario_rota_id).all()
 
 
+def obter_viagem_gestor(user_id: str, viagem_id: str) -> Viagem:
+    user = db.session.get(User, user_id)
+    if not user or user.role != UserRole.GESTOR:
+        raise ForbiddenError("Apenas gestores podem consultar viagens")
+
+    # 404 for another organization's trip too, so trip ids do not leak across tenants.
+    viagem = (
+        juntar_rota(db.session.query(Viagem))
+        .filter(Viagem.id == viagem_id, Rota.organizacao_id == user.organizacao_id)
+        .first()
+    )
+    if not viagem:
+        raise NotFoundError("Viagem não encontrada")
+    return viagem
+
+
 def cancelar_viagem(user_id: str, viagem_id: str) -> dict[str, Any]:
     """Cancel a trip and notify the confirmed students"""
     user = db.session.get(User, user_id)
