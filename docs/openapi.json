@@ -4282,6 +4282,10 @@
           "type": "integer",
           "description": "SOB_DEMANDA: prazo do motorista para iniciar, em minutos (1 até ROTA_PRAZO_INICIO_MINUTOS_MAX)"
         },
+        "ligada": {
+          "type": "boolean",
+          "description": "Rota ligada (aceita novas viagens)"
+        },
         "motorista_id": {
           "type": "string",
           "description": "UUID do motorista padrão"
@@ -4429,6 +4433,10 @@
         "veiculo_padrao_id": {
           "type": "string",
           "description": "UUID do veículo padrão (null remove)"
+        },
+        "ligada": {
+          "type": "boolean",
+          "description": "Liga ou desliga a rota; desligada não aceita novas viagens"
         }
       },
       "type": "object"
@@ -4458,6 +4466,10 @@
         "prazo_inicio_minutos": {
           "type": "integer",
           "description": "SOB_DEMANDA: prazo do motorista para iniciar, em minutos (1 até ROTA_PRAZO_INICIO_MINUTOS_MAX)"
+        },
+        "ligada": {
+          "type": "boolean",
+          "description": "Rota ligada (aceita novas viagens)"
         },
         "motorista_id": {
           "type": "string",
