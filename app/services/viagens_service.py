@@ -83,13 +83,12 @@ def _rota_da_viagem(viagem: Viagem) -> Rota | None:
     return None
 
 
-def _exigir_viagem_da_organizacao(
-    viagem: Viagem, user: User, mensagem: str = "Acesso negado"
-) -> None:
-    """Raise ForbiddenError unless the trip's route belongs to the user's organização."""
+def _exigir_viagem_da_organizacao(viagem: Viagem, user: User) -> None:
+    """Raise NotFoundError unless the trip's route belongs to the user's organização."""
+    # 404, not 403, so trip ids do not leak across tenants.
     rota = _rota_da_viagem(viagem)
     if rota is None or rota.organizacao_id != user.organizacao_id:
-        raise ForbiddenError(mensagem)
+        raise NotFoundError("Viagem não encontrada")
 
 
 def _popular_dados_da_viagem(viagem_obj: Viagem, rota_obj: Rota) -> None:
@@ -713,18 +712,24 @@ def list_viagens_motorista(user_id: str) -> list[Viagem]:
 
 
 def controlar_viagem(user_id: str, viagem_id: str, data: dict[str, Any]) -> Viagem:
-    """Start or finish a trip. Expects schema-validated payload with 'acao'."""
+    """Start or finish a trip: only its driver or a manager of its organização may."""
     user = db.session.get(User, user_id)
-    viagem = db.session.get(Viagem, viagem_id)
-
     if not user:
         raise NotFoundError("Usuário não encontrado")
 
+    if user.role not in (UserRole.MOTORISTA, UserRole.GESTOR):
+        raise ForbiddenError("Apenas o motorista ou o gestor podem iniciar ou finalizar viagens")
+
+    viagem = db.session.get(Viagem, viagem_id)
     if not viagem:
         raise NotFoundError("Viagem não encontrada")
 
-    if user.role == UserRole.MOTORISTA and viagem.motorista_id != user.id:
-        raise ForbiddenError("Esta viagem não pertence a você")
+    # 404 for someone else's trip too, so trip ids do not leak.
+    if user.role == UserRole.MOTORISTA:
+        if viagem.motorista_id != user.id:
+            raise NotFoundError("Viagem não encontrada")
+    else:
+        _exigir_viagem_da_organizacao(viagem, user)
 
     acao = data.get("acao")
 
@@ -1013,11 +1018,7 @@ def obter_localizacao_onibus(user_id: str, viagem_id: str) -> dict:
                 "Você precisa estar confirmado nesta viagem para ver a localização do ônibus."
             )
     elif user.role == UserRole.GESTOR:
-        _exigir_viagem_da_organizacao(
-            viagem,
-            user,
-            "Apenas gestores da organização desta viagem podem consultar a localização.",
-        )
+        _exigir_viagem_da_organizacao(viagem, user)
     else:
         raise ForbiddenError(
             "Apenas alunos confirmados, o motorista ou o gestor podem consultar a localização"
