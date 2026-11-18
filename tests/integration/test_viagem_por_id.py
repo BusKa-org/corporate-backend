@@ -20,3 +20,9 @@ def test_viagem_de_outra_organizacao_retorna_404(other_gestor, viagem_solicitada
 def test_viagem_inexistente_retorna_404(gestor):
     r = gestor.client.get(f"/v1/viagens/{uuid.uuid4()}")
     assert r.status_code == 404, r.get_data(as_text=True)
+
+
+def test_aluno_e_motorista_recebem_403(aluno, motorista, viagem_solicitada):
+    for usuario in (aluno, motorista):
+        r = usuario.client.get(f"/v1/viagens/{viagem_solicitada.id}")
+        assert r.status_code == 403, r.get_data(as_text=True)
