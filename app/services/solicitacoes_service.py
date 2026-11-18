@@ -14,6 +14,7 @@ from app.models.user import Aluno, Motorista, User
 from app.models.viagem import AlunosConfirmados, SolicitacaoViagem, Viagem
 from app.services import capacidade_service, janelas_service, viagens_service
 from app.services.notificacao_service import NotificacaoService
+from app.services.rotas_service import travar_e_reler_rota
 from app.utils import tempo
 
 EM_VIAGEM = "A conta está em uma viagem em andamento. Aguarde o fim da viagem."
@@ -75,12 +76,19 @@ def solicitar_viagem(user_id: str, rota_id: str) -> SolicitacaoViagem:
     if rota.tipo == TipoViagem.FIXA:
         raise ValidationError("Rota de horário fixo, use a confirmação de presença")
 
-    if rota.veiculo_padrao_id is None:
-        raise ValidationError("Rota sem veículo padrão definido, não é possível solicitar viagem")
-
-    veiculo_id = rota.veiculo_padrao_id
-
     with transactional():
+        # Route first, as in rotas_service: a switch-off either sees this round or runs before it.
+        travar_e_reler_rota(rota)
+        if not rota.ligada:
+            raise ValidationError("Rota desligada, não aceita novas solicitações")
+
+        # Read after the lock: the gestor may have changed the vehicle while we waited.
+        if rota.veiculo_padrao_id is None:
+            raise ValidationError(
+                "Rota sem veículo padrão definido, não é possível solicitar viagem"
+            )
+        veiculo_id = rota.veiculo_padrao_id
+
         # Serializes the first concurrent requests: only one creates the trip.
         db.session.execute(
             select(Onibus.id).where(Onibus.id == veiculo_id).with_for_update(key_share=True)

@@ -370,6 +370,14 @@ def delete_motorista(gestor_id: str, motorista_id: str) -> None:
         raise ForbiddenError("Proibido remover motoristas de outra organização")
 
     try:
+        # Routes first, as everywhere else: ON DELETE SET NULL writes them after the motorista row.
+        # shortcut: a route pointed here after this SELECT stays unlocked; re-check if it bites.
+        db.session.execute(
+            select(Rota.id)
+            .where(Rota.motorista_padrao_id == motorista.id)
+            .order_by(Rota.id)
+            .with_for_update(key_share=True)
+        ).all()
         db.session.delete(motorista)
         db.session.commit()
         audit_logger.log_user_action(

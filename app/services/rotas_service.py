@@ -339,11 +339,27 @@ def _get_rota_fixa_do_gestor(gestor_id: str, rota_id: str) -> Rota:
     return rota
 
 
-def travar_rota(rota_id: Any) -> None:
+def travar_rota(rota_id: Any) -> bool:
     """Lock order for schedule edits and trip generation: this Rota row first, held
     until commit. NO KEY UPDATE, so inserts referencing the route are not blocked.
+    Returns False when the row no longer exists.
     """
-    db.session.execute(select(Rota.id).where(Rota.id == rota_id).with_for_update(key_share=True))
+    linha = db.session.execute(
+        select(Rota.id).where(Rota.id == rota_id).with_for_update(key_share=True)
+    ).first()
+    return linha is not None
+
+
+def travar_e_reler_rota(rota: Rota) -> None:
+    """travar_rota, then re-read the route: it may have been switched or removed while we waited.
+
+    Raises: NotFoundError
+    """
+    if not travar_rota(rota.id):
+        raise NotFoundError("Rota não encontrada")
+    db.session.refresh(rota)
+    if not rota.ativa:
+        raise NotFoundError("Rota não encontrada")
 
 
 def _garantir_horario_nao_duplicado(
@@ -400,7 +416,7 @@ def add_horario(gestor_id: str, rota_id: str, data: dict[str, Any]) -> HorarioRo
     """
     rota = _get_rota_fixa_do_gestor(gestor_id, rota_id)
 
-    travar_rota(rota.id)
+    travar_e_reler_rota(rota)
     _garantir_horario_nao_duplicado(rota.id, data["horario_saida"], data["sentido"], data["dias"])
 
     try:
@@ -422,7 +438,7 @@ def _get_horario_do_gestor(gestor_id: str, rota_id: str, horario_id: str) -> Hor
     """
     validate_uuid(horario_id, "Horário ID")
     rota = _get_rota_fixa_do_gestor(gestor_id, rota_id)
-    travar_rota(rota.id)
+    travar_e_reler_rota(rota)
 
     horario = (
         db.session.query(HorarioRota)
@@ -589,9 +605,9 @@ def get_by_id(user_id: str, rota_id: str) -> Rota:
 
 
 def update_rota(user_id: str, rota_id: str, data: dict[str, Any]) -> Rota:
-    """Update route name, driver, or vehicle.
+    """Update route name, driver, vehicle, or switch it on/off.
 
-    Raises: ForbiddenError, NotFoundError, AppError
+    Raises: ForbiddenError, NotFoundError, ConflictError, AppError
     """
     validate_uuid(user_id, "User ID")
     validate_uuid(rota_id, "Rota ID")
@@ -628,9 +644,33 @@ def update_rota(user_id: str, rota_id: str, data: dict[str, Any]) -> Rota:
     if rota.tipo != TipoViagem.SOB_DEMANDA and any(k in data for k in PARAMETROS_SOB_DEMANDA):
         raise ValidationError("Parâmetros de buffer só se aplicam a rotas sob demanda")
 
+    # Same lock as trip generation, so no trip is created between the checks below and the
+    # commit. Taken before the driver lock, as in delete_motorista, so the two cannot deadlock.
+    travar_e_reler_rota(rota)
+
+    if data.get("ligada") is False:
+        pendente = (
+            db.session.query(Viagem.id)
+            .outerjoin(HorarioRota, Viagem.horario_rota_id == HorarioRota.id)
+            .filter(
+                or_(Viagem.rota_id == rota.id, HorarioRota.rota_id == rota.id),
+                _filtro_viagem_pendente(),
+            )
+            .first()
+        )
+        if pendente:
+            raise ConflictError(
+                "Há viagens agendadas ou em andamento nesta rota; "
+                "cancele-as ou aguarde a finalização para desligá-la"
+            )
+
     updated_fields: list[str] = []
 
     try:
+        if "ligada" in data:
+            rota.ligada = data["ligada"]
+            updated_fields.append("ligada")
+
         if "nome" in data:
             rota.nome = data.get("nome")
             updated_fields.append("nome")
@@ -708,7 +748,7 @@ def delete_rota(user_id: str, rota_id: str) -> None:
         )
         raise ForbiddenError("Acesso negado")
 
-    travar_rota(rota.id)
+    travar_e_reler_rota(rota)
     viagens_da_rota = (
         db.session.query(Viagem.id)
         .outerjoin(HorarioRota, Viagem.horario_rota_id == HorarioRota.id)

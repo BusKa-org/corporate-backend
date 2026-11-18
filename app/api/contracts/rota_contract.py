@@ -83,6 +83,9 @@ def register_models(api):
                 description="UUID do motorista padrão (null remove)"
             ),
             "veiculo_padrao_id": fields.String(description="UUID do veículo padrão (null remove)"),
+            "ligada": fields.Boolean(
+                description="Liga ou desliga a rota; desligada não aceita novas viagens"
+            ),
         },
     )
 
@@ -94,6 +97,7 @@ def register_models(api):
             "tipo": fields.String(enum=TIPOS_VIAGEM),
             "buffer_minutos": fields.Integer(description=BUFFER_DESC),
             "prazo_inicio_minutos": fields.Integer(description=PRAZO_DESC),
+            "ligada": fields.Boolean(description="Rota ligada (aceita novas viagens)"),
             "motorista_id": fields.String(description="UUID do motorista padrão"),
             "veiculo_id": fields.String(description="UUID do veículo padrão"),
             "organizacao_id": fields.String(description="UUID da organização"),

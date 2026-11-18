@@ -157,6 +157,17 @@ and ride requests return 404.
 |---|---|
 | 409 | the route has an `AGENDADA` trip dated today or later, or a `SOLICITADA`, `BUFFER_ABERTO` or `EM_ANDAMENTO` trip of any date |
 
+### Route on/off
+
+`PUT /v1/rotas/<id>` with `{"ligada": false}` / `{"ligada": true}` (gestor of the route's
+organization, else 403). Route responses carry `ligada`. A switched-off route stays in
+the listings and can be edited and switched back on, but trip generation
+(`POST /v1/viagens/`) and ride requests (`POST /v1/rotas/<id>/solicitacoes`) return 400.
+
+| Status | When |
+|---|---|
+| 409 | switching off a route with a pending trip, same rule as route removal |
+
 ### Ride request (RF-10)
 
 `POST /v1/rotas/<id>/solicitacoes`: student with current LGPD consent. No body.

@@ -65,6 +65,7 @@ class RotaUpdateRequestSchema(BaseSchema):
     veiculo_padrao_id = fields.String(allow_none=True)
     buffer_minutos = fields.Integer(validate=validar_buffer_minutos)
     prazo_inicio_minutos = fields.Integer(validate=validar_prazo_inicio_minutos)
+    ligada = fields.Boolean()
 
 
 # ==========================================
@@ -78,6 +79,7 @@ class RotaResponseSchema(BaseSchema):
     tipo = fields.Enum(TipoViagem)
     buffer_minutos = fields.Integer()
     prazo_inicio_minutos = fields.Integer()
+    ligada = fields.Boolean()
     motorista_id = fields.Method("get_motorista_id")
     veiculo_id = fields.Method("get_veiculo_id")
     organizacao_id = fields.String()
