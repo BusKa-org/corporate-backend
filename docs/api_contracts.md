@@ -342,6 +342,7 @@ Only run in the scheduler process (`RUN_SCHEDULER`).
 - `PUT /v1/viagens/<id>/acao` (`INICIAR`/`FINALIZAR`): only the trip's driver or a gestor
   of the trip's organization. Other roles get 403; another driver or a gestor of another
   organization gets 404 (it was 200 for anyone but another driver, who got 403).
+  `INICIAR` on a trip with no driver returns 409.
 - `GET /v1/viagens/<id>/localizacao`: a gestor of another organization gets 404 (it was 403).
 - Trip listings, the student agenda and the dashboard include on-demand trips.
 - Every `/v1/viagens/<id>/...` route (`declaracao`, `pontos-embarque`,
