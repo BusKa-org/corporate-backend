@@ -4027,12 +4027,12 @@
         },
         "rota_id": {
           "type": "string",
-          "description": "ID da rota (opcional se enviar viagem_id)",
+          "description": "ID da rota (opcional, não combinar com viagem_id)",
           "example": "COLE_O_UUID_DA_ROTA_AQUI"
         },
         "viagem_id": {
           "type": "string",
-          "description": "ID da viagem (opcional)",
+          "description": "ID da viagem (opcional): avisa os passageiros e o motorista da viagem; recusado se a viagem estiver finalizada ou cancelada",
           "example": ""
         },
         "destinatario_id": {
