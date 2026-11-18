@@ -53,8 +53,12 @@ def test_veiculo_da_propria_organizacao_e_aceito(_db, gestor, rota, organizacao)
     assert r.status_code == 201, r.get_data(as_text=True)
 
 
-def test_veiculo_vazio_desvincula_o_veiculo(_db, gestor, rota):
-    r = gestor.client.put(f"/v1/rotas/{rota.id}", json={"veiculo_padrao_id": ""})
+def test_id_vazio_desvincula_veiculo_e_motorista(_db, gestor, rota):
+    r = gestor.client.put(
+        f"/v1/rotas/{rota.id}", json={"veiculo_padrao_id": "", "motorista_padrao_id": ""}
+    )
     assert r.status_code == 200, r.get_data(as_text=True)
     _db.session.expire_all()
-    assert _db.session.get(Rota, rota.id).veiculo_padrao_id is None
+    salva = _db.session.get(Rota, rota.id)
+    assert salva.veiculo_padrao_id is None
+    assert salva.motorista_padrao_id is None
