@@ -10,6 +10,7 @@ from datetime import UTC, datetime, time, timedelta
 import pytest
 
 from app.models.enum import DiaDaSemana, StatusSolicitacao, StatusViagem, TipoViagem
+from app.models.rota import Rota
 from app.models.viagem import AlunosConfirmados, SolicitacaoViagem, Viagem
 from app.services import buffer_service
 from app.utils import tempo
@@ -346,3 +347,21 @@ def test_declaracoes_simultaneas_respeitam_a_capacidade_do_trecho(
     assert status_de(respostas) == [200, 200, 409, 409, 409, 409]
     _db.session.expire_all()
     assert _ativas(_db, viagem_buffer_aberto.id) == 2
+
+
+def test_solicitacao_e_desligar_rota_ao_mesmo_tempo(
+    app, _db, gestor, aluno, rota_sob_demanda, janela, relogio
+):
+    def desligar():
+        return app.test_client().put(
+            f"/v1/rotas/{rota_sob_demanda.id}", json={"ligada": False}, headers=gestor.headers
+        )
+
+    respostas = ao_mesmo_tempo(app, [_solicitar(app, aluno, rota_sob_demanda.id), desligar])
+
+    # Either the request opens the round and the switch-off sees it, or it runs after.
+    assert status_de(respostas) in ([201, 409], [200, 400])
+    _db.session.expire_all()
+    viagens = _db.session.query(Viagem).filter_by(rota_id=rota_sob_demanda.id).count()
+    rota = _db.session.get(Rota, rota_sob_demanda.id)
+    assert rota.ligada is (viagens == 1)

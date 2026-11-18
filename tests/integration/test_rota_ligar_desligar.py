@@ -2,8 +2,13 @@
 
 from datetime import date
 
+import pytest
+from sqlalchemy import update
+
+from app.core.exceptions import ValidationError
 from app.models.enum import StatusViagem
 from app.models.rota import Rota
+from app.services import solicitacoes_service
 from tests.factories.viagem_factory import ViagemFactory
 
 # relogio pins "today" to Monday 2026-11-02 (local time).
@@ -71,3 +76,16 @@ def test_rota_desligada_nao_aceita_solicitacao(gestor, aluno, rota_sob_demanda, 
     r = aluno.client.post(f"/v1/rotas/{rota_sob_demanda.id}/solicitacoes")
     assert r.status_code == 400
     assert "Rota desligada" in r.get_data(as_text=True)
+
+
+def test_solicitacao_rele_a_rota_sob_o_lock(_db, aluno, rota_sob_demanda, janela, relogio):
+    # Another transaction switched the route off after this one loaded it: the stale
+    # ligada=True in the session must not let the request open a round.
+    _db.session.execute(
+        update(Rota).where(Rota.id == rota_sob_demanda.id).values(ligada=False),
+        execution_options={"synchronize_session": False},
+    )
+    assert rota_sob_demanda.ligada is True
+
+    with pytest.raises(ValidationError, match="Rota desligada"):
+        solicitacoes_service.solicitar_viagem(str(aluno.user.id), str(rota_sob_demanda.id))
