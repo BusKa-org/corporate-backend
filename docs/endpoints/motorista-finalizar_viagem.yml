@@ -40,7 +40,7 @@ responses:
       properties:
         error:
           type: string
-          example: "Access restricted to motoristas"
+          example: "Apenas o motorista ou o gestor podem iniciar ou finalizar viagens"
   404:
     description: Viagem não encontrada, de outro motorista ou de outra organização.
     schema:
