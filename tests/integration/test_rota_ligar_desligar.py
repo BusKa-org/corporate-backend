@@ -6,7 +6,7 @@ import pytest
 from sqlalchemy import update
 from sqlalchemy.orm.attributes import set_committed_value
 
-from app.core.exceptions import ConflictError, ValidationError
+from app.core.exceptions import ConflictError, NotFoundError, ValidationError
 from app.models.enum import StatusViagem
 from app.models.rota import Rota
 from app.services import rotas_service, solicitacoes_service
@@ -110,3 +110,22 @@ def test_desligar_rele_a_rota_sob_o_lock(_db, gestor, horario_rota, relogio):
         rotas_service.update_rota(str(gestor.user.id), str(rota.id), {"ligada": False})
     _db.session.rollback()
     assert _db.session.get(Rota, rota.id).ligada is True
+
+
+def test_desligar_com_sessao_desatualizada_grava_no_banco(_db, gestor, rota):
+    # Stale ligada=False with no pending trip: the switch-off must still reach the row.
+    set_committed_value(rota, "ligada", False)
+
+    rotas_service.update_rota(str(gestor.user.id), str(rota.id), {"ligada": False})
+    _db.session.expire_all()
+    assert _db.session.get(Rota, rota.id).ligada is False
+
+
+def test_solicitacao_em_rota_removida_sob_o_lock(_db, aluno, rota_sob_demanda, janela, relogio):
+    _db.session.execute(
+        update(Rota).where(Rota.id == rota_sob_demanda.id).values(ativa=False),
+        execution_options={"synchronize_session": False},
+    )
+
+    with pytest.raises(NotFoundError):
+        solicitacoes_service.solicitar_viagem(str(aluno.user.id), str(rota_sob_demanda.id))
