@@ -1,6 +1,6 @@
 """Incident resolution stays inside the manager's organization."""
 
-from app.models.enum import StatusOcorrencia
+from app.models.enum import StatusOcorrencia, UserStatus
 from app.models.notificacao import Notificacao
 from app.models.ocorrencia import Ocorrencia
 
@@ -68,6 +68,32 @@ def test_resposta_vazia_ou_acima_do_limite_devolve_400(aluno, gestor, app):
 
     assert gestor.client.put(url, json={"resposta": "   "}).status_code == 400
     assert gestor.client.put(url, json={"resposta": "x" * (limite + 1)}).status_code == 400
+
+
+def test_apenas_gestor_ativo_responde_ocorrencia(aluno, gestor, _db):
+    ocorrencia_id = _criar_ocorrencia(aluno)
+    url = f"/v1/ocorrencias/{ocorrencia_id}/resposta"
+
+    assert aluno.client.put(url, json={"resposta": "Eu mesmo"}).status_code == 403
+
+    gestor.user.status = UserStatus.PENDING_SIGNUP
+    _db.session.commit()
+    assert gestor.client.put(url, json={"resposta": "Pendente"}).status_code == 403
+
+    _db.session.expire_all()
+    assert _db.session.get(Ocorrencia, ocorrencia_id).resposta is None
+
+
+def test_nova_resposta_substitui_a_anterior_e_notifica_de_novo(aluno, gestor, _db):
+    ocorrencia_id = _criar_ocorrencia(aluno)
+    url = f"/v1/ocorrencias/{ocorrencia_id}/resposta"
+    gestor.client.put(url, json={"resposta": "Primeira"})
+
+    response = gestor.client.put(url, json={"resposta": "Segunda"})
+
+    assert response.status_code == 200
+    assert response.get_json()["resposta"] == "Segunda"
+    assert Notificacao.query.filter_by(usuario_id=aluno.user.id).count() == 2
 
 
 def test_autor_ve_a_resposta_nas_suas_ocorrencias(aluno, other_aluno, gestor):
