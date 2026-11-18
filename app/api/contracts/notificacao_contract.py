@@ -18,6 +18,10 @@ def get_notificacao_input_model(api):
                 example="COLE_O_UUID_DA_ROTA_AQUI",
             ),
             "viagem_id": fields.String(description="ID da viagem (opcional)", example=""),
+            "destinatario_id": fields.String(
+                description="ID de um único usuário da organização (apenas gestor, opcional)",
+                example="",
+            ),
         },
     )
 
