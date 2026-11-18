@@ -31,11 +31,15 @@ def test_notificar_por_gestor_sucesso(app):
             mock_aluno_2.aluno_id = "aluno-2"
             mock_rota_query.filter_by.return_value.all.return_value = [mock_aluno_1, mock_aluno_2]
 
-            dados = {"titulo": "Aviso", "mensagem": "Teste de mensagem", "rota_id": "rota_123"}
+            dados = {
+                "titulo": "Aviso",
+                "mensagem": "Teste de mensagem",
+                "rota_id": "1b6f7a3e-2c4d-4e5f-8a9b-0c1d2e3f4a5b",
+            }
 
             resultado = NotificacaoService.notificar_por_gestor("user_gestor_id", dados)
 
-            assert resultado["message"] == "Notificação enviada para 2 aluno(s) com sucesso."
+            assert resultado["message"] == "Notificação enviada para 2 usuário(s) com sucesso."
             assert mock_criar.call_count == 2
             mock_commit.assert_called_once()
             mock_audit.log_user_action.assert_called_once()
@@ -51,7 +55,11 @@ def test_notificar_por_gestor_falha_nao_eh_gestor(app):
             mock_aluno.role = UserRole.ALUNO
             mock_get.return_value = mock_aluno
 
-            dados = {"titulo": "Aviso", "mensagem": "Teste", "rota_id": "123"}
+            dados = {
+                "titulo": "Aviso",
+                "mensagem": "Teste",
+                "rota_id": "1b6f7a3e-2c4d-4e5f-8a9b-0c1d2e3f4a5b",
+            }
 
             with pytest.raises(ForbiddenError) as excinfo:
                 NotificacaoService.notificar_por_gestor("user_aluno_id", dados)
@@ -73,9 +81,13 @@ def test_notificar_por_gestor_falha_sem_alunos(app):
             mock_get.return_value = mock_gestor
 
             mock_rota_query.filter_by.return_value.all.return_value = []
-            dados = {"titulo": "Aviso", "mensagem": "Teste", "rota_id": "123"}
+            dados = {
+                "titulo": "Aviso",
+                "mensagem": "Teste",
+                "rota_id": "1b6f7a3e-2c4d-4e5f-8a9b-0c1d2e3f4a5b",
+            }
 
             with pytest.raises(NotFoundError) as excinfo:
                 NotificacaoService.notificar_por_gestor("user_gestor_id", dados)
 
-            assert "Nenhum aluno encontrado" in str(excinfo.value)
+            assert "Nenhum usuário encontrado" in str(excinfo.value)
