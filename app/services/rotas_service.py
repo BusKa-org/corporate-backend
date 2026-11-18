@@ -175,7 +175,7 @@ def create_rota(gestor_id: str, data: dict[str, Any]) -> Rota:
         if veiculo_id:
             veiculo_id = _exigir_onibus_da_organizacao(veiculo_id, user.organizacao_id)
         # If a driver creates a route, automatically assign themselves as the default driver
-        motorista_id = data.get("motorista_padrao_id")
+        motorista_id = data.get("motorista_padrao_id") or None
         if not motorista_id and user.role == UserRole.MOTORISTA:
             motorista_id = user.id
         if motorista_id:
@@ -356,8 +356,8 @@ def travar_rota(rota_id: Any) -> bool:
 
 
 def _exigir_onibus_da_organizacao(onibus_id: Any, organizacao_id: Any) -> Any:
-    """Lock the vehicle row after the route, as exigir_motorista_ativo does for the driver:
-    a concurrent delete_onibus either waits for this commit or makes this a clean 404.
+    """FOR KEY SHARE on the vehicle after the route lock: enough to make a concurrent
+    delete_onibus wait for this commit, or make this a clean 404 if it ran first.
 
     Raises: ValidationError, NotFoundError
     """
@@ -366,7 +366,7 @@ def _exigir_onibus_da_organizacao(onibus_id: Any, organizacao_id: Any) -> Any:
     linha = db.session.execute(
         select(Onibus.id)
         .where(Onibus.id == onibus_uuid, Onibus.organizacao_id == organizacao_id)
-        .with_for_update(key_share=True)
+        .with_for_update(read=True, key_share=True)
     ).first()
     if linha is None:
         raise NotFoundError("Ônibus não encontrado")
@@ -707,7 +707,7 @@ def update_rota(user_id: str, rota_id: str, data: dict[str, Any]) -> Rota:
             updated_fields.append("veiculo_padrao_id")
 
         if "motorista_padrao_id" in data:
-            motorista_id = data.get("motorista_padrao_id")
+            motorista_id = data.get("motorista_padrao_id") or None
             if motorista_id:
                 motorista_id = viagens_service.exigir_motorista_ativo(
                     motorista_id, rota.organizacao_id
