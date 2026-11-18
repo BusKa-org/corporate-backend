@@ -4,11 +4,12 @@ from datetime import date
 
 import pytest
 from sqlalchemy import update
+from sqlalchemy.orm.attributes import set_committed_value
 
-from app.core.exceptions import ValidationError
+from app.core.exceptions import ConflictError, ValidationError
 from app.models.enum import StatusViagem
 from app.models.rota import Rota
-from app.services import solicitacoes_service
+from app.services import rotas_service, solicitacoes_service
 from tests.factories.viagem_factory import ViagemFactory
 
 # relogio pins "today" to Monday 2026-11-02 (local time).
@@ -89,3 +90,23 @@ def test_solicitacao_rele_a_rota_sob_o_lock(_db, aluno, rota_sob_demanda, janela
 
     with pytest.raises(ValidationError, match="Rota desligada"):
         solicitacoes_service.solicitar_viagem(str(aluno.user.id), str(rota_sob_demanda.id))
+
+
+def test_desligar_rele_a_rota_sob_o_lock(_db, gestor, horario_rota, relogio):
+    # This gestor loaded the route while it was off; another one switched it on and a
+    # trip opened. The stale ligada=False must not skip the pending-trip check.
+    viagem = ViagemFactory(
+        horario_rota_id=horario_rota.id,
+        rota_id=horario_rota.rota_id,
+        status=StatusViagem.AGENDADA,
+        data=SEGUNDA_FUTURA,
+    )
+    _db.session.add(viagem)
+    _db.session.commit()
+    rota = _db.session.get(Rota, horario_rota.rota_id)
+    set_committed_value(rota, "ligada", False)
+
+    with pytest.raises(ConflictError):
+        rotas_service.update_rota(str(gestor.user.id), str(rota.id), {"ligada": False})
+    _db.session.rollback()
+    assert _db.session.get(Rota, rota.id).ligada is True
