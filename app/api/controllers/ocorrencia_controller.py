@@ -34,7 +34,14 @@ _ocorrencia_output = api.model(
         "descricao": fields.String,
         "status": fields.String,
         "created_at": fields.String(description="ISO 8601 ou null"),
+        "resposta": fields.String(description="Resposta do gestor ou null"),
+        "respondida_em": fields.String(description="ISO 8601 ou null"),
     },
+)
+
+_resposta_input = api.model(
+    "OcorrenciaRespostaInput",
+    {"resposta": fields.String(required=True, description="Resposta do gestor ao autor")},
 )
 
 
@@ -48,6 +55,8 @@ def _serialize(o) -> dict[str, Any]:
         "descricao": o.descricao,
         "status": o.status.value,
         "created_at": o.created_at.isoformat() if o.created_at else None,
+        "resposta": o.resposta,
+        "respondida_em": o.respondida_em.isoformat() if o.respondida_em else None,
     }
 
 
@@ -86,4 +95,30 @@ class OcorrenciaResolverResource(Resource):
         """(Manager) Marks an incident as resolved"""
         gestor_id = get_jwt_identity()
         ocorrencia = OcorrenciaService.resolver(gestor_id, str(ocorrencia_id))
+        return _serialize(ocorrencia), 200
+
+
+@api.route("/minhas")
+class OcorrenciaMinhasResource(Resource):
+    @api.doc("listar_minhas_ocorrencias")
+    @api.response(200, "Success", [_ocorrencia_output])
+    @jwt_required()
+    def get(self) -> tuple[list[dict[str, Any]], int]:
+        """(Student / Driver) Lists own incidents with the manager's reply"""
+        ocorrencias = OcorrenciaService.listar_minhas(get_jwt_identity())
+        return [_serialize(o) for o in ocorrencias], 200
+
+
+@api.route("/<uuid:ocorrencia_id>/resposta")
+class OcorrenciaRespostaResource(Resource):
+    @api.doc("responder_ocorrencia")
+    @api.expect(_resposta_input, validate=True)
+    @api.response(200, "Ocorrência respondida", _ocorrencia_output)
+    @api.response(404, "Ocorrência não encontrada")
+    @jwt_required()
+    def put(self, ocorrencia_id: UUID) -> tuple[dict[str, Any], int]:
+        """(Manager) Replies to an incident"""
+        gestor_id = get_jwt_identity()
+        data = request.get_json(silent=True) or {}
+        ocorrencia = OcorrenciaService.responder(gestor_id, str(ocorrencia_id), data)
         return _serialize(ocorrencia), 200
