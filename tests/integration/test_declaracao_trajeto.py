@@ -146,4 +146,4 @@ def test_aviso_do_gestor_por_viagem_alcanca_quem_solicitou(app, _db, buffer, alu
             str(gestor.user.id), {"viagem_id": str(buffer.id), "titulo": "Aviso", "mensagem": "Oi"}
         )
 
-    assert resultado["message"].startswith("Notificação enviada para 1 aluno(s)")
+    assert resultado["message"].startswith("Notificação enviada para 1 usuário(s)")
