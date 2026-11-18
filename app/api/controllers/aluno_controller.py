@@ -12,7 +12,8 @@ from app.schemas.aluno_schema import (
     AlunoMeUpdateRequestSchema,
     AlunoResponseSchema,
 )
-from app.services import aluno_service
+from app.schemas.projeto_schema import AlunoProjetoRequestSchema
+from app.services import aluno_service, projeto_service
 
 api = Namespace("alunos", description="Área do Aluno (App)")
 
@@ -23,6 +24,7 @@ models = aluno_contract.register_models(api)
 me_update_schema = AlunoMeUpdateRequestSchema()
 aluno_response_schema = AlunoResponseSchema()
 aluno_list_response_schema = AlunoListResponseSchema()
+aluno_projeto_request_schema = AlunoProjetoRequestSchema()
 
 foto_upload_parser = reqparse.RequestParser()
 foto_upload_parser.add_argument(
@@ -79,6 +81,7 @@ class AlunoFotoResource(Resource):
 class AlunoListResource(Resource):
     @api.doc("list_alunos_gestor")
     @api.param("status", "Filter by status (PENDING_APPROVAL, ACTIVE, ...)", _in="query")
+    @api.param("projeto_id", "Filtra pelo projeto (UUID de um projeto da organização)", _in="query")
     @api.response(200, "Success", models["aluno_list_response"])
     @jwt_required()
     def get(self) -> tuple[dict[str, Any], int]:
@@ -87,7 +90,10 @@ class AlunoListResource(Resource):
 
         user_id = get_jwt_identity()
         status_filter = flask_request.args.get("status")
-        alunos = aluno_service.list_alunos_gestor(user_id, status=status_filter)
+        projeto_filter = flask_request.args.get("projeto_id")
+        alunos = aluno_service.list_alunos_gestor(
+            user_id, status=status_filter, projeto_id=projeto_filter
+        )
         return (
             aluno_list_response_schema.dump(
                 {
@@ -108,4 +114,26 @@ class AlunoDetailResource(Resource):
         """(Manager) Gets a student's full details"""
         gestor_id = get_jwt_identity()
         aluno = aluno_service.get_aluno_by_id(gestor_id, aluno_id)
+        return aluno_response_schema.dump(aluno), 200
+
+
+@api.route("/<string:aluno_id>/projeto")
+class AlunoProjetoResource(Resource):
+    @api.doc(
+        "set_aluno_projeto",
+        responses={
+            400: "Dados inválidos ou projeto desativado",
+            403: "Não é gestor ativo",
+            404: "Aluno ou projeto não encontrado na organização",
+        },
+    )
+    @api.expect(models["aluno_projeto_request"])
+    @api.response(200, "Success", models["aluno_response"])
+    @jwt_required()
+    def put(self, aluno_id: str) -> tuple[dict[str, Any], int]:
+        """(Manager) Assigns the student to a project, or removes them with null"""
+        payload = aluno_projeto_request_schema.load(request.get_json(silent=True) or {})
+        aluno = projeto_service.definir_projeto_do_aluno(
+            get_jwt_identity(), aluno_id, payload["projeto_id"]
+        )
         return aluno_response_schema.dump(aluno), 200

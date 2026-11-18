@@ -627,6 +627,33 @@ Criar, reenviar e cancelar convites e resolver ocorrências também exigem gesto
 | 404 | não encontrado, não é motorista, ou motorista `DELETED` |
 | 409 | cadastro não está `PENDING_SIGNUP` (já `ACTIVE`, ou `DISABLED`) |
 
+## Projetos dos alunos (gestor)
+
+Fora do documento de requisitos; o mais próximo é o RF-02 (usuário vinculado a instituição,
+gerido pelo gestor). O gestor divide os alunos da organização em projetos (ex.: a empresa ou
+o projeto em que a pessoa trabalha no parque).
+
+| Método | Rota | Quem |
+|---|---|---|
+| `GET` | `/v1/projetos` | gestor (ativos e desativados, por nome) |
+| `POST` | `/v1/projetos` `{nome}` | gestor `ACTIVE` |
+| `PATCH` | `/v1/projetos/<id>` `{nome?, ativo?}` | gestor `ACTIVE`; renomeia, desativa ou reativa |
+| `PUT` | `/v1/alunos/<aluno_id>/projeto` `{projeto_id}` | gestor `ACTIVE`; `null` tira o aluno do projeto |
+| `GET` | `/v1/alunos/?projeto_id=<id>` | gestor; filtra a lista de alunos pelo projeto |
+
+- `nome`: 1 a 100 caracteres, sem os espaços das pontas; único na organização sem diferenciar
+  maiúsculas (409 `CONFLICT`). O mesmo nome em outra organização é permitido.
+- Projeto não é apagado, só desativado. Desativado não recebe alunos novos (400), mas quem já
+  estava nele continua vinculado.
+- `AlunoResponse` ganha `projeto_id` e `projeto` (nome), ambos `null` sem projeto.
+
+| Status | Quando |
+|---|---|
+| 400 | id que não é UUID; `nome` inválido; `PATCH` sem campos; projeto desativado |
+| 403 | não é gestor; escrita por gestor que não está `ACTIVE` |
+| 404 | projeto ou aluno de outra organização, ou inexistente |
+| 409 | nome já usado na organização |
+
 ## Rate limit
 
 Every route is limited by Flask-Limiter. Over the limit, the API answers `429`
