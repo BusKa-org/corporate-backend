@@ -589,9 +589,9 @@ def get_by_id(user_id: str, rota_id: str) -> Rota:
 
 
 def update_rota(user_id: str, rota_id: str, data: dict[str, Any]) -> Rota:
-    """Update route name, driver, or vehicle.
+    """Update route name, driver, vehicle, or switch it on/off.
 
-    Raises: ForbiddenError, NotFoundError, AppError
+    Raises: ForbiddenError, NotFoundError, ConflictError, AppError
     """
     validate_uuid(user_id, "User ID")
     validate_uuid(rota_id, "Rota ID")
@@ -628,9 +628,32 @@ def update_rota(user_id: str, rota_id: str, data: dict[str, Any]) -> Rota:
     if rota.tipo != TipoViagem.SOB_DEMANDA and any(k in data for k in PARAMETROS_SOB_DEMANDA):
         raise ValidationError("Parâmetros de buffer só se aplicam a rotas sob demanda")
 
+    desligando = data.get("ligada") is False and rota.ligada
+    if desligando:
+        # Same lock as trip generation, so no trip is created between this check and the commit.
+        travar_rota(rota.id)
+        pendente = (
+            db.session.query(Viagem.id)
+            .outerjoin(HorarioRota, Viagem.horario_rota_id == HorarioRota.id)
+            .filter(
+                or_(Viagem.rota_id == rota.id, HorarioRota.rota_id == rota.id),
+                _filtro_viagem_pendente(),
+            )
+            .first()
+        )
+        if pendente:
+            raise ConflictError(
+                "Há viagens agendadas ou em andamento nesta rota; "
+                "cancele-as ou aguarde a finalização para desligá-la"
+            )
+
     updated_fields: list[str] = []
 
     try:
+        if "ligada" in data:
+            rota.ligada = data["ligada"]
+            updated_fields.append("ligada")
+
         if "nome" in data:
             rota.nome = data.get("nome")
             updated_fields.append("nome")

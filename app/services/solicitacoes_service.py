@@ -75,6 +75,11 @@ def solicitar_viagem(user_id: str, rota_id: str) -> SolicitacaoViagem:
     if rota.tipo == TipoViagem.FIXA:
         raise ValidationError("Rota de horário fixo, use a confirmação de presença")
 
+    # shortcut: checked without the route lock, so a request racing the switch-off can still
+    # open a round; lock the route here if that ever shows up in practice.
+    if not rota.ligada:
+        raise ValidationError("Rota desligada, não aceita novas solicitações")
+
     if rota.veiculo_padrao_id is None:
         raise ValidationError("Rota sem veículo padrão definido, não é possível solicitar viagem")
 

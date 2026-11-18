@@ -451,6 +451,10 @@ def gerar_viagem(user_id: str, data_input: dict) -> Viagem:
     # Same lock as the schedule edits in rotas_service: two generators, or a generator
     # and an edit, run one after the other, and every read below sees the committed state.
     travar_rota(rota.id)
+    # Re-read under the lock: the route may have been switched off while we waited.
+    db.session.refresh(rota)
+    if not rota.ligada:
+        raise ValidationError("Rota desligada, não é possível gerar viagens")
     horario_selecionado = _resolver_horario(rota, dia_semana, data_input.get("horario_rota_id"))
 
     # By time and direction, not horario_rota_id: a versioned schedule gets a new id.
