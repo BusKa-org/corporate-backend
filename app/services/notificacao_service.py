@@ -8,7 +8,7 @@ from firebase_admin import messaging
 
 from app.core.exceptions import AppError, ForbiddenError, NotFoundError, ValidationError
 from app.models.base import db
-from app.models.enum import StatusSolicitacao, UserRole, UserStatus
+from app.models.enum import StatusSolicitacao, StatusViagem, UserRole, UserStatus
 from app.models.notificacao import Notificacao
 from app.models.rota import Rota, RotaAluno
 from app.models.user import User
@@ -69,8 +69,6 @@ class NotificacaoService:
                 raise ForbiddenError(
                     "Você só pode enviar avisos para viagens que você está conduzindo."
                 )
-            from app.models.enum import StatusViagem
-
             if viagem.status != StatusViagem.EM_ANDAMENTO:
                 raise ForbiddenError("Você só pode enviar avisos durante uma viagem em andamento.")
         elif user.role != UserRole.GESTOR:
@@ -88,7 +86,8 @@ class NotificacaoService:
         if not titulo or not mensagem:
             raise ValidationError("Título e mensagem são obrigatórios.")
 
-        if destinatario_id and (rota_id or viagem_id):
+        # rota_id + viagem_id would let a motorista reach a whole route through its own trip.
+        if (destinatario_id and (rota_id or viagem_id)) or (rota_id and viagem_id):
             raise ValidationError(
                 "Informe apenas um destino: rota_id, viagem_id ou destinatario_id."
             )
@@ -122,8 +121,22 @@ class NotificacaoService:
                 rota_da_viagem = viagem.rota
             elif viagem and viagem.horario_rota is not None:
                 rota_da_viagem = viagem.horario_rota.rota
-            if not rota_da_viagem or rota_da_viagem.organizacao_id != user.organizacao_id:
+            if (
+                not viagem
+                or not rota_da_viagem
+                or rota_da_viagem.organizacao_id != user.organizacao_id
+            ):
                 raise NotFoundError("Viagem não encontrada.")
+            if viagem.status in (StatusViagem.FINALIZADA, StatusViagem.CANCELADA):
+                raise ValidationError("Não é possível enviar aviso para uma viagem encerrada.")
+            # The motorista sending the notice does not need a copy of it.
+            motorista = viagem.motorista
+            if (
+                motorista is not None
+                and str(motorista.id) != str(user_id)
+                and motorista.status == UserStatus.ACTIVE
+            ):
+                usuarios_notificados.add(motorista.id)
             confirmados = AlunosConfirmados.query.filter_by(
                 viagem_id=viagem_id, confirmacao=True
             ).all()
@@ -152,7 +165,11 @@ class NotificacaoService:
                 action="enviar_notificacao_massa",
                 user_id=user_id,
                 resource_type="notificacao",
-                details={"destinatario_id": destinatario_id},
+                details={
+                    "destinatario_id": destinatario_id,
+                    "rota_id": rota_id,
+                    "viagem_id": viagem_id,
+                },
             )
 
             return {

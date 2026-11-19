@@ -151,7 +151,8 @@ def delete_onibus(user_id: str, onibus_id: str) -> None:
 
     try:
         # Routes first, as everywhere else: ON DELETE SET NULL writes them after the onibus row.
-        # shortcut: a route pointed here after this SELECT stays unlocked; re-check if it bites.
+        # shortcut: a route pointed here after this SELECT is written after the onibus row and can
+        # deadlock with a tx holding that route (Postgres aborts one), revisit if deadlocks show up.
         db.session.execute(
             select(Rota.id)
             .where(Rota.veiculo_padrao_id == onibus.id)

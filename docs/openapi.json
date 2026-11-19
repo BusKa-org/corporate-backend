@@ -17,6 +17,12 @@
         "parameters": [
           {
             "in": "query",
+            "description": "Filtra pelo projeto (UUID de um projeto da organização)",
+            "name": "projeto_id",
+            "type": "string"
+          },
+          {
+            "in": "query",
             "description": "Filter by status (PENDING_APPROVAL, ACTIVE, ...)",
             "name": "status",
             "type": "string"
@@ -2321,6 +2327,9 @@
               "$ref": "#/definitions/UserListResponse"
             }
           },
+          "400": {
+            "description": "Status inválido"
+          },
           "403": {
             "description": "Forbidden - not a gestor"
           }
@@ -2328,6 +2337,12 @@
         "summary": "Lists drivers in the Manager's organization",
         "operationId": "list_motoristas",
         "parameters": [
+          {
+            "in": "query",
+            "description": "Filtra por status (PENDING_SIGNUP, ACTIVE, ...)",
+            "name": "status",
+            "type": "string"
+          },
           {
             "name": "X-Fields",
             "in": "header",
@@ -3097,6 +3112,151 @@
           "ocorrencias"
         ]
       }
+    },
+    "/v1/alunos/{aluno_id}/projeto": {
+      "parameters": [
+        {
+          "name": "aluno_id",
+          "in": "path",
+          "required": true,
+          "type": "string"
+        }
+      ],
+      "put": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/AlunoResponse"
+            }
+          },
+          "400": {
+            "description": "Dados inválidos ou projeto desativado"
+          },
+          "403": {
+            "description": "Não é gestor ativo"
+          },
+          "404": {
+            "description": "Aluno ou projeto não encontrado na organização"
+          }
+        },
+        "summary": "(Manager) Assigns the student to a project, or removes them with null",
+        "operationId": "set_aluno_projeto",
+        "parameters": [
+          {
+            "name": "payload",
+            "required": true,
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/AlunoProjetoRequest"
+            }
+          }
+        ],
+        "tags": [
+          "alunos"
+        ]
+      }
+    },
+    "/v1/projetos": {
+      "post": {
+        "responses": {
+          "201": {
+            "description": "Created",
+            "schema": {
+              "$ref": "#/definitions/ProjetoResponse"
+            }
+          },
+          "400": {
+            "description": "Nome inválido"
+          },
+          "403": {
+            "description": "Não é gestor ativo"
+          },
+          "409": {
+            "description": "Nome já usado"
+          }
+        },
+        "summary": "Creates a project in the organization (gestor)",
+        "operationId": "create_projeto",
+        "parameters": [
+          {
+            "name": "payload",
+            "required": true,
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/ProjetoCreateRequest"
+            }
+          }
+        ],
+        "tags": [
+          "projetos"
+        ]
+      },
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/ProjetoListResponse"
+            }
+          },
+          "403": {
+            "description": "Não é gestor"
+          }
+        },
+        "summary": "Lists the organization's projects, active and inactive (gestor)",
+        "operationId": "list_projetos",
+        "tags": [
+          "projetos"
+        ]
+      }
+    },
+    "/v1/projetos/{projeto_id}": {
+      "parameters": [
+        {
+          "name": "projeto_id",
+          "in": "path",
+          "required": true,
+          "type": "string"
+        }
+      ],
+      "patch": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/ProjetoResponse"
+            }
+          },
+          "400": {
+            "description": "Dados inválidos"
+          },
+          "403": {
+            "description": "Não é gestor ativo"
+          },
+          "404": {
+            "description": "Projeto não encontrado na organização"
+          },
+          "409": {
+            "description": "Nome já usado"
+          }
+        },
+        "summary": "Renames, deactivates or reactivates a project (gestor)",
+        "operationId": "update_projeto",
+        "parameters": [
+          {
+            "name": "payload",
+            "required": true,
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/ProjetoUpdateRequest"
+            }
+          }
+        ],
+        "tags": [
+          "projetos"
+        ]
+      }
     }
   },
   "info": {
@@ -3191,6 +3351,10 @@
     {
       "name": "parametros-operacao",
       "description": "Parâmetros da operação sob demanda"
+    },
+    {
+      "name": "projetos",
+      "description": "Projetos dos alunos da organização"
     }
   ],
   "definitions": {
@@ -4027,12 +4191,12 @@
         },
         "rota_id": {
           "type": "string",
-          "description": "ID da rota (opcional se enviar viagem_id)",
+          "description": "ID da rota (opcional, não combinar com viagem_id)",
           "example": "COLE_O_UUID_DA_ROTA_AQUI"
         },
         "viagem_id": {
           "type": "string",
-          "description": "ID da viagem (opcional)",
+          "description": "ID da viagem (opcional): avisa os passageiros e o motorista da viagem; recusado se a viagem estiver finalizada ou cancelada",
           "example": ""
         },
         "destinatario_id": {
@@ -5678,6 +5842,14 @@
         },
         "observacao_acessibilidade": {
           "type": "string"
+        },
+        "projeto_id": {
+          "type": "string",
+          "description": "UUID do projeto do aluno (ou null)"
+        },
+        "projeto": {
+          "type": "string",
+          "description": "Nome do projeto do aluno (ou null)"
         }
       },
       "type": "object"
@@ -6585,6 +6757,84 @@
         "resposta": {
           "type": "string",
           "description": "Resposta do gestor ao autor"
+        }
+      },
+      "type": "object"
+    },
+    "AlunoProjetoRequest": {
+      "required": [
+        "projeto_id"
+      ],
+      "properties": {
+        "projeto_id": {
+          "type": "string",
+          "description": "UUID do projeto; null tira o aluno do projeto"
+        }
+      },
+      "type": "object"
+    },
+    "ProjetoCreateRequest": {
+      "required": [
+        "nome"
+      ],
+      "properties": {
+        "nome": {
+          "type": "string",
+          "description": "Nome do projeto, único na organização (sem diferenciar maiúsculas)",
+          "minLength": 1,
+          "maxLength": 100
+        }
+      },
+      "type": "object"
+    },
+    "ProjetoResponse": {
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "UUID"
+        },
+        "nome": {
+          "type": "string",
+          "description": "Nome"
+        },
+        "ativo": {
+          "type": "boolean",
+          "description": "Projeto ativo"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Data de criação"
+        }
+      },
+      "type": "object"
+    },
+    "ProjetoListResponse": {
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ProjetoResponse"
+          }
+        },
+        "total": {
+          "type": "integer",
+          "description": "Total de projetos"
+        }
+      },
+      "type": "object"
+    },
+    "ProjetoUpdateRequest": {
+      "properties": {
+        "nome": {
+          "type": "string",
+          "description": "Novo nome",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "ativo": {
+          "type": "boolean",
+          "description": "false desativa, true reativa"
         }
       },
       "type": "object"

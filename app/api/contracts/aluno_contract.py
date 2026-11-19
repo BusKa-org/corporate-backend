@@ -57,6 +57,8 @@ def register_models(api):
             "matricula": fields.String(description="Matrícula"),
             "escola": fields.String(description="Nome da escola"),
             "instituicao_id": fields.String(description="UUID da instituição"),
+            "projeto_id": fields.String(description="UUID do projeto do aluno (ou null)"),
+            "projeto": fields.String(description="Nome do projeto do aluno (ou null)"),
             "status": fields.String(
                 description="Status (PENDING_SIGNUP, PENDING_APPROVAL, ACTIVE, DISABLED, DELETED)"
             ),
@@ -79,7 +81,17 @@ def register_models(api):
         },
     )
 
+    aluno_projeto_request = api.model(
+        "AlunoProjetoRequest",
+        {
+            "projeto_id": fields.String(
+                required=True, description="UUID do projeto; null tira o aluno do projeto"
+            ),
+        },
+    )
+
     return {
+        "aluno_projeto_request": aluno_projeto_request,
         "me_update_request": me_update_request,
         "aluno_response": aluno_response,
         "aluno_list_response": aluno_list_response,

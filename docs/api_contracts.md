@@ -578,6 +578,16 @@ muda o `status`: resolver continua em `PATCH /v1/ocorrencias/<id>/resolver`.
 - As respostas de ocorrência (criar, listar, resolver, minhas) ganham `resposta` e
   `respondida_em` (ISO 8601), ambos `null` enquanto não houver resposta.
 
+## Aviso do gestor para uma viagem (RF-08)
+
+`POST /v1/notificacoes/` `{titulo, mensagem, viagem_id}`: avisa só as pessoas daquela viagem,
+não a rota inteira. Destinatários: alunos confirmados, solicitações `ATIVA` e o motorista da
+viagem, se ativo (o motorista que envia não recebe cópia). O motorista continua limitado à
+própria viagem `EM_ANDAMENTO` (403 fora disso).
+
+- Gestor, viagem `FINALIZADA` ou `CANCELADA`: 400. `viagem_id` junto com `rota_id`: 400. Viagem de
+  outra organização: 404.
+
 ## Acessibilidade do aluno
 
 `necessidades_acessibilidade` (lista de `CADEIRA_DE_RODAS`, `MOBILIDADE_REDUZIDA`,
@@ -618,6 +628,13 @@ O motorista criado pelo gestor nasce `PENDING_SIGNUP`; esta rota o passa para `A
 (exigido, por exemplo, para receber janela de disponibilidade). Retorna 200 com o usuário.
 A ordem das checagens é a mesma de `desativar`/`reativar`.
 
+Para a tela de aprovação, `GET /v1/users/motoristas?status=PENDING_SIGNUP` lista os
+motoristas pendentes da organização do gestor. `status` aceita qualquer valor de
+`UserStatus`; valor inválido retorna 400 (igual em `GET /v1/alunos/?status=`), e quem não é
+gestor recebe 403. Sem `status`, lista
+todos. Não há rejeição: o motorista criado por engano é removido com
+`DELETE /v1/users/motoristas/<id>`.
+
 A ativação não registra aceite do termo (RF-09). Todo motorista sem o aceite da versão
 vigente recebe 403 em qualquer rota autenticada, exceto `/v1/auth/*`, `/v1/consentimento`,
 `/v1/users/me` (GET, PATCH, DELETE), `/v1/users/change-password` e `/v1/users/fcm-token`
@@ -632,6 +649,33 @@ Criar, reenviar e cancelar convites e resolver ocorrências também exigem gesto
 | 403 | não é gestor ou o gestor não está `ACTIVE`; conta de outra organização (qualquer papel ou status) |
 | 404 | não encontrado, não é motorista, ou motorista `DELETED` |
 | 409 | cadastro não está `PENDING_SIGNUP` (já `ACTIVE`, ou `DISABLED`) |
+
+## Projetos dos alunos (gestor)
+
+Fora do documento de requisitos; o mais próximo é o RF-02 (usuário vinculado a instituição,
+gerido pelo gestor). O gestor divide os alunos da organização em projetos (ex.: a empresa ou
+o projeto em que a pessoa trabalha no parque).
+
+| Método | Rota | Quem |
+|---|---|---|
+| `GET` | `/v1/projetos` | gestor (ativos e desativados, por nome) |
+| `POST` | `/v1/projetos` `{nome}` | gestor `ACTIVE` |
+| `PATCH` | `/v1/projetos/<id>` `{nome?, ativo?}` | gestor `ACTIVE`; renomeia, desativa ou reativa |
+| `PUT` | `/v1/alunos/<aluno_id>/projeto` `{projeto_id}` | gestor `ACTIVE`; `null` tira o aluno do projeto |
+| `GET` | `/v1/alunos/?projeto_id=<id>` | gestor; filtra a lista de alunos pelo projeto |
+
+- `nome`: 1 a 100 caracteres, sem os espaços das pontas; único na organização sem diferenciar
+  maiúsculas (409 `CONFLICT`). O mesmo nome em outra organização é permitido.
+- Projeto não é apagado, só desativado. Desativado não recebe alunos novos (400), mas quem já
+  estava nele continua vinculado.
+- `AlunoResponse` ganha `projeto_id` e `projeto` (nome), ambos `null` sem projeto.
+
+| Status | Quando |
+|---|---|
+| 400 | id que não é UUID; `nome` inválido; `PATCH` sem campos; projeto desativado |
+| 403 | não é gestor; escrita por gestor que não está `ACTIVE` |
+| 404 | projeto ou aluno de outra organização, inexistente, ou aluno com conta excluída |
+| 409 | nome já usado na organização |
 
 ## Rate limit
 

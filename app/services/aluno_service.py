@@ -19,6 +19,7 @@ from app.models.enum import StatusSolicitacao, StatusViagem, UserRole, UserStatu
 from app.models.geo import Endereco, Ponto
 from app.models.user import Aluno, User
 from app.models.viagem import AlunosConfirmados, SolicitacaoViagem, Viagem
+from app.services import projeto_service
 from app.services.user_service import _get_gestor_or_403, _get_user_or_404
 from app.utils.imagem import dimensoes, remover_metadados
 from app.utils.validators import validate_uuid
@@ -127,15 +128,17 @@ def get_aluno_by_id(gestor_id: str, aluno_id: str) -> Aluno:
     return aluno
 
 
-def list_alunos_gestor(gestor_id: str, status: str | None = None) -> list[Aluno]:
-    """List the organization's students (managers only), optionally filtered by status."""
+def list_alunos_gestor(
+    gestor_id: str, status: UserStatus | None = None, projeto_id: str | None = None
+) -> list[Aluno]:
+    """List the organization's students (managers only), optionally filtered by status/project."""
     gestor = _get_gestor_or_403(gestor_id, "Apenas gestores podem listar alunos")
     q = db.session.query(Aluno).filter_by(organizacao_id=gestor.organizacao_id)
     if status:
-        try:
-            q = q.filter(Aluno.status == UserStatus[status])
-        except KeyError:
-            pass
+        q = q.filter(Aluno.status == status)
+    if projeto_id:
+        projeto = projeto_service.projeto_da_organizacao(gestor.organizacao_id, projeto_id)
+        q = q.filter(Aluno.projeto_id == projeto.id)
     return q.all()
 
 

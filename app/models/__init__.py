@@ -3,4 +3,5 @@
 from .consentimento import Consentimento  # noqa: F401
 from .ocorrencia import Ocorrencia  # noqa: F401
 from .parametros_operacao import ParametrosOperacao  # noqa: F401
+from .projeto import Projeto  # noqa: F401
 from .telemetria import TelemetriaVeiculo  # noqa: F401

@@ -81,6 +81,7 @@ after the fork whose owner §2/§5 does not settle are marked "a classificar".
 | `onibus.py` | mixed | `Onibus` (Background IP) and `JanelaDisponibilidade` (PaqTcPB, availability windows) |
 | `credencial_embarque.py` | PaqTcPB | `CredencialEmbarque`, QR boarding |
 | `parametros_operacao.py` | PaqTcPB | `ParametrosOperacao`, on-demand operation parameters per organization |
+| `projeto.py` | PaqTcPB | `Projeto`, projects the gestor splits the organization's alunos into |
 | `organizacao.py`, `notificacao.py`, `password_reset.py`, `base.py` | Background IP | unmixed |
 | `consentimento.py`, `retencao_legal.py` | a classificar | LGPD consent and data kept after account deletion |
 | `convite.py` | a classificar | passenger invitations |
