@@ -46,6 +46,8 @@ class AlunoResponseSchema(BaseSchema):
     matricula = fields.String()
     escola = fields.String(attribute="instituicao.nome", dump_default=None)
     instituicao_id = fields.UUID(dump_default=None)
+    projeto_id = fields.UUID(dump_default=None)
+    projeto = fields.String(attribute="projeto.nome", dump_default=None)
 
     status = fields.String(attribute="status.value", dump_default=None)
     signup_completed_at = fields.DateTime(dump_default=None)
