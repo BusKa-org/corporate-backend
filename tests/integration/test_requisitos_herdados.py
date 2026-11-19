@@ -277,7 +277,7 @@ def test_rf07_motorista_de_outra_organizacao_nao_publica_a_localizacao(
     r = other_motorista.client.post(
         f"/v1/viagens/{viagem.id}/localizacao", json={"latitude": -7.2, "longitude": -35.9}
     )
-    assert r.status_code == 403
+    assert r.status_code == 404
     _assert_localizacao_intacta(_db, viagem)
 
 
@@ -307,7 +307,7 @@ def test_rf07_motorista_de_outra_organizacao_nao_sonda_o_status_da_viagem(
         f"/v1/viagens/{viagem_futura_agendada_com_motorista.id}/localizacao",
         json={"latitude": -7.2, "longitude": -35.9},
     )
-    assert r.status_code == 403
+    assert r.status_code == 404
     assert "AGENDADA" not in r.get_data(as_text=True)
 
 
