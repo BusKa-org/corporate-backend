@@ -4,7 +4,7 @@ from datetime import date, datetime
 from typing import Any
 
 from marshmallow import ValidationError as MarshmallowValidationError, fields, validates_schema
-from marshmallow.validate import OneOf, Range
+from marshmallow.validate import Length, OneOf, Range
 
 from app.models.enum import StatusViagem
 from app.schemas.common import BaseSchema, PaginacaoQuerySchema
@@ -101,6 +101,12 @@ class ViagemAcaoRequestSchema(BaseSchema):
     """PUT /viagens/<id>/acao"""
 
     acao = fields.String(required=True, validate=OneOf(["INICIAR", "FINALIZAR"]))
+
+
+class ViagemCancelarRequestSchema(BaseSchema):
+    """PUT /viagens/<id>/cancelar"""
+
+    motivo = fields.String(load_default=None, allow_none=True, validate=Length(max=255))
 
 
 class LocalizacaoRequestSchema(BaseSchema):

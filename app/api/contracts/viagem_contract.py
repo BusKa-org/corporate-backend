@@ -133,6 +133,16 @@ def register_models(api):
         },
     )
 
+    viagem_cancelar_request = api.model(
+        "ViagemCancelarRequest",
+        {
+            "motivo": fields.String(
+                required=False,
+                description="Motivo do cancelamento (opcional, até 255 caracteres)",
+            )
+        },
+    )
+
     viagem_cancelar_response = api.model(
         "ViagemCancelarResponse",
         {
@@ -191,6 +201,7 @@ def register_models(api):
         "viagem_agenda_aluno_list_response": viagem_agenda_aluno_list_response,
         "viagem_agenda_aluno_response": viagem_agenda_aluno_response,
         "localizacao_request": localizacao_request,
+        "viagem_cancelar_request": viagem_cancelar_request,
         "viagem_cancelar_response": viagem_cancelar_response,
         "localizacao_onibus_response": localizacao_onibus_response,
         "localizacao_motorista_response": localizacao_motorista_response,
