@@ -52,3 +52,10 @@ def test_nao_gestor_nao_lista_motoristas(motorista, aluno):
 def test_status_invalido_na_lista_de_alunos_tambem_retorna_400(gestor):
     # Same filter helper as the drivers' list; it used to ignore a typo and list everyone.
     assert gestor.client.get("/v1/alunos/?status=PENDENTE").status_code == 400
+
+
+def test_status_vazio_lista_todos(gestor, motorista):
+    r = gestor.client.get("/v1/users/motoristas?status=")
+    assert r.status_code == 200, r.get_json()
+    assert str(motorista.user.id) in _ids(r)
+    assert gestor.client.get("/v1/alunos/?status=").status_code == 200
