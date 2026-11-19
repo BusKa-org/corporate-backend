@@ -933,7 +933,8 @@ def cancelar_viagem(user_id: str, viagem_id: str, motivo: str | None = None) -> 
             user_id=user_id,
             resource_type="viagem",
             resource_id=viagem_id,
-            details={"motivo": motivo},
+            # Free text may hold personal data (LGPD), so the audit log keeps only a flag.
+            details={"com_motivo": bool(motivo)},
         )
 
         return {

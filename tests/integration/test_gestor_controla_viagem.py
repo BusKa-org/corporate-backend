@@ -74,3 +74,15 @@ def test_gestor_inicia_acompanha_e_finaliza(gestor, viagem_futura_agendada_com_m
     r = gestor.client.put(f"/v1/viagens/{viagem_id}/acao", json={"acao": "FINALIZAR"})
     assert r.status_code == 200, r.get_data(as_text=True)
     assert gestor.client.get(f"/v1/viagens/{viagem_id}").get_json()["status"] == "FINALIZADA"
+
+
+@pytest.mark.integration
+def test_cancelar_viagem_sem_motorista_nao_avisa_ninguem(
+    gestor, viagem_futura_agendada_com_motorista, _db
+):
+    viagem_futura_agendada_com_motorista.motorista_id = None
+    _db.session.commit()
+
+    r = _cancelar(gestor, viagem_futura_agendada_com_motorista, {"motivo": "Chuva"})
+    assert r.status_code == 200, r.get_data(as_text=True)
+    assert Notificacao.query.count() == 0
