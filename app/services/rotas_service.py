@@ -16,6 +16,7 @@ from app.core.exceptions import (
 from app.models.base import db
 from app.models.enum import DiaDaSemana, SentidoViagem, StatusViagem, TipoViagem, UserRole
 from app.models.geo import Ponto
+from app.models.onibus import Onibus
 from app.models.rota import DiasOperacao, HorarioRota, Rota, RotaAluno, RotaPonto
 from app.models.user import User
 from app.models.viagem import Viagem
@@ -169,8 +170,12 @@ def create_rota(gestor_id: str, data: dict[str, Any]) -> Rota:
         raise ValidationError("Parâmetros de buffer só se aplicam a rotas sob demanda")
 
     try:
+        # Vehicle before driver, as in solicitar_viagem and janelas_service.
+        veiculo_id = data.get("veiculo_padrao_id") or None
+        if veiculo_id:
+            veiculo_id = _exigir_onibus_da_organizacao(veiculo_id, user.organizacao_id)
         # If a driver creates a route, automatically assign themselves as the default driver
-        motorista_id = data.get("motorista_padrao_id")
+        motorista_id = data.get("motorista_padrao_id") or None
         if not motorista_id and user.role == UserRole.MOTORISTA:
             motorista_id = user.id
         if motorista_id:
@@ -181,7 +186,7 @@ def create_rota(gestor_id: str, data: dict[str, Any]) -> Rota:
             tipo=tipo,
             **parametros,
             motorista_padrao_id=motorista_id,
-            veiculo_padrao_id=data.get("veiculo_padrao_id"),
+            veiculo_padrao_id=veiculo_id,
             organizacao_id=user.organizacao_id,
         )
 
@@ -348,6 +353,24 @@ def travar_rota(rota_id: Any) -> bool:
         select(Rota.id).where(Rota.id == rota_id).with_for_update(key_share=True)
     ).first()
     return linha is not None
+
+
+def _exigir_onibus_da_organizacao(onibus_id: Any, organizacao_id: Any) -> Any:
+    """FOR KEY SHARE on the vehicle after the route lock: enough to make a concurrent
+    delete_onibus wait for this commit, or make this a clean 404 if it ran first.
+
+    Raises: ValidationError, NotFoundError
+    """
+    onibus_uuid = validate_uuid(str(onibus_id), "ID do ônibus")
+    # Same 404 for another organization's vehicle, so its ids do not leak.
+    linha = db.session.execute(
+        select(Onibus.id)
+        .where(Onibus.id == onibus_uuid, Onibus.organizacao_id == organizacao_id)
+        .with_for_update(read=True, key_share=True)
+    ).first()
+    if linha is None:
+        raise NotFoundError("Ônibus não encontrado")
+    return onibus_uuid
 
 
 def travar_e_reler_rota(rota: Rota) -> None:
@@ -607,7 +630,7 @@ def get_by_id(user_id: str, rota_id: str) -> Rota:
 def update_rota(user_id: str, rota_id: str, data: dict[str, Any]) -> Rota:
     """Update route name, driver, vehicle, or switch it on/off.
 
-    Raises: ForbiddenError, NotFoundError, ConflictError, AppError
+    Raises: ValidationError, ForbiddenError, NotFoundError, ConflictError, AppError
     """
     validate_uuid(user_id, "User ID")
     validate_uuid(rota_id, "Rota ID")
@@ -645,7 +668,7 @@ def update_rota(user_id: str, rota_id: str, data: dict[str, Any]) -> Rota:
         raise ValidationError("Parâmetros de buffer só se aplicam a rotas sob demanda")
 
     # Same lock as trip generation, so no trip is created between the checks below and the
-    # commit. Taken before the driver lock, as in delete_motorista, so the two cannot deadlock.
+    # commit. Taken before the driver and vehicle locks, as in delete_motorista/delete_onibus.
     travar_e_reler_rota(rota)
 
     if data.get("ligada") is False:
@@ -675,18 +698,22 @@ def update_rota(user_id: str, rota_id: str, data: dict[str, Any]) -> Rota:
             rota.nome = data.get("nome")
             updated_fields.append("nome")
 
+        # Vehicle before driver, as in solicitar_viagem and janelas_service.
+        if "veiculo_padrao_id" in data:
+            veiculo_id = data.get("veiculo_padrao_id") or None
+            if veiculo_id:
+                veiculo_id = _exigir_onibus_da_organizacao(veiculo_id, rota.organizacao_id)
+            rota.veiculo_padrao_id = veiculo_id
+            updated_fields.append("veiculo_padrao_id")
+
         if "motorista_padrao_id" in data:
-            motorista_id = data.get("motorista_padrao_id")
+            motorista_id = data.get("motorista_padrao_id") or None
             if motorista_id:
                 motorista_id = viagens_service.exigir_motorista_ativo(
                     motorista_id, rota.organizacao_id
                 )
             rota.motorista_padrao_id = motorista_id
             updated_fields.append("motorista_padrao_id")
-
-        if "veiculo_padrao_id" in data:
-            rota.veiculo_padrao_id = data.get("veiculo_padrao_id")
-            updated_fields.append("veiculo_padrao_id")
 
         for campo in PARAMETROS_SOB_DEMANDA:
             if campo in data:

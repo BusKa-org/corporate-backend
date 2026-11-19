@@ -730,6 +730,19 @@ def controlar_viagem(user_id: str, viagem_id: str, data: dict[str, Any]) -> Viag
 
     with transactional():
         if acao == "INICIAR":
+            if viagem.status != StatusViagem.AGENDADA:
+                raise ValidationError(
+                    f"Não é possível iniciar viagem com status {viagem.status.name}"
+                )
+            # Route before trip, as in update_rota: a past AGENDADA trip does not block a
+            # switch-off, so the start itself must see it.
+            rota = viagem.rota
+            if rota is None and viagem.horario_rota is not None:
+                rota = viagem.horario_rota.rota
+            if rota is not None:
+                travar_e_reler_rota(rota)
+                if not rota.ligada:
+                    raise ValidationError("Rota desligada, não é possível iniciar a viagem")
             # Lock trip and driver until commit: two simultaneous INICIAR wait for each
             # other and the second sees the already updated state.
             viagem = (

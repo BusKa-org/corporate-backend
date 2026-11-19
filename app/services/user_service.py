@@ -375,7 +375,8 @@ def delete_motorista(gestor_id: str, motorista_id: str) -> None:
 
     try:
         # Routes first, as everywhere else: ON DELETE SET NULL writes them after the motorista row.
-        # shortcut: a route pointed here after this SELECT stays unlocked; re-check if it bites.
+        # shortcut: a route pointed here after this SELECT is written after the motorista row and
+        # can deadlock with a tx holding that route (Postgres aborts one), revisit if it shows up.
         db.session.execute(
             select(Rota.id)
             .where(Rota.motorista_padrao_id == motorista.id)

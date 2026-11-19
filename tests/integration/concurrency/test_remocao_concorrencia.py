@@ -8,12 +8,14 @@ import threading
 import time
 
 import pytest
-from sqlalchemy import select, text
+from sqlalchemy import delete, select, text
 
+from app.core.exceptions import NotFoundError
 from app.models.base import db
 from app.models.onibus import Onibus
 from app.models.rota import Rota
 from app.services import onibus_service, rotas_service, user_service
+from tests.factories.rota_factory import RotaFactory
 
 pytestmark = [pytest.mark.integration, pytest.mark.concurrency]
 
@@ -113,3 +115,54 @@ def test_remover_motorista_enquanto_a_rota_esta_travada(app, _db, gestor, rota, 
     assert resultados == ["ok", "ok"]
     _db.session.expire_all()
     assert _db.session.get(Rota, rota.id).motorista_padrao_id is None
+
+
+def test_apontar_rota_para_veiculo_sendo_removido_responde_404(
+    app, _db, gestor, organizacao, onibus
+):
+    """update_rota waits on the vehicle row of an in-flight removal, then gets a 404, not a 500."""
+    outra_rota = RotaFactory(
+        organizacao_id=organizacao.id, motorista_padrao_id=None, veiculo_padrao_id=None
+    )
+    _db.session.add(outra_rota)
+    _db.session.commit()
+    onibus_id = onibus.id
+    rota_id = outra_rota.id
+    removido = threading.Event()
+    resultados: list = [None, None]
+
+    def remocao() -> None:
+        with app.app_context():
+            try:
+                # What delete_onibus runs, left open until update_rota is waiting on it.
+                db.session.execute(delete(Onibus).where(Onibus.id == onibus_id))
+                removido.set()
+                _esperar_alguem_bloqueado()
+                db.session.commit()
+                resultados[0] = "ok"
+            except Exception as e:  # noqa: BLE001 — the test inspects the error
+                db.session.rollback()
+                resultados[0] = e
+
+    def reatribuicao() -> None:
+        with app.app_context():
+            try:
+                removido.wait(timeout=10)
+                rotas_service.update_rota(
+                    str(gestor.user.id), str(rota_id), {"veiculo_padrao_id": str(onibus_id)}
+                )
+                resultados[1] = "ok"
+            except Exception as e:  # noqa: BLE001 — the test inspects the error
+                resultados[1] = e
+
+    threads = [threading.Thread(target=remocao), threading.Thread(target=reatribuicao)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=30)
+        assert not thread.is_alive(), "deadlock: uma thread não terminou"
+
+    assert resultados[0] == "ok"
+    assert isinstance(resultados[1], NotFoundError), resultados[1]
+    _db.session.expire_all()
+    assert _db.session.get(Rota, rota_id).veiculo_padrao_id is None
