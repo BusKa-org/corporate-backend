@@ -572,6 +572,16 @@ muda o `status`: resolver continua em `PATCH /v1/ocorrencias/<id>/resolver`.
 - As respostas de ocorrência (criar, listar, resolver, minhas) ganham `resposta` e
   `respondida_em` (ISO 8601), ambos `null` enquanto não houver resposta.
 
+## Aviso do gestor para uma viagem (RF-08)
+
+`POST /v1/notificacoes/` `{titulo, mensagem, viagem_id}`: avisa só as pessoas daquela viagem,
+não a rota inteira. Destinatários: alunos confirmados, solicitações `ATIVA` e o motorista da
+viagem, se ativo (o motorista que envia não recebe cópia). O motorista continua limitado à
+própria viagem `EM_ANDAMENTO` (403 fora disso).
+
+- Gestor, viagem `FINALIZADA` ou `CANCELADA`: 400. `viagem_id` junto com `rota_id`: 400. Viagem de
+  outra organização: 404.
+
 ## Acessibilidade do aluno
 
 `necessidades_acessibilidade` (lista de `CADEIRA_DE_RODAS`, `MOBILIDADE_REDUZIDA`,
