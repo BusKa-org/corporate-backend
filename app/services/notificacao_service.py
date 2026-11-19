@@ -5,6 +5,8 @@ from datetime import UTC, datetime
 from typing import Any
 
 from firebase_admin import messaging
+from sqlalchemy import event
+from sqlalchemy.orm import Session, SessionTransaction
 
 from app.core.exceptions import AppError, ForbiddenError, NotFoundError, ValidationError
 from app.models.base import db
@@ -17,6 +19,39 @@ from app.utils import audit_logger
 from app.utils.validators import validate_uuid
 
 logger = logging.getLogger(__name__)
+
+
+PUSHES_PENDENTES = "pushes_pendentes"
+
+
+def _enviar_push(fcm_token: str, email: str, titulo: str, mensagem: str) -> None:
+    try:
+        mensagem_fcm = messaging.Message(
+            notification=messaging.Notification(
+                title=titulo,
+                body=mensagem,
+            ),
+            token=fcm_token,
+        )
+        response = messaging.send(mensagem_fcm)
+        logger.info(f"Push enviado com sucesso para {email}. ID: {response}")
+
+    except Exception as e:
+        logger.error(f"Falha ao enviar Push Notification via Firebase para {email}: {str(e)}")
+
+
+@event.listens_for(Session, "after_commit")
+def _enviar_pushes_pendentes(session: Session) -> None:
+    pendentes = session.info.pop(PUSHES_PENDENTES, [])
+    for fcm_token, email, titulo, mensagem in pendentes:
+        _enviar_push(fcm_token, email, titulo, mensagem)
+
+
+@event.listens_for(Session, "after_transaction_end")
+def _descartar_pushes_pendentes(session: Session, transaction: SessionTransaction) -> None:
+    # Rollback or close without commit; after a commit the list was already sent and popped.
+    if transaction.parent is None:
+        session.info.pop(PUSHES_PENDENTES, None)
 
 
 class NotificacaoService:
@@ -34,21 +69,9 @@ class NotificacaoService:
         usuario = db.session.get(User, usuario_id)
 
         if usuario and getattr(usuario, "fcm_token", None):
-            try:
-                mensagem_fcm = messaging.Message(
-                    notification=messaging.Notification(
-                        title=titulo,
-                        body=mensagem,
-                    ),
-                    token=usuario.fcm_token,
-                )
-                response = messaging.send(mensagem_fcm)
-                logger.info(f"Push enviado com sucesso para {usuario.email}. ID: {response}")
-
-            except Exception as e:
-                logger.error(
-                    f"Falha ao enviar Push Notification via Firebase para {usuario.email}: {str(e)}"
-                )
+            # Sent by _enviar_pushes_pendentes after commit, so a rollback sends nothing.
+            pendentes = db.session.info.setdefault(PUSHES_PENDENTES, [])
+            pendentes.append((usuario.fcm_token, usuario.email, titulo, mensagem))
 
         return nova
 

@@ -11,6 +11,7 @@ def test_atualizar_localizacao_dispara_notificacao(app):
             patch("app.services.viagens_service.ViagemPonto") as mock_ponto_class,
             patch("app.services.viagens_service.AlunosConfirmados") as mock_aluno_conf_class,
             patch("app.services.viagens_service.NotificacaoService") as mock_notif,
+            patch("app.services.viagens_service._exigir_viagem_da_organizacao"),
         ):
 
             # Arrange: driver and trip
