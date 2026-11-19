@@ -880,8 +880,8 @@ def obter_viagem_gestor(user_id: str, viagem_id: str) -> Viagem:
     return viagem
 
 
-def cancelar_viagem(user_id: str, viagem_id: str) -> dict[str, Any]:
-    """Cancel a trip and notify the confirmed students"""
+def cancelar_viagem(user_id: str, viagem_id: str, motivo: str | None = None) -> dict[str, Any]:
+    """Cancel a trip and notify its students and driver, with the gestor's optional reason."""
     user = db.session.get(User, user_id)
     if not user or user.role != UserRole.GESTOR:
         raise ForbiddenError("Apenas gestores podem cancelar viagens")
@@ -896,7 +896,11 @@ def cancelar_viagem(user_id: str, viagem_id: str) -> dict[str, Any]:
     viagem = _travar_viagem(viagem.id)
     if viagem.status in (StatusViagem.FINALIZADA, StatusViagem.CANCELADA):
         db.session.rollback()
-        raise ValidationError(f"Não é possível cancelar uma viagem com status {viagem.status.name}")
+        raise ConflictError(f"Não é possível cancelar uma viagem com status {viagem.status.name}")
+
+    complemento_motivo = ""
+    if motivo:
+        complemento_motivo = f" Motivo: {motivo}"
 
     try:
         viagem.status = StatusViagem.CANCELADA
@@ -914,7 +918,7 @@ def cancelar_viagem(user_id: str, viagem_id: str) -> dict[str, Any]:
             NotificacaoService._criar_notificacao_interna(
                 usuario_id=conf.aluno_id,
                 titulo="Viagem Cancelada",
-                mensagem=f"Atenção! A viagem da rota agendada para o dia {data_formatada} foi cancelada pela organização.",
+                mensagem=f"Atenção! A viagem da rota agendada para o dia {data_formatada} foi cancelada pela organização.{complemento_motivo}",
             )
 
         solicitacoes = SolicitacaoViagem.query.filter_by(
@@ -926,13 +930,25 @@ def cancelar_viagem(user_id: str, viagem_id: str) -> dict[str, Any]:
             NotificacaoService._criar_notificacao_interna(
                 usuario_id=solicitacao.aluno_id,
                 titulo="Viagem Cancelada",
-                mensagem="Atenção! A viagem sob demanda que você solicitou foi cancelada pela organização. Faça uma nova solicitação se ainda precisar.",
+                mensagem=f"Atenção! A viagem sob demanda que você solicitou foi cancelada pela organização. Faça uma nova solicitação se ainda precisar.{complemento_motivo}",
+            )
+
+        if viagem.motorista_id is not None:
+            NotificacaoService._criar_notificacao_interna(
+                usuario_id=viagem.motorista_id,
+                titulo="Viagem Cancelada",
+                mensagem=f"A viagem do dia {data_formatada} atribuída a você foi cancelada pela organização.{complemento_motivo}",
             )
 
         db.session.commit()
 
         audit_logger.log_user_action(
-            action="cancelar_viagem", user_id=user_id, resource_type="viagem", resource_id=viagem_id
+            action="cancelar_viagem",
+            user_id=user_id,
+            resource_type="viagem",
+            resource_id=viagem_id,
+            # Free text may hold personal data (LGPD), so the audit log keeps only a flag.
+            details={"com_motivo": bool(motivo)},
         )
 
         return {
