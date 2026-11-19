@@ -1,11 +1,29 @@
-from marshmallow import fields
+from typing import Any
 
-from app.models.enum import DiaDaSemana
+from marshmallow import fields, pre_load
+
+from app.models.enum import DiaDaSemana, UserStatus
 from app.schemas.common import BaseSchema
+from app.schemas.viagem_schema import EnumByNameField
 
 # ==========================================
 # Input Schemas (Validation)
 # ==========================================
+
+
+class UserStatusQuerySchema(BaseSchema):
+    """`?status=` of the gestor's lists; an unknown value is 400, never an unfiltered list."""
+
+    status = EnumByNameField(UserStatus, load_default=None)
+
+    @pre_load
+    def _status_vazio_sem_filtro(self, data: Any, **kwargs: Any) -> Any:
+        # A blank `?status=` is the "all" filter the lists always accepted, not a typo.
+        status = data.get("status")
+        if isinstance(status, str) and status.strip() == "":
+            data = dict(data)
+            del data["status"]
+        return data
 
 
 class FcmTokenRequestSchema(BaseSchema):
