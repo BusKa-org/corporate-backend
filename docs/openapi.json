@@ -2767,8 +2767,18 @@
             }
           }
         },
-        "summary": "Cancels a scheduled trip and notifies students (Manager)",
+        "summary": "Cancels a trip and notifies its students and driver (Manager)",
         "operationId": "cancelar_viagem",
+        "parameters": [
+          {
+            "name": "payload",
+            "required": true,
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/ViagemCancelarRequest"
+            }
+          }
+        ],
         "tags": [
           "viagens"
         ]
@@ -5255,6 +5265,15 @@
         "acao": {
           "type": "string",
           "description": "INICIAR ou FINALIZAR"
+        }
+      },
+      "type": "object"
+    },
+    "ViagemCancelarRequest": {
+      "properties": {
+        "motivo": {
+          "type": "string",
+          "description": "Motivo do cancelamento (opcional, até 255 caracteres)"
         }
       },
       "type": "object"

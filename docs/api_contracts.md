@@ -338,7 +338,9 @@ Only run in the scheduler process (`RUN_SCHEDULER`).
   returns 409.
 - `PUT /v1/viagens/<id>/cancelar` returns 404 for a trip of another organization (same
   body as a missing trip, so ids do not leak), and also cancels and notifies the active
-  requests of the trip.
+  requests of the trip. Optional body `{"motivo": "..."}` (up to 255 characters, 400 if
+  longer): the reason is appended to the notices. The trip's driver is notified too.
+  Cancelling a `FINALIZADA` or `CANCELADA` trip returns 409 (it was 400).
 - `PUT /v1/viagens/<id>/acao` (`INICIAR`/`FINALIZAR`): only the trip's driver or a gestor
   of the trip's organization. Other roles get 403; another driver or a gestor of another
   organization gets 404 (it was 200 for anyone but another driver, who got 403).
