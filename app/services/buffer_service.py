@@ -79,7 +79,7 @@ def iniciar_percurso(user_id: str, viagem_id: str) -> Viagem:
 
 
 def _exigir_minimo_alunos(viagem: Viagem, minimo: int) -> None:
-    # Lock the counted rows: the gestor's cancelar_viagem cancels them without travar_viagem.
+    # Lock the counted rows: they must not change status while being counted.
     # key_share=True emits FOR NO KEY UPDATE, which still blocks that concurrent status UPDATE.
     solicitantes = len(
         db.session.query(SolicitacaoViagem.id)

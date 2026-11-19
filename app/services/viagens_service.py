@@ -83,13 +83,24 @@ def _rota_da_viagem(viagem: Viagem) -> Rota | None:
     return None
 
 
-def _exigir_viagem_da_organizacao(
-    viagem: Viagem, user: User, mensagem: str = "Acesso negado"
-) -> None:
-    """Raise ForbiddenError unless the trip's route belongs to the user's organização."""
+def _exigir_viagem_da_organizacao(viagem: Viagem, user: User) -> None:
+    """Raise NotFoundError unless the trip's route belongs to the user's organização."""
+    # 404, not 403, so trip ids do not leak across tenants.
     rota = _rota_da_viagem(viagem)
     if rota is None or rota.organizacao_id != user.organizacao_id:
-        raise ForbiddenError(mensagem)
+        raise NotFoundError("Viagem não encontrada")
+
+
+def _travar_viagem(viagem_id) -> Viagem:
+    """Reload the trip with a row lock held until commit."""
+    # key_share: FOR NO KEY UPDATE, so inserts of rows that reference the trip are not blocked.
+    return (
+        db.session.query(Viagem)
+        .filter(Viagem.id == viagem_id)
+        .with_for_update(of=Viagem, key_share=True)
+        .populate_existing()
+        .one()
+    )
 
 
 def _popular_dados_da_viagem(viagem_obj: Viagem, rota_obj: Rota) -> None:
@@ -713,18 +724,24 @@ def list_viagens_motorista(user_id: str) -> list[Viagem]:
 
 
 def controlar_viagem(user_id: str, viagem_id: str, data: dict[str, Any]) -> Viagem:
-    """Start or finish a trip. Expects schema-validated payload with 'acao'."""
+    """Start or finish a trip: only its driver or a manager of its organização may."""
     user = db.session.get(User, user_id)
-    viagem = db.session.get(Viagem, viagem_id)
-
     if not user:
         raise NotFoundError("Usuário não encontrado")
 
+    if user.role not in (UserRole.MOTORISTA, UserRole.GESTOR):
+        raise ForbiddenError("Apenas o motorista ou o gestor podem iniciar ou finalizar viagens")
+
+    viagem = db.session.get(Viagem, viagem_id)
     if not viagem:
         raise NotFoundError("Viagem não encontrada")
 
-    if user.role == UserRole.MOTORISTA and viagem.motorista_id != user.id:
-        raise ForbiddenError("Esta viagem não pertence a você")
+    # 404 for someone else's trip too, so trip ids do not leak.
+    if user.role == UserRole.MOTORISTA:
+        if viagem.motorista_id != user.id:
+            raise NotFoundError("Viagem não encontrada")
+    else:
+        _exigir_viagem_da_organizacao(viagem, user)
 
     acao = data.get("acao")
 
@@ -743,30 +760,37 @@ def controlar_viagem(user_id: str, viagem_id: str, data: dict[str, Any]) -> Viag
                 travar_e_reler_rota(rota)
                 if not rota.ligada:
                     raise ValidationError("Rota desligada, não é possível iniciar a viagem")
-            # Lock trip and driver until commit: two simultaneous INICIAR wait for each
-            # other and the second sees the already updated state.
-            viagem = (
-                db.session.query(Viagem)
-                .filter(Viagem.id == viagem.id)
-                .with_for_update(of=Viagem)
-                .populate_existing()
-                .one()
-            )
+        # Lock the trip until commit: the driver and a gestor may act on it at the same
+        # time (start, finish or cancel), and the second one must see the updated state.
+        viagem = _travar_viagem(viagem.id)
+        if acao == "INICIAR":
             if viagem.status != StatusViagem.AGENDADA:
                 raise ValidationError(
                     f"Não é possível iniciar viagem com status {viagem.status.name}"
                 )
+            # Same rule as iniciar_percurso: nobody could drive or send GPS.
+            if viagem.motorista_id is None:
+                raise ConflictError("Viagem sem motorista atribuído")
             agora = _agora()
-            if viagem.motorista_id is not None:
-                motorista = (
-                    db.session.query(Motorista)
-                    .filter(Motorista.id == viagem.motorista_id)
-                    .with_for_update(of=Motorista)
-                    .populate_existing()
-                    .one()
-                )
-                validar_jornada_motorista(motorista, agora)
-                motorista.descanso_ate = None
+            # Lock the usuario row too, as exigir_motorista_ativo does, so a concurrent
+            # deactivation either sees this trip or wins.
+            db.session.execute(
+                select(User.id)
+                .where(User.id == viagem.motorista_id)
+                .with_for_update(key_share=True)
+            )
+            motorista = (
+                db.session.query(Motorista)
+                .filter(Motorista.id == viagem.motorista_id)
+                .with_for_update(of=Motorista)
+                .populate_existing()
+                .one()
+            )
+            # A gestor may start it for the driver, so check the account is still active.
+            if motorista.status != UserStatus.ACTIVE:
+                raise ConflictError("Motorista sem cadastro ativo")
+            validar_jornada_motorista(motorista, agora)
+            motorista.descanso_ate = None
             viagem.status = StatusViagem.EM_ANDAMENTO
             viagem.inicio_real = agora
 
@@ -805,7 +829,14 @@ def controlar_viagem(user_id: str, viagem_id: str, data: dict[str, Any]) -> Viag
         else:
             raise ValidationError("Ação inválida. Use INICIAR ou FINALIZAR")
 
-        return viagem
+    # After commit, so a rolled back change is not logged. A gestor may act for the driver.
+    audit_logger.log_user_action(
+        action=f"controlar_viagem_{acao.lower()}",
+        user_id=user_id,
+        resource_type="viagem",
+        resource_id=viagem_id,
+    )
+    return viagem
 
 
 def list_viagens_gestor(user_id: str, filters: dict[str, Any]) -> list[Viagem]:
@@ -861,7 +892,10 @@ def cancelar_viagem(user_id: str, viagem_id: str) -> dict[str, Any]:
 
     _exigir_viagem_da_organizacao(viagem, user)
 
+    # Locked so a FINALIZAR running at the same time cannot overwrite the cancel.
+    viagem = _travar_viagem(viagem.id)
     if viagem.status in (StatusViagem.FINALIZADA, StatusViagem.CANCELADA):
+        db.session.rollback()
         raise ValidationError(f"Não é possível cancelar uma viagem com status {viagem.status.name}")
 
     try:
@@ -1026,11 +1060,7 @@ def obter_localizacao_onibus(user_id: str, viagem_id: str) -> dict:
                 "Você precisa estar confirmado nesta viagem para ver a localização do ônibus."
             )
     elif user.role == UserRole.GESTOR:
-        _exigir_viagem_da_organizacao(
-            viagem,
-            user,
-            "Apenas gestores da organização desta viagem podem consultar a localização.",
-        )
+        _exigir_viagem_da_organizacao(viagem, user)
     else:
         raise ForbiddenError(
             "Apenas alunos confirmados, o motorista ou o gestor podem consultar a localização"

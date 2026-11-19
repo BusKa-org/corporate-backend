@@ -174,7 +174,7 @@ def test_rf07_gestor_de_outra_organizacao_nao_ve_a_localizacao(
     r = other_gestor.client.get(
         f"/v1/viagens/{viagem_futura_iniciada_com_motorista.id}/localizacao"
     )
-    assert r.status_code == 403
+    assert r.status_code == 404
 
 
 @pytest.mark.integration
@@ -184,7 +184,7 @@ def test_rf07_gestor_de_outra_organizacao_nao_sonda_o_status_da_viagem(
     r = other_gestor.client.get(
         f"/v1/viagens/{viagem_futura_agendada_com_motorista.id}/localizacao"
     )
-    assert r.status_code == 403
+    assert r.status_code == 404
 
 
 @pytest.mark.integration

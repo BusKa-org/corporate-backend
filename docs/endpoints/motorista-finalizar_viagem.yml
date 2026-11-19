@@ -4,7 +4,7 @@ tags:
 summary: Finalizar Viagem
 description: |
   Marca uma viagem como **finalizada**.
-  Disponível apenas para usuários com o papel **motorista**.
+  Disponível para o **motorista da viagem** ou um **gestor** da organização da viagem.
   Requer um **JWT token** válido no cabeçalho `Authorization`.
   Ao finalizar, o motorista volta a `ATIVO`, ou fica `EM_DESCANSO_OBRIGATORIO` até `descanso_ate`
   se atingiu o tempo máximo de direção contínua. Cancelar uma viagem já iniciada faz o mesmo.
@@ -34,15 +34,15 @@ responses:
           type: string
           example: "Viagem finalizada com sucesso."
   403:
-    description: Acesso negado — apenas motoristas podem finalizar viagens.
+    description: Acesso negado — apenas o motorista ou o gestor podem finalizar viagens.
     schema:
       type: object
       properties:
         error:
           type: string
-          example: "Access restricted to motoristas"
+          example: "Apenas o motorista ou o gestor podem iniciar ou finalizar viagens"
   404:
-    description: Viagem não encontrada.
+    description: Viagem não encontrada, de outro motorista ou de outra organização.
     schema:
       type: object
       properties:

@@ -4,7 +4,7 @@ tags:
 summary: Iniciar Viagem
 description: |
   Marca uma viagem como **iniciada**.
-  Disponível apenas para usuários com o papel **motorista**.
+  Disponível para o **motorista da viagem** ou um **gestor** da organização da viagem.
   Requer um **JWT token** válido no cabeçalho `Authorization`.
   O motorista não pode ter outra viagem em andamento ou com buffer aberto nem descanso obrigatório pendente,
   e precisa estar no dia e no horário de trabalho. Com a viagem em andamento, ele aparece como `EM_ROTA`.
@@ -34,19 +34,19 @@ responses:
           type: string
           example: "Viagem iniciada com sucesso."
   409:
-    description: Motorista já está `EM_ROTA` em outra viagem.
+    description: Motorista já está `EM_ROTA` em outra viagem, ou viagem sem motorista atribuído.
   403:
     description: |
-      Acesso negado — viagem de outro motorista, fora do dia/horário de trabalho, ou
+      Acesso negado — papel sem permissão (ex.: aluno), fora do dia/horário de trabalho, ou
       descanso obrigatório pendente (a mensagem informa o horário em que pode voltar a dirigir).
     schema:
       type: object
       properties:
         error:
           type: string
-          example: "Access restricted to motoristas"
+          example: "Apenas o motorista ou o gestor podem iniciar ou finalizar viagens"
   404:
-    description: Viagem não encontrada.
+    description: Viagem não encontrada, de outro motorista ou de outra organização.
     schema:
       type: object
       properties:
