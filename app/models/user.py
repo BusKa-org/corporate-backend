@@ -121,9 +121,13 @@ class Aluno(User):
 
     instituicao_id = db.Column(UUID(as_uuid=True), db.ForeignKey("instituicao.id"))
     ponto_casa_id = db.Column(UUID(as_uuid=True), db.ForeignKey("ponto.id"))
+    projeto_id = db.Column(
+        UUID(as_uuid=True), db.ForeignKey("projeto.id", ondelete="SET NULL"), index=True
+    )
 
     instituicao = db.relationship("Instituicao")
     ponto_casa = db.relationship("Ponto")
+    projeto = db.relationship("Projeto")
 
     __mapper_args__ = {
         "polymorphic_identity": UserRole.ALUNO,

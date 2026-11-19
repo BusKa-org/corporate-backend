@@ -34,6 +34,7 @@ from .api.controllers.ocorrencia_controller import api as ocorrencias_ns
 from .api.controllers.onibus_controller import api as onibus_ns
 from .api.controllers.parametros_operacao_controller import api as parametros_operacao_ns
 from .api.controllers.pontos_controller import api as pontos_ns
+from .api.controllers.projeto_controller import api as projetos_ns
 from .api.controllers.rotas_controller import api as rotas_ns
 from .api.controllers.routing_controller import api as routing_ns
 from .api.controllers.telemetria_controller import api as telemetria_ns
@@ -260,6 +261,7 @@ Inclua o header: `Authorization: Bearer <seu_token>`
     api.add_namespace(embarque_ns, path="/v1/embarque")
     api.add_namespace(telemetria_ns, path="/v1/telemetria")
     api.add_namespace(parametros_operacao_ns, path="/v1/parametros-operacao")
+    api.add_namespace(projetos_ns, path="/v1/projetos")
 
     # Client-specific extensions — see `plugins` param contract on the signature.
     for register in (_discover_plugins() if plugins is None else plugins):

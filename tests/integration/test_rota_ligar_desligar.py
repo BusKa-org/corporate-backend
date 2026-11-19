@@ -9,6 +9,7 @@ from sqlalchemy.orm.attributes import set_committed_value
 from app.core.exceptions import ConflictError, NotFoundError, ValidationError
 from app.models.enum import StatusViagem
 from app.models.rota import Rota
+from app.models.viagem import Viagem
 from app.services import rotas_service, solicitacoes_service
 from tests.factories.viagem_factory import ViagemFactory
 
@@ -162,3 +163,24 @@ def test_rota_apagada_sob_o_lock_da_404(_db, rota):
 
     with pytest.raises(NotFoundError):
         rotas_service.travar_e_reler_rota(rota)
+
+
+def test_viagem_antiga_de_rota_desligada_nao_inicia(_db, gestor, motorista, horario_rota, relogio):
+    # A past AGENDADA trip is not pending, so the switch-off goes through.
+    viagem = ViagemFactory(
+        horario_rota_id=horario_rota.id,
+        rota_id=horario_rota.rota_id,
+        motorista_id=motorista.user.id,
+        status=StatusViagem.AGENDADA,
+        data=date(2026, 10, 26),
+    )
+    _db.session.add(viagem)
+    _db.session.commit()
+    rota = _db.session.get(Rota, horario_rota.rota_id)
+    assert _ligar(gestor, rota, False).status_code == 200
+
+    r = motorista.client.put(f"/v1/viagens/{viagem.id}/acao", json={"acao": "INICIAR"})
+    assert r.status_code == 400
+    assert "Rota desligada" in r.get_data(as_text=True)
+    _db.session.expire_all()
+    assert _db.session.get(Viagem, viagem.id).status == StatusViagem.AGENDADA

@@ -79,7 +79,7 @@ Product-owned prefixes you must never register under: `/v1/auth`, `/v1/users`,
 `/v1/consentimento`, `/v1/convites`, `/v1/notificacoes`, `/v1/onibus`,
 `/v1/rotas`, `/v1/pontos`, `/v1/routing`, `/v1/viagens`, `/v1/instituicoes`,
 `/v1/alunos`, `/v1/ocorrencias`, `/v1/dashboard`, `/v1/embarque`,
-`/v1/telemetria`.
+`/v1/telemetria`, `/v1/projetos`.
 
 ### If a route should not be client-specific
 
