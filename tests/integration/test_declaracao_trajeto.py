@@ -9,6 +9,7 @@ from flask_jwt_extended import create_access_token
 
 from app.models.consentimento import ACEITE, Consentimento
 from app.models.enum import StatusSolicitacao, StatusViagem
+from app.models.notificacao import Notificacao
 from app.models.viagem import AlunosConfirmados, SolicitacaoViagem
 from app.services import buffer_service, capacidade_service
 from app.services.consentimento_service import VERSAO_TERMO_VIGENTE
@@ -142,8 +143,11 @@ def test_desistir_depois_da_partida_tira_da_lista_de_embarque(
 
 def test_aviso_do_gestor_por_viagem_alcanca_quem_solicitou(app, _db, buffer, aluno, gestor):
     with app.test_request_context():
-        resultado = NotificacaoService.notificar_por_gestor(
+        NotificacaoService.notificar_por_gestor(
             str(gestor.user.id), {"viagem_id": str(buffer.id), "titulo": "Aviso", "mensagem": "Oi"}
         )
 
-    assert resultado["message"].startswith("Notificação enviada para 1 usuário(s)")
+    destinatarios = set()
+    for notificacao in Notificacao.query.all():
+        destinatarios.add(notificacao.usuario_id)
+    assert destinatarios == {aluno.user.id, buffer.motorista_id}

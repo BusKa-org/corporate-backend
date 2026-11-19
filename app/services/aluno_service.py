@@ -129,16 +129,13 @@ def get_aluno_by_id(gestor_id: str, aluno_id: str) -> Aluno:
 
 
 def list_alunos_gestor(
-    gestor_id: str, status: str | None = None, projeto_id: str | None = None
+    gestor_id: str, status: UserStatus | None = None, projeto_id: str | None = None
 ) -> list[Aluno]:
     """List the organization's students (managers only), optionally filtered by status/project."""
     gestor = _get_gestor_or_403(gestor_id, "Apenas gestores podem listar alunos")
     q = db.session.query(Aluno).filter_by(organizacao_id=gestor.organizacao_id)
     if status:
-        try:
-            q = q.filter(Aluno.status == UserStatus[status])
-        except KeyError:
-            pass
+        q = q.filter(Aluno.status == status)
     if projeto_id:
         projeto = projeto_service.projeto_da_organizacao(gestor.organizacao_id, projeto_id)
         q = q.filter(Aluno.projeto_id == projeto.id)

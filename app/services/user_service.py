@@ -299,13 +299,17 @@ def change_password(user_id: str, data: dict[str, Any]) -> None:
         raise AppError(f"Erro ao atualizar senha: {str(e)}", 500)
 
 
-def get_motoristas_by_municipio(gestor_id: str):
-    gestor = _get_user_or_404(gestor_id)
+def get_motoristas_by_municipio(
+    gestor_id: str, status: UserStatus | None = None
+) -> list[Motorista]:
+    """Gestor lists its organization's drivers, optionally by account status (RF-02, RF-06)."""
+    gestor = _get_gestor_or_403(gestor_id, "Apenas gestores podem listar motoristas")
 
     # Query Motorista directly: through User, the driver columns came one query per row
-    motoristas = (
-        db.session.query(Motorista).filter(Motorista.organizacao_id == gestor.organizacao_id).all()
-    )
+    q = db.session.query(Motorista).filter(Motorista.organizacao_id == gestor.organizacao_id)
+    if status:
+        q = q.filter(Motorista.status == status)
+    motoristas = q.all()
     _preencher_status_motoristas(motoristas)
 
     return motoristas
@@ -371,7 +375,8 @@ def delete_motorista(gestor_id: str, motorista_id: str) -> None:
 
     try:
         # Routes first, as everywhere else: ON DELETE SET NULL writes them after the motorista row.
-        # shortcut: a route pointed here after this SELECT stays unlocked; re-check if it bites.
+        # shortcut: a route pointed here after this SELECT is written after the motorista row and
+        # can deadlock with a tx holding that route (Postgres aborts one), revisit if it shows up.
         db.session.execute(
             select(Rota.id)
             .where(Rota.motorista_padrao_id == motorista.id)

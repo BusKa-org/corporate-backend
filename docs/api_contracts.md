@@ -572,6 +572,16 @@ muda o `status`: resolver continua em `PATCH /v1/ocorrencias/<id>/resolver`.
 - As respostas de ocorrência (criar, listar, resolver, minhas) ganham `resposta` e
   `respondida_em` (ISO 8601), ambos `null` enquanto não houver resposta.
 
+## Aviso do gestor para uma viagem (RF-08)
+
+`POST /v1/notificacoes/` `{titulo, mensagem, viagem_id}`: avisa só as pessoas daquela viagem,
+não a rota inteira. Destinatários: alunos confirmados, solicitações `ATIVA` e o motorista da
+viagem, se ativo (o motorista que envia não recebe cópia). O motorista continua limitado à
+própria viagem `EM_ANDAMENTO` (403 fora disso).
+
+- Gestor, viagem `FINALIZADA` ou `CANCELADA`: 400. `viagem_id` junto com `rota_id`: 400. Viagem de
+  outra organização: 404.
+
 ## Acessibilidade do aluno
 
 `necessidades_acessibilidade` (lista de `CADEIRA_DE_RODAS`, `MOBILIDADE_REDUZIDA`,
@@ -611,6 +621,13 @@ ao e-mail de um convite pendente; um PIN novo só sai 60 segundos depois do ante
 O motorista criado pelo gestor nasce `PENDING_SIGNUP`; esta rota o passa para `ACTIVE`
 (exigido, por exemplo, para receber janela de disponibilidade). Retorna 200 com o usuário.
 A ordem das checagens é a mesma de `desativar`/`reativar`.
+
+Para a tela de aprovação, `GET /v1/users/motoristas?status=PENDING_SIGNUP` lista os
+motoristas pendentes da organização do gestor. `status` aceita qualquer valor de
+`UserStatus`; valor inválido retorna 400 (igual em `GET /v1/alunos/?status=`), e quem não é
+gestor recebe 403. Sem `status`, lista
+todos. Não há rejeição: o motorista criado por engano é removido com
+`DELETE /v1/users/motoristas/<id>`.
 
 A ativação não registra aceite do termo (RF-09). Todo motorista sem o aceite da versão
 vigente recebe 403 em qualquer rota autenticada, exceto `/v1/auth/*`, `/v1/consentimento`,

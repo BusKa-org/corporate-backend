@@ -2327,6 +2327,9 @@
               "$ref": "#/definitions/UserListResponse"
             }
           },
+          "400": {
+            "description": "Status inválido"
+          },
           "403": {
             "description": "Forbidden - not a gestor"
           }
@@ -2334,6 +2337,12 @@
         "summary": "Lists drivers in the Manager's organization",
         "operationId": "list_motoristas",
         "parameters": [
+          {
+            "in": "query",
+            "description": "Filtra por status (PENDING_SIGNUP, ACTIVE, ...)",
+            "name": "status",
+            "type": "string"
+          },
           {
             "name": "X-Fields",
             "in": "header",
@@ -4182,12 +4191,12 @@
         },
         "rota_id": {
           "type": "string",
-          "description": "ID da rota (opcional se enviar viagem_id)",
+          "description": "ID da rota (opcional, não combinar com viagem_id)",
           "example": "COLE_O_UUID_DA_ROTA_AQUI"
         },
         "viagem_id": {
           "type": "string",
-          "description": "ID da viagem (opcional)",
+          "description": "ID da viagem (opcional): avisa os passageiros e o motorista da viagem; recusado se a viagem estiver finalizada ou cancelada",
           "example": ""
         },
         "destinatario_id": {

@@ -14,10 +14,16 @@ def get_notificacao_input_model(api):
                 example="O ônibus vai atrasar 10 minutos hoje.",
             ),
             "rota_id": fields.String(
-                description="ID da rota (opcional se enviar viagem_id)",
+                description="ID da rota (opcional, não combinar com viagem_id)",
                 example="COLE_O_UUID_DA_ROTA_AQUI",
             ),
-            "viagem_id": fields.String(description="ID da viagem (opcional)", example=""),
+            "viagem_id": fields.String(
+                description=(
+                    "ID da viagem (opcional): avisa os passageiros e o motorista da viagem; "
+                    "recusado se a viagem estiver finalizada ou cancelada"
+                ),
+                example="",
+            ),
             "destinatario_id": fields.String(
                 description="ID de um único usuário da organização (apenas gestor, opcional)",
                 example="",
