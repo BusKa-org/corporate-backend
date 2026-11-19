@@ -622,6 +622,13 @@ O motorista criado pelo gestor nasce `PENDING_SIGNUP`; esta rota o passa para `A
 (exigido, por exemplo, para receber janela de disponibilidade). Retorna 200 com o usuário.
 A ordem das checagens é a mesma de `desativar`/`reativar`.
 
+Para a tela de aprovação, `GET /v1/users/motoristas?status=PENDING_SIGNUP` lista os
+motoristas pendentes da organização do gestor. `status` aceita qualquer valor de
+`UserStatus`; valor inválido retorna 400 (igual em `GET /v1/alunos/?status=`), e quem não é
+gestor recebe 403. Sem `status`, lista
+todos. Não há rejeição: o motorista criado por engano é removido com
+`DELETE /v1/users/motoristas/<id>`.
+
 A ativação não registra aceite do termo (RF-09). Todo motorista sem o aceite da versão
 vigente recebe 403 em qualquer rota autenticada, exceto `/v1/auth/*`, `/v1/consentimento`,
 `/v1/users/me` (GET, PATCH, DELETE), `/v1/users/change-password` e `/v1/users/fcm-token`
