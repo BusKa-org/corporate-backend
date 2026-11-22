@@ -347,3 +347,18 @@ def test_periodo_invertido_e_recusado(app, gestor):
 
     with pytest.raises(MarshmallowValidationError):
         PeriodoRelatorioQuerySchema().load({"inicio": "2026-03-12", "fim": "2026-03-10"})
+
+
+def test_exportacao_csv_neutraliza_formula_no_apelido(app, _db, cenario, gestor):
+    import csv
+    import io
+
+    formula = '=HYPERLINK("http://evil.example","clique")'
+    cenario["pontos"][0].apelido = formula
+    _db.session.commit()
+
+    with app.app_context():
+        texto = exportar_indicadores_csv(str(gestor.user.id), INICIO, FIM)
+
+    linhas = list(csv.reader(io.StringIO(texto)))
+    assert [str(cenario["pontos"][0].id), "'" + formula, "4"] in linhas
