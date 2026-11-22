@@ -282,7 +282,7 @@ def request_password_reset(email_raw: str) -> None:
 
     user = User.query.filter_by(email=email).first()
     if not user:
-        logger.info("Password reset requested for unknown email: %s", email)
+        logger.info("Password reset requested for unknown email")
         return
 
     token = secrets.token_urlsafe(32)
