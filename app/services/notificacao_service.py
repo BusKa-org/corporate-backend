@@ -176,10 +176,10 @@ class NotificacaoService:
                 "message": f"Notificação enviada para {len(usuarios_notificados)} usuário(s) com sucesso."
             }
 
-        except Exception as e:
+        except Exception:
             db.session.rollback()
-            logger.error(f"Erro ao disparar notificações: {e}")
-            raise AppError(f"Erro ao enviar notificações: {str(e)}", 500)
+            logger.exception("Erro ao disparar notificações")
+            raise AppError("Erro ao enviar notificações", 500)
 
     @staticmethod
     def listar_notificacoes(user_id: str) -> list[Notificacao]:
@@ -200,9 +200,10 @@ class NotificacaoService:
             notificacao.enviada = True
             db.session.commit()
             return {"message": "Notificação marcada como lida."}
-        except Exception as e:
+        except Exception:
             db.session.rollback()
-            raise AppError(f"Erro ao atualizar notificação: {str(e)}", 500)
+            logger.exception("Erro ao atualizar notificação")
+            raise AppError("Erro ao atualizar notificação", 500)
 
     @staticmethod
     def notificar_alunos_viagem_iniciada(viagem_id: str) -> None:

@@ -141,10 +141,10 @@ def update_user(user_id: str, data: dict[str, Any]) -> User:
         return user
     except (ValidationError, ConflictError):
         raise
-    except Exception as e:
+    except Exception:
         db.session.rollback()
-        logger.error(f"Error updating user: {e}", exc_info=True)
-        raise AppError(f"Erro ao atualizar usuário: {str(e)}", 500)
+        logger.exception("Error updating user")
+        raise AppError("Erro ao atualizar usuário", 500)
 
 
 def _aplicar_jornada(motorista: Motorista, data: dict[str, Any]) -> None:
@@ -212,10 +212,10 @@ def create_motorista(gestor_id: str, data: dict[str, Any]) -> Motorista:
 
     except (ValidationError, ConflictError, ForbiddenError):
         raise
-    except Exception as e:
+    except Exception:
         db.session.rollback()
-        logger.error(f"Error creating motorista: {e}", exc_info=True)
-        raise AppError(f"Erro ao criar motorista: {str(e)}", 500)
+        logger.exception("Error creating motorista")
+        raise AppError("Erro ao criar motorista", 500)
 
 
 def update_motorista(gestor_id: str, motorista_id: str, data: dict[str, Any]) -> Motorista:
@@ -293,10 +293,10 @@ def change_password(user_id: str, data: dict[str, Any]) -> None:
             resource_id=user_id,
         )
 
-    except Exception as e:
+    except Exception:
         db.session.rollback()
-        logger.error(f"Error changing password: {e}", exc_info=True)
-        raise AppError(f"Erro ao atualizar senha: {str(e)}", 500)
+        logger.exception("Error changing password")
+        raise AppError("Erro ao atualizar senha", 500)
 
 
 def get_motoristas_by_municipio(
@@ -350,10 +350,10 @@ def update_profile(user_id: str, data: dict[str, Any]) -> User:
         )
         _preencher_status_motoristas([user])
         return user
-    except Exception as e:
+    except Exception:
         db.session.rollback()
-        logger.error(f"Error updating profile: {e}", exc_info=True)
-        raise AppError(f"Erro ao atualizar perfil: {str(e)}", 500)
+        logger.exception("Error updating profile")
+        raise AppError("Erro ao atualizar perfil", 500)
 
 
 def delete_motorista(gestor_id: str, motorista_id: str) -> None:

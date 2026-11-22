@@ -95,10 +95,10 @@ class OcorrenciaService:
         except AppError:
             db.session.rollback()
             raise
-        except Exception as e:
+        except Exception:
             db.session.rollback()
-            logger.error(f"Erro ao criar ocorrência: {e}")
-            raise AppError(f"Erro ao registrar ocorrência: {str(e)}", 500)
+            logger.exception("Erro ao criar ocorrência")
+            raise AppError("Erro ao registrar ocorrência", 500)
 
     @staticmethod
     def _notificar_gestores(autor: User, ocorrencia: Ocorrencia) -> None:
@@ -158,9 +158,10 @@ class OcorrenciaService:
             ocorrencia.status = StatusOcorrencia.RESOLVIDA
             db.session.commit()
             return ocorrencia
-        except Exception as e:
+        except Exception:
             db.session.rollback()
-            raise AppError(f"Erro ao resolver ocorrência: {str(e)}", 500)
+            logger.exception("Erro ao resolver ocorrência")
+            raise AppError("Erro ao resolver ocorrência", 500)
 
     @staticmethod
     def responder(gestor_id: str, ocorrencia_id: str, dados: dict[str, Any]) -> Ocorrencia:
@@ -199,9 +200,10 @@ class OcorrenciaService:
                 resource_id=str(ocorrencia.id),
             )
             return ocorrencia
-        except Exception as e:
+        except Exception:
             db.session.rollback()
-            raise AppError(f"Erro ao responder ocorrência: {str(e)}", 500)
+            logger.exception("Erro ao responder ocorrência")
+            raise AppError("Erro ao responder ocorrência", 500)
 
     @staticmethod
     def listar_minhas(user_id: str) -> list[Ocorrencia]:

@@ -259,14 +259,14 @@ def register_user(data: dict[str, Any]) -> User:
         raise
     except Exception as e:
         db.session.rollback()
-        logger.error(f"Error registering user: {e}", exc_info=True)
+        logger.exception("Error registering user")
         audit_logger.log_auth(
             action="register",
             email=email,
             success=False,
             details={"error": str(e), "role": role_str},
         )
-        raise AppError(f"Erro ao registrar usuário: {str(e)}", 500)
+        raise AppError("Erro ao registrar usuário", 500)
 
 
 def request_password_reset(email_raw: str) -> None:
