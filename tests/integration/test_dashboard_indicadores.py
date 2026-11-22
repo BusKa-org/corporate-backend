@@ -4,6 +4,8 @@ The scenario below uses fixed values so each indicator has a hand-computed
 result, not just a 200.
 """
 
+import csv
+import io
 from datetime import UTC, date, datetime, timedelta
 
 import pytest
@@ -347,3 +349,15 @@ def test_periodo_invertido_e_recusado(app, gestor):
 
     with pytest.raises(MarshmallowValidationError):
         PeriodoRelatorioQuerySchema().load({"inicio": "2026-03-12", "fim": "2026-03-10"})
+
+
+def test_exportacao_csv_neutraliza_formula_no_apelido(app, _db, cenario, gestor):
+    formula = '=HYPERLINK("http://evil.example","clique")'
+    cenario["pontos"][0].apelido = formula
+    _db.session.commit()
+
+    with app.app_context():
+        texto = exportar_indicadores_csv(str(gestor.user.id), INICIO, FIM)
+
+    linhas = list(csv.reader(io.StringIO(texto)))
+    assert [str(cenario["pontos"][0].id), "'" + formula, "4"] in linhas
