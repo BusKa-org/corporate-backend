@@ -1,4 +1,3 @@
-import math
 from typing import Any
 
 from flask import request
@@ -15,7 +14,6 @@ api = Namespace("routing", description="Roteamento e Cálculo de Rotas")
 models = routing_contract.register_models(api)
 
 _REQUIRED_PARAMS = ("origin_lat", "origin_lng", "dest_lat", "dest_lng")
-_LAT_PARAMS = ("origin_lat", "dest_lat")
 
 
 @api.route("/route")
@@ -35,22 +33,12 @@ class RouteResource(Resource):
     @api.response(503, "Serviço de roteamento indisponível")
     @jwt_required()
     def get(self) -> tuple[dict[str, Any], int]:
-        params: dict[str, float] = {}
-        for nome in _REQUIRED_PARAMS:
-            try:
-                valor = float(request.args[nome])
-            except KeyError:
-                raise ValidationError(f"Parâmetro obrigatório ausente: {nome}")
-            except ValueError as exc:
-                raise ValidationError(f"Parâmetro inválido (esperado número): {exc}")
-
-            # float() accepts "nan" and "inf", which would reach the routing engine.
-            if not math.isfinite(valor):
-                raise ValidationError(f"Parâmetro inválido (esperado número finito): {nome}")
-            limite = 90 if nome in _LAT_PARAMS else 180
-            if valor < -limite or valor > limite:
-                raise ValidationError(f"Parâmetro fora do intervalo [-{limite}, {limite}]: {nome}")
-            params[nome] = valor
+        try:
+            params = {k: float(request.args[k]) for k in _REQUIRED_PARAMS}
+        except KeyError as exc:
+            raise ValidationError(f"Parâmetro obrigatório ausente: {exc.args[0]}")
+        except ValueError as exc:
+            raise ValidationError(f"Parâmetro inválido (esperado número): {exc}")
 
         result = routing_service.get_route(
             origin_lat=params["origin_lat"],
