@@ -434,6 +434,24 @@ def indicadores_periodo(gestor_id: str, inicio: date, fim: date) -> dict:
     }
 
 
+_PREFIXOS_FORMULA = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _celula_segura(valor: Any) -> Any:
+    """Neutralize spreadsheet formulas (CSV injection): user text such as a ponto
+    apelido starting with "=" would run as a formula in Excel. Numbers stay numeric."""
+    if isinstance(valor, str) and valor.startswith(_PREFIXOS_FORMULA):
+        return "'" + valor
+    return valor
+
+
+def _escrever_linha(escritor: Any, linha: list) -> None:
+    celulas: list = []
+    for valor in linha:
+        celulas.append(_celula_segura(valor))
+    escritor.writerow(celulas)
+
+
 def exportar_indicadores_csv(gestor_id: str, inicio: date, fim: date) -> str:
     """Export the period report as CSV (RF-21, step 4 of the main flow).
 
@@ -445,12 +463,12 @@ def exportar_indicadores_csv(gestor_id: str, inicio: date, fim: date) -> str:
 
     buffer = io.StringIO()
     escritor = csv.writer(buffer)
-    escritor.writerow(["relatorio", "MeBusKa - indicadores operacionais (RF-21)"])
-    escritor.writerow(["periodo_inicio", dados["periodo"]["inicio"]])
-    escritor.writerow(["periodo_fim", dados["periodo"]["fim"]])
-    escritor.writerow(["total_viagens", dados["total_viagens"]])
+    _escrever_linha(escritor, ["relatorio", "MeBusKa - indicadores operacionais (RF-21)"])
+    _escrever_linha(escritor, ["periodo_inicio", dados["periodo"]["inicio"]])
+    _escrever_linha(escritor, ["periodo_fim", dados["periodo"]["fim"]])
+    _escrever_linha(escritor, ["total_viagens", dados["total_viagens"]])
     if dados["mensagem"]:
-        escritor.writerow(["mensagem", dados["mensagem"]])
+        _escrever_linha(escritor, ["mensagem", dados["mensagem"]])
 
     blocos: list[tuple[str, list[str], list[list]]] = [
         (
@@ -490,10 +508,11 @@ def exportar_indicadores_csv(gestor_id: str, inicio: date, fim: date) -> str:
     ]
 
     for nome, cabecalho, linhas in blocos:
-        escritor.writerow([])
-        escritor.writerow([nome])
-        escritor.writerow(cabecalho)
-        escritor.writerows(linhas)
+        _escrever_linha(escritor, [])
+        _escrever_linha(escritor, [nome])
+        _escrever_linha(escritor, cabecalho)
+        for linha in linhas:
+            _escrever_linha(escritor, linha)
 
     return buffer.getvalue()
 
