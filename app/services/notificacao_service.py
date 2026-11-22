@@ -43,11 +43,11 @@ class NotificacaoService:
                     token=usuario.fcm_token,
                 )
                 response = messaging.send(mensagem_fcm)
-                logger.info(f"Push enviado com sucesso para {usuario.email}. ID: {response}")
+                logger.info("Push enviado com sucesso para %s. ID: %s", usuario.id, response)
 
-            except Exception as e:
-                logger.error(
-                    f"Falha ao enviar Push Notification via Firebase para {usuario.email}: {str(e)}"
+            except Exception:
+                logger.exception(
+                    "Falha ao enviar Push Notification via Firebase para %s", usuario.id
                 )
 
         return nova
