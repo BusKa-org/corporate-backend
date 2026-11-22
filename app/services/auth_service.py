@@ -264,7 +264,7 @@ def register_user(data: dict[str, Any]) -> User:
             action="register",
             email=email,
             success=False,
-            details={"error": str(e), "role": role_str},
+            details={"error": type(e).__name__, "role": role_str},
         )
         raise AppError("Erro ao registrar usuário", 500)
 
