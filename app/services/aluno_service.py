@@ -109,10 +109,10 @@ def update_me(user_id: str, data: dict[str, Any]) -> Aluno:
         db.session.commit()
         return aluno
 
-    except Exception as e:
+    except Exception:
         db.session.rollback()
-        logger.error(f"Error updating student profile: {e}")
-        raise AppError(f"Erro ao atualizar perfil: {str(e)}", 500)
+        logger.exception("Error updating student profile")
+        raise AppError("Erro ao atualizar perfil", 500)
 
 
 def get_aluno_by_id(gestor_id: str, aluno_id: str) -> Aluno:

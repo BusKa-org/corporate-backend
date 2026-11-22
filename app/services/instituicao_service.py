@@ -176,7 +176,7 @@ def delete_instituicao(gestor_id: str, inst_id: str) -> None:
     try:
         db.session.delete(inst.ponto)
         db.session.commit()
-    except Exception as e:
+    except Exception:
         db.session.rollback()
-        logger.error(f"Error deleting institution: {e}")
-        raise AppError(f"Erro ao remover instituição: {str(e)}", 500)
+        logger.exception("Error deleting institution")
+        raise AppError("Erro ao remover instituição", 500)

@@ -83,10 +83,10 @@ def create_onibus(user_id: str, data: dict[str, Any]) -> Onibus:
         db.session.commit()
         return novo_onibus
 
-    except Exception as e:
+    except Exception:
         db.session.rollback()
-        logger.error(f"Error creating bus: {e}")
-        raise AppError(f"Erro ao salvar ônibus: {str(e)}", 500)
+        logger.exception("Error creating bus")
+        raise AppError("Erro ao salvar ônibus", 500)
 
 
 def update_onibus(user_id: str, onibus_id: str, data: dict[str, Any]) -> Onibus:
@@ -125,10 +125,10 @@ def update_onibus(user_id: str, onibus_id: str, data: dict[str, Any]) -> Onibus:
     try:
         db.session.commit()
         return onibus
-    except Exception as e:
+    except Exception:
         db.session.rollback()
-        logger.error(f"Error updating bus: {e}")
-        raise AppError(f"Erro ao atualizar ônibus: {str(e)}", 500)
+        logger.exception("Error updating bus")
+        raise AppError("Erro ao atualizar ônibus", 500)
 
 
 def delete_onibus(user_id: str, onibus_id: str) -> None:

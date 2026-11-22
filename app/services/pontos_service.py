@@ -67,10 +67,10 @@ def create_ponto(user_id: str, data: dict[str, Any]) -> Ponto:
         db.session.commit()
         return novo_ponto
 
-    except Exception as e:
+    except Exception:
         db.session.rollback()
-        logger.error(f"Error creating point: {e}")
-        raise AppError(f"Erro ao criar ponto: {str(e)}", 500)
+        logger.exception("Error creating point")
+        raise AppError("Erro ao criar ponto", 500)
 
 
 def update_ponto(user_id: str, ponto_id: str, data: dict[str, Any]) -> Ponto:
@@ -100,10 +100,10 @@ def update_ponto(user_id: str, ponto_id: str, data: dict[str, Any]) -> Ponto:
         db.session.commit()
         return ponto
 
-    except Exception as e:
+    except Exception:
         db.session.rollback()
-        logger.error(f"Error updating point: {e}")
-        raise AppError(f"Erro ao atualizar ponto: {str(e)}", 500)
+        logger.exception("Error updating point")
+        raise AppError("Erro ao atualizar ponto", 500)
 
 
 def delete_ponto(user_id: str, ponto_id: str) -> None:

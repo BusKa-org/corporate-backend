@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 PUSHES_PENDENTES = "pushes_pendentes"
 
 
-def _enviar_push(fcm_token: str, email: str, titulo: str, mensagem: str) -> None:
+def _enviar_push(fcm_token: str, usuario_id: str, titulo: str, mensagem: str) -> None:
     try:
         mensagem_fcm = messaging.Message(
             notification=messaging.Notification(
@@ -34,17 +34,17 @@ def _enviar_push(fcm_token: str, email: str, titulo: str, mensagem: str) -> None
             token=fcm_token,
         )
         response = messaging.send(mensagem_fcm)
-        logger.info(f"Push enviado com sucesso para {email}. ID: {response}")
+        logger.info("Push enviado com sucesso para %s. ID: %s", usuario_id, response)
 
-    except Exception as e:
-        logger.error(f"Falha ao enviar Push Notification via Firebase para {email}: {str(e)}")
+    except Exception:
+        logger.exception("Falha ao enviar Push Notification via Firebase para %s", usuario_id)
 
 
 @event.listens_for(Session, "after_commit")
 def _enviar_pushes_pendentes(session: Session) -> None:
     pendentes = session.info.pop(PUSHES_PENDENTES, [])
-    for fcm_token, email, titulo, mensagem in pendentes:
-        _enviar_push(fcm_token, email, titulo, mensagem)
+    for fcm_token, usuario_id, titulo, mensagem in pendentes:
+        _enviar_push(fcm_token, usuario_id, titulo, mensagem)
 
 
 @event.listens_for(Session, "after_transaction_end")
@@ -71,7 +71,7 @@ class NotificacaoService:
         if usuario and getattr(usuario, "fcm_token", None):
             # Sent by _enviar_pushes_pendentes after commit, so a rollback sends nothing.
             pendentes = db.session.info.setdefault(PUSHES_PENDENTES, [])
-            pendentes.append((usuario.fcm_token, usuario.email, titulo, mensagem))
+            pendentes.append((usuario.fcm_token, str(usuario.id), titulo, mensagem))
 
         return nova
 
@@ -199,10 +199,10 @@ class NotificacaoService:
                 "message": f"Notificação enviada para {len(usuarios_notificados)} usuário(s) com sucesso."
             }
 
-        except Exception as e:
+        except Exception:
             db.session.rollback()
-            logger.error(f"Erro ao disparar notificações: {e}")
-            raise AppError(f"Erro ao enviar notificações: {str(e)}", 500)
+            logger.exception("Erro ao disparar notificações")
+            raise AppError("Erro ao enviar notificações", 500)
 
     @staticmethod
     def listar_notificacoes(user_id: str) -> list[Notificacao]:
@@ -223,9 +223,10 @@ class NotificacaoService:
             notificacao.enviada = True
             db.session.commit()
             return {"message": "Notificação marcada como lida."}
-        except Exception as e:
+        except Exception:
             db.session.rollback()
-            raise AppError(f"Erro ao atualizar notificação: {str(e)}", 500)
+            logger.exception("Erro ao atualizar notificação")
+            raise AppError("Erro ao atualizar notificação", 500)
 
     @staticmethod
     def notificar_alunos_viagem_iniciada(viagem_id: str) -> None:

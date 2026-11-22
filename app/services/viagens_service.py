@@ -974,10 +974,10 @@ def cancelar_viagem(user_id: str, viagem_id: str, motivo: str | None = None) -> 
             "message": "Viagem cancelada com sucesso",
             "alunos_notificados": len(alunos_notificados),
         }
-    except Exception as e:
+    except Exception:
         db.session.rollback()
-        logger.error(f"Erro ao cancelar viagem: {e}")
-        raise AppError(f"Erro ao cancelar viagem: {str(e)}", 500)
+        logger.exception("Erro ao cancelar viagem")
+        raise AppError("Erro ao cancelar viagem", 500)
 
 
 def atualizar_localizacao(user_id: str, viagem_id: str, data: dict) -> dict:
