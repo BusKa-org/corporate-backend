@@ -89,6 +89,14 @@ def register_error_handlers(app) -> None:
             },
         )
 
+        # Many services build a 500 from str(e), which may hold SQL or other internals.
+        if err.status_code == 500:
+            logger.exception("Internal application error: %s", err.message)
+            return (
+                jsonify(_error_payload(code=err.code, message="Erro interno do servidor")),
+                500,
+            )
+
         details = None
         if isinstance(err, ValidationError):
             details = err.details or None

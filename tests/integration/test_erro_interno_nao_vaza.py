@@ -15,4 +15,4 @@ def test_falha_de_banco_retorna_500_sem_detalhe_interno(gestor, onibus, monkeypa
     assert r.status_code == 500
     corpo = r.get_data(as_text=True)
     assert "tabela_interna" not in corpo
-    assert r.get_json()["error"]["message"] == "Erro ao atualizar ônibus"
+    assert r.get_json()["error"]["message"] == "Erro interno do servidor"

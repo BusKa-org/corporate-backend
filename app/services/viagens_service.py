@@ -41,7 +41,7 @@ from app.models.viagem import (
 )
 from app.services import capacidade_service, parametros_operacao_service
 from app.services.notificacao_service import NotificacaoService
-from app.services.rotas_service import travar_e_reler_rota
+from app.services.rotas_service import travar_e_reler_rota, travar_rota
 from app.tasks.viagem_tasks import realizar_auto_checkin
 from app.utils import audit_logger, tempo, validate_uuid
 from app.utils.geo_utils import calcular_distancia_metros
@@ -92,15 +92,22 @@ def _exigir_viagem_da_organizacao(viagem: Viagem, user: User) -> None:
 
 
 def _travar_viagem(viagem_id) -> Viagem:
-    """Reload the trip with a row lock held until commit."""
+    """Reload the trip with a row lock held until commit.
+
+    Raises: NotFoundError
+    """
     # key_share: FOR NO KEY UPDATE, so inserts of rows that reference the trip are not blocked.
-    return (
+    viagem = (
         db.session.query(Viagem)
         .filter(Viagem.id == viagem_id)
         .with_for_update(of=Viagem, key_share=True)
         .populate_existing()
-        .one()
+        .first()
     )
+    # The trip may have been deleted while we waited for the lock.
+    if viagem is None:
+        raise NotFoundError("Viagem não encontrada")
+    return viagem
 
 
 def _popular_dados_da_viagem(viagem_obj: Viagem, rota_obj: Rota) -> None:
@@ -892,6 +899,11 @@ def cancelar_viagem(user_id: str, viagem_id: str, motivo: str | None = None) -> 
 
     _exigir_viagem_da_organizacao(viagem, user)
 
+    # Route, then trip, as in solicitar_viagem: a student joining the round either lands
+    # before the cancel (and is cancelled with it) or sees the trip already cancelled.
+    rota = _rota_da_viagem(viagem)
+    if rota is not None:
+        travar_rota(rota.id)
     # Locked so a FINALIZAR running at the same time cannot overwrite the cancel.
     viagem = _travar_viagem(viagem.id)
     if viagem.status in (StatusViagem.FINALIZADA, StatusViagem.CANCELADA):
@@ -914,7 +926,11 @@ def cancelar_viagem(user_id: str, viagem_id: str, motivo: str | None = None) -> 
         confirmados = AlunosConfirmados.query.filter_by(viagem_id=viagem.id, confirmacao=True).all()
         data_formatada = viagem.data.strftime("%d/%m/%Y")
 
+        # After the buffer closes, an on-demand passenger is both confirmed and an active
+        # request: notify each one once.
+        alunos_notificados: set[Any] = set()
         for conf in confirmados:
+            alunos_notificados.add(conf.aluno_id)
             NotificacaoService._criar_notificacao_interna(
                 usuario_id=conf.aluno_id,
                 titulo="Viagem Cancelada",
@@ -927,6 +943,9 @@ def cancelar_viagem(user_id: str, viagem_id: str, motivo: str | None = None) -> 
         for solicitacao in solicitacoes:
             solicitacao.status = StatusSolicitacao.CANCELADA
             solicitacao.cancelada_em = tempo.agora_utc()
+            if solicitacao.aluno_id in alunos_notificados:
+                continue
+            alunos_notificados.add(solicitacao.aluno_id)
             NotificacaoService._criar_notificacao_interna(
                 usuario_id=solicitacao.aluno_id,
                 titulo="Viagem Cancelada",
@@ -953,7 +972,7 @@ def cancelar_viagem(user_id: str, viagem_id: str, motivo: str | None = None) -> 
 
         return {
             "message": "Viagem cancelada com sucesso",
-            "alunos_notificados": len(confirmados) + len(solicitacoes),
+            "alunos_notificados": len(alunos_notificados),
         }
     except Exception:
         db.session.rollback()
@@ -971,6 +990,7 @@ def atualizar_localizacao(user_id: str, viagem_id: str, data: dict) -> dict:
     if not viagem:
         raise NotFoundError("Viagem não encontrada")
 
+    _exigir_viagem_da_organizacao(viagem, user)
     # Authorize before the status check so other drivers cannot probe a trip's state;
     # a trip without a driver also falls here, so its assignment does not leak.
     if viagem.motorista_id != user.id:
@@ -1065,6 +1085,7 @@ def obter_localizacao_onibus(user_id: str, viagem_id: str) -> dict:
     if not viagem:
         raise NotFoundError("Viagem não encontrada")
 
+    _exigir_viagem_da_organizacao(viagem, user)
     # Authorize before the status check so outsiders cannot probe a trip's state.
     if user.role == UserRole.MOTORISTA:
         if viagem.motorista_id != user.id:
@@ -1075,9 +1096,7 @@ def obter_localizacao_onibus(user_id: str, viagem_id: str) -> dict:
             raise ForbiddenError(
                 "Você precisa estar confirmado nesta viagem para ver a localização do ônibus."
             )
-    elif user.role == UserRole.GESTOR:
-        _exigir_viagem_da_organizacao(viagem, user)
-    else:
+    elif user.role != UserRole.GESTOR:
         raise ForbiddenError(
             "Apenas alunos confirmados, o motorista ou o gestor podem consultar a localização"
             " do ônibus."

@@ -138,7 +138,8 @@ def list_alunos_gestor(
         q = q.filter(Aluno.status == status)
     if projeto_id:
         projeto = projeto_service.projeto_da_organizacao(gestor.organizacao_id, projeto_id)
-        q = q.filter(Aluno.projeto_id == projeto.id)
+        # A deleted account keeps its projeto_id, so leave it out as definir_projeto_do_aluno does.
+        q = q.filter(Aluno.projeto_id == projeto.id, Aluno.status != UserStatus.DELETED)
     return q.all()
 
 
