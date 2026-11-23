@@ -29,6 +29,7 @@ class RotaHorarioCreateRequestSchema(BaseSchema):
     horario_saida = fields.String(required=True)
     sentido = fields.String(required=True, validate=validate.OneOf(["IDA", "VOLTA", "CIRCULAR"]))
     dias = fields.List(fields.String(), required=True)
+    custo_tickets = fields.Integer(load_default=1, validate=validate.Range(min=1, max=100))
 
 
 class RotaCreateRequestSchema(BaseSchema):

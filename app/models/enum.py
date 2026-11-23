@@ -62,3 +62,23 @@ class TipoOcorrencia(enum.Enum):
 class StatusOcorrencia(enum.Enum):
     ABERTA = "ABERTA"
     RESOLVIDA = "RESOLVIDA"
+
+
+class TipoPoliticaTicket(enum.Enum):
+    RECARGA = "RECARGA"
+    COTA = "COTA"
+    ILIMITADO = "ILIMITADO"
+
+
+class JanelaCota(enum.Enum):
+    DIA = "DIA"
+    SEMANA = "SEMANA"
+    MES = "MES"
+    HORAS = "HORAS"
+
+
+class TipoMovimentoTicket(enum.Enum):
+    GASTO = "GASTO"
+    DEVOLUCAO = "DEVOLUCAO"
+    CONCESSAO = "CONCESSAO"
+    NO_SHOW = "NO_SHOW"

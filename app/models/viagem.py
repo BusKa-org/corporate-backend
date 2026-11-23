@@ -39,6 +39,9 @@ class Viagem(db.Model):
     aviso_24h_enviado = db.Column(db.Boolean, default=False, nullable=False)
     aviso_10min_enviado = db.Column(db.Boolean, default=False, nullable=False)
 
+    # Quantos tickets esta viagem custa. Copiado do horário ao gerar a viagem.
+    custo_tickets = db.Column(db.Integer, default=1, server_default="1", nullable=False)
+
     created_at = db.Column(db.DateTime(timezone=True), server_default=db.func.now())
     updated_at = db.Column(
         db.DateTime(timezone=True), server_default=db.func.now(), onupdate=db.func.now()
@@ -111,6 +114,12 @@ class AlunosConfirmados(db.Model):
     ponto_destino = relationship("Ponto", foreign_keys=[ponto_destino_id])
 
     embarcou = db.Column(db.Boolean, default=False, nullable=False)
+
+    # Política que cobrou esta confirmação e quanto cobrou. Servem para devolver uma vez só.
+    politica_ticket_id = db.Column(
+        UUID(as_uuid=True), db.ForeignKey("politica_ticket.id", ondelete="SET NULL")
+    )
+    tickets_gastos = db.Column(db.Integer, default=0, server_default="0", nullable=False)
 
     tentativas_auto_checkin = db.Column(db.Integer, default=0, nullable=False)
 

@@ -71,6 +71,7 @@ class HorarioRota(db.Model):
 
     horario_saida = db.Column(db.Time, nullable=False)
     sentido = db.Column(db.Enum(SentidoViagem, name="sentido_viagem"), nullable=False)
+    custo_tickets = db.Column(db.Integer, default=1, server_default="1", nullable=False)
 
     rota = relationship("Rota", back_populates="grade_horarios")
 
