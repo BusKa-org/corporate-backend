@@ -15,12 +15,18 @@ class HorarioCreateRequestSchema(BaseSchema):
         required=True,
         metadata={"description": "Lista de dias da semana"},
     )
+    custo_tickets = fields.Integer(
+        load_default=1,
+        validate=validate.Range(min=1, max=100),
+        metadata={"description": "Tickets que cada viagem deste horário custa"},
+    )
 
 
 class HorarioResponseSchema(BaseSchema):
     id = fields.String()
     horario_saida = fields.Time()
     sentido = fields.String()
+    custo_tickets = fields.Integer()
     dias = fields.Method("get_dias")
 
     def get_dias(self, obj):

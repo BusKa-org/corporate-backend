@@ -31,6 +31,7 @@ from .api.controllers.onibus_controller import api as onibus_ns
 from .api.controllers.pontos_controller import api as pontos_ns
 from .api.controllers.rotas_controller import api as rotas_ns
 from .api.controllers.routing_controller import api as routing_ns
+from .api.controllers.ticket_controller import api as politicas_ticket_ns, tickets_api as tickets_ns
 from .api.controllers.user_controller import api as user_ns
 from .api.controllers.viagens_controller import api as viagem_ns
 from .core.config import Settings
@@ -207,6 +208,8 @@ Inclua o header: `Authorization: Bearer <seu_token>`
     api.add_namespace(consentimento_ns, path="/v1/consentimento")
     api.add_namespace(convites_ns, path="/v1/convites")
     api.add_namespace(grupos_ns, path="/v1/grupos")
+    api.add_namespace(politicas_ticket_ns, path="/v1/politicas-ticket")
+    api.add_namespace(tickets_ns, path="/v1/tickets")
     api.add_namespace(notificacoes_ns, path="/v1/notificacoes")
     api.add_namespace(onibus_ns, path="/v1/onibus")
     api.add_namespace(rotas_ns, path="/v1/rotas")

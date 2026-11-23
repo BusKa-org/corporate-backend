@@ -155,6 +155,7 @@ class ViagemResponseSchema(BaseSchema):
     id = fields.String()
     data = fields.Date()
     status = fields.Method("get_status")
+    custo_tickets = fields.Integer()
     motorista_nome = fields.String(attribute="motorista.nome", dump_default="Sem Motorista")
     veiculo_placa = fields.String(attribute="veiculo.placa", dump_default="Sem Veículo")
 

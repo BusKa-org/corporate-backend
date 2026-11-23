@@ -11,6 +11,7 @@ from app.schemas.credencial_embarque_schema import CredencialEmbarqueResponseSch
 from app.schemas.ponto_schema import (
     PontoFlatListResponseSchema,
 )
+from app.schemas.ticket_schema import CustoViagemRequestSchema
 from app.schemas.viagem_schema import (
     MessageResponseSchema,
     ViagemAcaoRequestSchema,
@@ -38,6 +39,7 @@ viagem_response_schema = ViagemResponseSchema()
 viagem_list_response_schema = ViagemListResponseSchema()
 
 viagem_create_request_schema = ViagemCreateRequestSchema()
+custo_viagem_request_schema = CustoViagemRequestSchema()
 viagem_confirmacao_request_schema = ViagemConfirmacaoRequestSchema()
 viagem_acao_request_schema = ViagemAcaoRequestSchema()
 
@@ -147,11 +149,8 @@ class ViagemListResource(Resource):
         user_id = get_jwt_identity()
         data = request.get_json(silent=True) or {}
         payload = viagem_create_request_schema.load(data)
-        result = viagens_service.gerar_viagem(user_id, payload)
-
-        # gerar_viagem returns {message,id,dia}. If you want to return ViagemResponseSchema instead,
-        # change service to return the Viagem ORM instance. For now, keep it consistent with existing behavior.
-        return result, 201
+        viagem = viagens_service.gerar_viagem(user_id, payload)
+        return viagem_response_schema.dump(viagem), 201
 
 
 @api.route("/minhas")
@@ -197,6 +196,19 @@ class ViagemCancelarResource(Resource):
         user_id = get_jwt_identity()
         result = viagens_service.cancelar_viagem(user_id, id)
         return result, 200
+
+
+@api.route("/<string:id>/custo")
+class ViagemCustoResource(Resource):
+    @api.doc("definir_custo_viagem", responses={200: "Custo atualizado", 404: "Não encontrada"})
+    @jwt_required()
+    def put(self, id: str) -> tuple[dict[str, Any], int]:
+        """(Gestor) Define quantos tickets esta viagem agendada custa. Corpo: {"custo_tickets"}"""
+        payload = custo_viagem_request_schema.load(request.get_json(silent=True) or {})
+        viagem = viagens_service.definir_custo_da_viagem(
+            get_jwt_identity(), id, payload["custo_tickets"]
+        )
+        return {"id": str(viagem.id), "custo_tickets": viagem.custo_tickets}, 200
 
 
 @api.route("/<string:id>/localizacao")

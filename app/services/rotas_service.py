@@ -123,6 +123,7 @@ def create_rota(gestor_id: str, data: dict[str, Any]) -> Rota:
                     rota_id=rota.id,
                     horario_saida=h_data["horario_saida"],
                     sentido=h_data["sentido"],
+                    custo_tickets=h_data.get("custo_tickets", 1),
                 )
                 db.session.add(novo_horario)
                 db.session.flush()
@@ -242,6 +243,7 @@ def add_horario(gestor_id: str, rota_id: str, data: dict[str, Any]) -> HorarioRo
             rota_id=rota.id,
             horario_saida=data.get("horario_saida"),
             sentido=SentidoViagem(data.get("sentido")),
+            custo_tickets=data.get("custo_tickets", 1),
         )
         db.session.add(novo_horario)
         db.session.flush()

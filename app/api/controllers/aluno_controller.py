@@ -10,7 +10,8 @@ from app.schemas.aluno_schema import (
     AlunoMeUpdateRequestSchema,
     AlunoResponseSchema,
 )
-from app.services import aluno_service
+from app.schemas.ticket_schema import MovimentoTicketResponseSchema, SaldoTicketResponseSchema
+from app.services import aluno_service, ticket_service
 
 api = Namespace("alunos", description="Área do Aluno (App)")
 
@@ -21,6 +22,8 @@ models = aluno_contract.register_models(api)
 me_update_schema = AlunoMeUpdateRequestSchema()
 aluno_response_schema = AlunoResponseSchema()
 aluno_list_response_schema = AlunoListResponseSchema()
+saldo_ticket_response_schema = SaldoTicketResponseSchema()
+movimento_ticket_response_schema = MovimentoTicketResponseSchema()
 
 
 @api.route("/me")
@@ -73,3 +76,33 @@ class AlunoDetailResource(Resource):
         gestor_id = get_jwt_identity()
         aluno = aluno_service.get_aluno_by_id(gestor_id, aluno_id)
         return aluno_response_schema.dump(aluno), 200
+
+
+@api.route("/me/tickets")
+class AlunoMeTicketsResource(Resource):
+    @api.doc("aluno_tickets", responses={200: "Saldo por política vigente"})
+    @jwt_required()
+    def get(self) -> tuple[dict[str, Any], int]:
+        """Saldo de tickets do passageiro, uma linha por política vigente"""
+        saldos = ticket_service.listar_saldos_do_aluno(get_jwt_identity())
+        return {
+            "items": saldo_ticket_response_schema.dump(saldos, many=True),
+            "total": len(saldos),
+        }, 200
+
+
+@api.route("/me/tickets/movimentos")
+class AlunoMeTicketsMovimentosResource(Resource):
+    @api.doc("aluno_tickets_movimentos", params={"limite": "Máximo de linhas (padrão 100)"})
+    @jwt_required()
+    def get(self) -> tuple[dict[str, Any], int]:
+        """Histórico de tickets do passageiro, do mais novo ao mais velho"""
+        try:
+            limite = int(request.args.get("limite", 100))
+        except ValueError:
+            limite = 100
+        linhas = ticket_service.listar_movimentos_do_aluno(get_jwt_identity(), limite)
+        return {
+            "items": movimento_ticket_response_schema.dump(linhas, many=True),
+            "total": len(linhas),
+        }, 200

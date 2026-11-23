@@ -22,6 +22,12 @@ from app.models.rota import DiasOperacao, HorarioRota, Rota, RotaAluno, RotaPont
 from app.models.user import Aluno, User
 from app.models.viagem import AlunosConfirmados, TelemetriaViagem, Viagem, ViagemPonto
 from app.services.notificacao_service import NotificacaoService
+from app.services.ticket_service import (
+    cobrar_confirmacao,
+    devolver_a_todos_os_confirmados,
+    devolver_ao_desmarcar,
+    tratar_tickets_ao_finalizar,
+)
 from app.tasks.viagem_tasks import realizar_auto_checkin
 from app.utils import audit_logger
 from app.utils.geo_utils import calcular_distancia_metros
@@ -200,10 +206,13 @@ def confirmar_presenca_aluno(
                 if aluno.ponto_casa_id:
                     ponto_destino_inferido = aluno.ponto_casa_id
 
+            cobrar_confirmacao(aluno, viagem, horario, registro, datetime.now(UTC))
+
             registro.confirmacao = True
             registro.ponto_embarque_id = ponto_embarque_id
             registro.ponto_destino_id = ponto_destino_inferido
         else:
+            devolver_ao_desmarcar(registro, viagem, datetime.now(UTC))
             registro.confirmacao = False
             registro.ponto_embarque_id = None
             registro.ponto_destino_id = None
@@ -311,6 +320,7 @@ def gerar_viagem(user_id: str, data_input: dict) -> Viagem:
             motorista_id=motorista_id,
             veiculo_id=rota.veiculo_padrao_id,
             status=StatusViagem.AGENDADA,
+            custo_tickets=horario_selecionado.custo_tickets,
         )
         db.session.add(nova_viagem)
         db.session.flush()  # ensure nova_viagem.id
@@ -359,6 +369,7 @@ def controlar_viagem(user_id: str, viagem_id: str, data: dict[str, Any]) -> Viag
                 raise ValidationError("A viagem precisa estar em andamento para ser finalizada")
             viagem.status = StatusViagem.FINALIZADA
             viagem.fim_real = datetime.now(UTC)
+            tratar_tickets_ao_finalizar(viagem, viagem.fim_real)
 
             rastros = (
                 TelemetriaViagem.query.filter_by(viagem_id=viagem.id)
@@ -434,6 +445,7 @@ def cancelar_viagem(user_id: str, viagem_id: str) -> dict[str, Any]:
         viagem.status = StatusViagem.CANCELADA
 
         confirmados = AlunosConfirmados.query.filter_by(viagem_id=viagem.id, confirmacao=True).all()
+        devolver_a_todos_os_confirmados(viagem, datetime.now(UTC))
         data_formatada = viagem.data.strftime("%d/%m/%Y")
 
         for conf in confirmados:
@@ -454,6 +466,35 @@ def cancelar_viagem(user_id: str, viagem_id: str) -> dict[str, Any]:
         db.session.rollback()
         logger.error(f"Erro ao cancelar viagem: {e}")
         raise AppError(f"Erro ao cancelar viagem: {str(e)}", 500)
+
+
+def definir_custo_da_viagem(user_id: str, viagem_id: str, custo_tickets: int) -> Viagem:
+    """Gestor muda quantos tickets uma viagem agendada custa (evento, rota longa)."""
+    user = db.session.get(User, user_id)
+    if not user or user.role != UserRole.GESTOR:
+        raise ForbiddenError("Apenas gestores podem alterar o custo da viagem")
+
+    viagem = db.session.get(Viagem, viagem_id)
+    if viagem is None:
+        raise NotFoundError("Viagem não encontrada")
+    horario = db.session.get(HorarioRota, viagem.horario_rota_id)
+    rota = db.session.get(Rota, horario.rota_id) if horario else None
+    if rota is None or rota.organizacao_id != user.organizacao_id:
+        raise NotFoundError("Viagem não encontrada")
+
+    if viagem.status != StatusViagem.AGENDADA:
+        raise ValidationError("Só uma viagem agendada pode mudar de custo")
+
+    with transactional():
+        viagem.custo_tickets = custo_tickets
+
+    audit_logger.log_user_action(
+        action="definir_custo_viagem",
+        user_id=user_id,
+        resource_type="viagem",
+        resource_id=viagem_id,
+    )
+    return viagem
 
 
 def atualizar_localizacao(user_id: str, viagem_id: str, data: dict) -> dict:
