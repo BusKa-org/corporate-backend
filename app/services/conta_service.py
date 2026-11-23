@@ -8,7 +8,7 @@ estatístico é apagado.
 import hashlib
 import logging
 import secrets
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 from werkzeug.security import check_password_hash
 
@@ -19,6 +19,7 @@ from app.models.consentimento import REVOGACAO, Consentimento
 from app.models.credencial_embarque import CredencialEmbarque
 from app.models.enum import StatusViagem, UserRole, UserStatus
 from app.models.geo import Endereco, Ponto
+from app.models.grupo import GrupoMembro
 from app.models.notificacao import Notificacao
 from app.models.password_reset import PasswordResetToken
 from app.models.retencao_legal import RetencaoLegal
@@ -91,6 +92,10 @@ def _apagar_dados_sem_valor_estatistico(aluno_id) -> None:
     CredencialEmbarque.query.filter_by(aluno_id=aluno_id).delete()
     PasswordResetToken.query.filter_by(user_id=aluno_id).delete()
     RotaAluno.query.filter_by(aluno_id=aluno_id).delete()
+    # O vínculo fica como histórico do grupo, mas a pessoa deixa de ser membro atual.
+    GrupoMembro.query.filter(
+        GrupoMembro.usuario_id == aluno_id, GrupoMembro.data_fim.is_(None)
+    ).update({"data_fim": date.today()}, synchronize_session=False)
 
     # Presença em viagem finalizada fica (estatística). O resto sai.
     viagens_finalizadas = db.session.query(Viagem.id).filter(

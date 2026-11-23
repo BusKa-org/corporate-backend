@@ -15,6 +15,10 @@ class ConviteListQuerySchema(BaseSchema):
     estado = fields.String(load_default=None, allow_none=True)
 
 
+class SugestaoGruposQuerySchema(BaseSchema):
+    email = fields.String(required=True)
+
+
 class ConviteAceiteRequestSchema(BaseSchema):
     """Dados da pessoa ao concluir. Nome, CPF e instituição podem vir do convite."""
 
@@ -45,8 +49,15 @@ class ConviteResponseSchema(BaseSchema):
     envio_estado = fields.String()
     expira_em = fields.DateTime()
     vencido = fields.Method("get_vencido")
+    grupo_ids = fields.Method("get_grupo_ids")
     created_at = fields.DateTime()
     concluido_em = fields.DateTime(allow_none=True)
+
+    def get_grupo_ids(self, convite):
+        ids: list[str] = []
+        for grupo in convite.grupos:
+            ids.append(str(grupo.id))
+        return ids
 
     def get_vencido(self, convite):
         return convite.estado == "PENDENTE" and convite.expira_em <= datetime.now(UTC)

@@ -23,6 +23,16 @@ All notable changes to this project will be documented in this file.
   the background by a scheduler job. New optional setting `APP_DOWNLOAD_URL`.
   A person who types an enabled e-mail straight into the app gets a 10-minute PIN by e-mail
   (`POST /v1/convites/pin`, `POST /v1/convites/pin/validar`) instead of using the link.
+- Passenger groups: the gestor creates groups (optionally with start and end dates), adds and
+  removes passengers, and lists each membership with its trip counts (confirmed, finished and
+  with boarding recorded). Removing a member keeps the history, and rejoining creates a new
+  membership. Endpoints under `/v1/grupos`. An invitation can list `grupo_ids`, and the person
+  joins those groups when finishing the registration. Deleting an account closes the open
+  memberships. A group can have a parent (one level): a member of the subgroup also counts as a
+  member of the parent, the parent report lists the subgroup memberships, and a group with
+  subgroups cannot be deleted. Email-domain rules per group (`/v1/grupos/<id>/regras-email`)
+  feed `GET /v1/convites/sugestao-grupos?email=`, which suggests the groups for an address
+  (`ana@aluno.nubank.com` matches `aluno.nubank.com` and `nubank.com`) without applying them.
 
 ### Removed
 - Passenger self-signup (`POST /v1/alunos/signup`), the guardian consent endpoints, the

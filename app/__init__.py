@@ -23,6 +23,7 @@ from .api.controllers.auth_controller import api as auth_ns
 from .api.controllers.consentimento_controller import api as consentimento_ns
 from .api.controllers.convite_controller import api as convites_ns
 from .api.controllers.dashboard_controller import api as dashboard_ns
+from .api.controllers.grupo_controller import api as grupos_ns
 from .api.controllers.instituicao_controller import api as inst_ns
 from .api.controllers.notificacao_controller import api as notificacoes_ns
 from .api.controllers.ocorrencia_controller import api as ocorrencias_ns
@@ -205,6 +206,7 @@ Inclua o header: `Authorization: Bearer <seu_token>`
     api.add_namespace(user_ns, path="/v1/users")
     api.add_namespace(consentimento_ns, path="/v1/consentimento")
     api.add_namespace(convites_ns, path="/v1/convites")
+    api.add_namespace(grupos_ns, path="/v1/grupos")
     api.add_namespace(notificacoes_ns, path="/v1/notificacoes")
     api.add_namespace(onibus_ns, path="/v1/onibus")
     api.add_namespace(rotas_ns, path="/v1/rotas")

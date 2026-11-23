@@ -25,6 +25,7 @@ from app.models.convite import (
 from app.models.enum import UserRole, UserStatus
 from app.models.geo import Instituicao
 from app.models.user import Aluno, User
+from app.services import grupo_service
 from app.services.user_service import _get_gestor_or_403
 from app.utils import (
     audit_logger,
@@ -116,12 +117,15 @@ def _validar_item(gestor, item: dict[str, Any]) -> dict[str, Any]:
     if instituicao_texto is not None:
         instituicao_id = _instituicao_da_organizacao(instituicao_texto, gestor.organizacao_id).id
 
+    grupos = grupo_service.grupos_do_convite(item.get("grupo_ids"), gestor.organizacao_id)
+
     return {
         "email": email,
         "nome": nome,
         "cpf": cpf,
         "telefone": telefone,
         "instituicao_id": instituicao_id,
+        "grupos": grupos,
     }
 
 
@@ -166,6 +170,7 @@ def _processar_item(gestor, item: dict[str, Any]) -> dict[str, str]:
     convite.cpf = dados["cpf"]
     convite.telefone = dados["telefone"]
     convite.instituicao_id = dados["instituicao_id"]
+    convite.grupos = dados["grupos"]
     _renovar(convite)
 
     return {"email": email, "resultado": resultado, "motivo": ""}
@@ -342,6 +347,7 @@ def concluir_convite(token: str, dados: dict[str, Any]) -> Aluno:
         )
         db.session.add(aluno)
         db.session.flush()
+        grupo_service.entrar_nos_grupos_do_convite(convite, aluno)
 
         convite.estado = CONCLUIDO
         convite.concluido_em = _agora()

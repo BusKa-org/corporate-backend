@@ -25,6 +25,7 @@ from app.models import (
     convite,
     credencial_embarque,
     geo,
+    grupo,
     notificacao,
     onibus,
     organizacao,

@@ -11,8 +11,10 @@ from app.schemas.convite_schema import (
     ConvitesCreateRequestSchema,
     PinSolicitarRequestSchema,
     PinValidarRequestSchema,
+    SugestaoGruposQuerySchema,
 )
-from app.services import convite_service
+from app.schemas.grupo_schema import GrupoResponseSchema
+from app.services import convite_service, grupo_service
 
 api = Namespace("convites", description="Convites de cadastro de passageiros")
 
@@ -22,6 +24,8 @@ convite_aceite_schema = ConviteAceiteRequestSchema()
 convite_response_schema = ConviteResponseSchema()
 pin_solicitar_schema = PinSolicitarRequestSchema()
 pin_validar_schema = PinValidarRequestSchema()
+sugestao_grupos_query_schema = SugestaoGruposQuerySchema()
+grupo_response_schema = GrupoResponseSchema()
 
 
 @api.route("")
@@ -47,6 +51,20 @@ class ConviteListResource(Resource):
         payload = convites_create_schema.load(request.get_json(silent=True) or {})
         resultados = convite_service.criar_convites(get_jwt_identity(), payload["convites"])
         return {"resultados": resultados}, 200
+
+
+@api.route("/sugestao-grupos")
+class ConviteSugestaoGruposResource(Resource):
+    @api.doc(
+        "sugerir_grupos_do_convite",
+        responses={200: "Grupos sugeridos", 400: "E-mail inválido", 403: "Não é gestor"},
+    )
+    @jwt_required()
+    def get(self) -> tuple[dict[str, Any], int]:
+        """(Gestor) Grupos sugeridos para o domínio do e-mail. Só sugere, nada é gravado. ?email="""
+        filtros = sugestao_grupos_query_schema.load(request.args.to_dict())
+        grupos = grupo_service.sugerir_grupos(get_jwt_identity(), filtros["email"])
+        return {"items": grupo_response_schema.dump(grupos, many=True), "total": len(grupos)}, 200
 
 
 @api.route("/<string:convite_id>")
